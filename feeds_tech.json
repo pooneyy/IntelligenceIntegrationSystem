@@ -1,0 +1,19 @@
+{
+  "theme": "科技",
+  "focus": "AI",
+  "prompt": "",
+  "feeds": {
+    "青柠学术": "https://qnscholar.github.io//feed.xml",
+    "MOOC中国": "https://www.cmooc.com/feed",
+    "知乎日报": "https://feeds.feedburner.com/zhihu-daily",
+    "知乎每日精选": "https://www.zhihu.com/rss",
+
+    "科学网博客RSS——用户推荐": "https://www.sciencenet.cn/xml/blog.aspx?di=30",
+    "科学网博客RSS——科普集锦": "https://www.sciencenet.cn/xml/blog.aspx?di=7",
+    "科学网博客RSS——科研笔记": "https://www.sciencenet.cn/xml/blog.aspx?di=1",
+    "科学网博客RSS——编辑部推荐": "https://www.sciencenet.cn/xml/blog.aspx?di=20",
+
+    "LaTeX Templates": "https://feeds.feedburner.com/LaTeXTemplates-all",
+    "Science News": "https://www.sciencenews.org/feed"
+  }
+}
