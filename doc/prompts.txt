@@ -1,3 +1,46 @@
+作为一个专业的python程序员，接下来你需要使用简洁及优雅的代码实现我的需求，所有函数必须有标准的英文注释，并且考虑错误处理及可测试性。理解请回复“OK”。
+
+
+我希望实现一个类，它能够根据rss订阅列表，对其中的每一个rss feed，下载其中所有的文章内容，包括：
+1. 文章标题
+2. 发布时间
+3. 文章链接
+4. 文章内容
+其中rss feed列表会通过读取json文件输入，json格式如下：
+```
+{
+  "theme": "科技",
+  "focus": "AI",
+  "prompt": "",
+  "feeds": {
+    "青柠学术": "https://qnscholar.github.io//feed.xml",
+    "MOOC中国": "https://www.cmooc.com/feed",
+    "知乎日报": "https://feeds.feedburner.com/zhihu-daily",
+    "知乎每日精选": "https://www.zhihu.com/rss"
+  }
+}
+```
+请将读取json文件、遍历feeds、对每个feed下载、对feed中其中一篇文章的链接下载各写在不同函数里。
+
+对于上面的需求有不清楚之处清进一步询问，如果有更多的建议也请提出。
+
+
+
+
+我希望将正文转换为markdown格式以减少复杂度。
+
+
+
+
+在这个函数里面，调用另一个函数，用来将不同feed的文章分文件夹存储为<标题>.md文件。注意需要保证目录存在，且<标题>作为文件名有效，否则将其中非法字符进行清洗。
+不要在最后一起写入，而是拉取一个写一个，这是为了防止中途出错。另外请考虑这么一种机制：成功拉取文章后记录一个“URL” - "文件"的持久性存储表，在每次拉取时，不要拉取已经拉取过的文章。
+
+
+
+
+
+
+
 name	rss source
 微软AI	https://blogs.microsoft.com/ai/feed/
 微软亚研	https://www.msra.cn/feed
