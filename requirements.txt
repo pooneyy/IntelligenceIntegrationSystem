@@ -8,3 +8,14 @@ markdownify
 fastapi
 pydantic
 uvicorn
+
+# 基础依赖
+requests>=2.26.0
+requests[socks]>=2.26.0  # SOCKS代理支持
+
+# Web服务依赖（可选）
+Flask>=2.0.3
+
+# 图形界面依赖（可选）
+PyQt5>=5.15.6
+

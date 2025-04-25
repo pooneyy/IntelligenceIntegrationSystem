@@ -14,10 +14,16 @@ except ImportError:
 
 # ==================== Core Validation Logic ====================
 class FeedValidator:
-    def __init__(self):
+    def __init__(self, proxies=None):
         self.feeds = {}  # {url: {'name': str, 'status': str}}
         self.lock = threading.Lock()
         self.status_change_callbacks = []
+        self.proxies = proxies or {}
+
+    def set_proxies(self, proxies):
+        """更新代理设置"""
+        with self.lock:
+            self.proxies = proxies
 
     def add_feeds(self, feeds_dict):
         with self.lock:
@@ -27,15 +33,25 @@ class FeedValidator:
                     self._emit_status_change(url, 'unknown')
 
     def validate_sync(self, url):
+        """同步验证带代理支持"""
         self._update_status(url, 'busy')
         try:
-            response = requests.get(url, timeout=10)
-            valid = (response.status_code == 200 and
-                     'xml' in response.headers.get('Content-Type', '') and
-                     self._is_valid_rss(response.content))
+            response = requests.get(
+                url,
+                timeout=10,
+                proxies=self.proxies,
+                headers={'User-Agent': 'FeedValidator/1.0'}
+            )
+            valid = (
+                response.status_code == 200 and
+                'xml' in response.headers.get('Content-Type', '') and
+                self._is_valid_rss(response.content)
+            )
             status = 'valid' if valid else 'invalid'
-        except Exception:
-            status = 'invalid'
+        except requests.exceptions.ProxyError:
+            status = 'proxy_error'
+        except Exception as e:
+            status = 'error'
         self._update_status(url, status)
         return status == 'valid'
 
@@ -90,6 +106,14 @@ if Flask:
     @app.route('/submit', methods=['POST'])
     def web_submit():
         data = request.get_json() or {}
+        # 从请求中获取代理设置
+        proxies = {
+            'http': data.get('proxy'),
+            'https': data.get('proxy')
+        } if data.get('proxy') else None
+
+        validator_web.set_proxies(proxies or {})
+
         feeds = data.get('feeds', {})
         validator_web.add_feeds(feeds)
         validator_web.validate_async(list(feeds.values()))
@@ -102,8 +126,10 @@ if Flask:
 
 
 # ==================== Command Line Interface ====================
-def cmdline_validate(url):
-    validator = FeedValidator()
+def cmdline_validate(url, proxy=None):
+    """命令行验证带代理支持"""
+    proxies = {'http': proxy, 'https': proxy} if proxy else None
+    validator = FeedValidator(proxies=proxies)
     return 'valid' if validator.validate_sync(url) else 'invalid'
 
 
@@ -112,7 +138,7 @@ def run_gui():
     try:
         from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                      QHBoxLayout, QTextEdit, QPushButton, QTableWidget,
-                                     QTableWidgetItem, QCheckBox, QLabel, QHeaderView)
+                                     QTableWidgetItem, QCheckBox, QLabel, QHeaderView, QLineEdit)
         from PyQt5.QtCore import Qt, pyqtSignal, QObject, QThread
     except ImportError:
         print("PyQt5 not installed, GUI unavailable")
@@ -138,6 +164,8 @@ def run_gui():
         def __init__(self, validator):
             super().__init__()
             self.validator = validator
+            self.proxy_input = QLineEdit()
+            self.proxy_input.setPlaceholderText("输入代理地址，如：http://user:pass@host:port")
             self.emitter = Emitter()
             self.workers = []
             self.init_ui()
@@ -152,9 +180,17 @@ def run_gui():
 
             # Left Panel
             left_panel = QVBoxLayout()
+
             self.input_area = QTextEdit()
             self.input_area.setPlaceholderText("Enter URL or JSON...")
             self.input_area.setAcceptRichText(False)
+
+            # 代理设置组件
+            proxy_layout = QHBoxLayout()
+            proxy_layout.addWidget(QLabel("代理设置："))
+            proxy_layout.addWidget(self.proxy_input)
+            left_panel.addLayout(proxy_layout)
+
             submit_btn = QPushButton('Submit')
             submit_btn.clicked.connect(self.handle_submit)
             left_panel.addWidget(self.input_area)
@@ -202,6 +238,13 @@ def run_gui():
             self.setCentralWidget(main_widget)
 
         def handle_submit(self):
+            # 获取代理设置
+            proxy = self.proxy_input.text().strip() or None
+            if proxy:
+                self.validator.set_proxies({'http': proxy, 'https': proxy})
+            else:
+                self.validator.set_proxies({})
+
             text = self.input_area.toPlainText().strip()
             try:
                 data = json.loads(text)
@@ -302,9 +345,10 @@ def run_gui():
 
 # ==================== Main Entry Point ====================
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='Feed Validator with Proxy Support')
     parser.add_argument('url', nargs='?', default=None)
-    parser.add_argument('--web', action='store_true')
+    parser.add_argument('--web', action='store_true', help='启动Web服务')
+    parser.add_argument('--proxy', type=str, help='设置代理，如：http://user:pass@host:port')
     args = parser.parse_args()
 
     if args.web:
@@ -313,6 +357,6 @@ if __name__ == '__main__':
             sys.exit(1)
         app.run(host='0.0.0.0', port=5000)
     elif args.url:
-        print(cmdline_validate(args.url))
+        print(cmdline_validate(args.url, proxy=args.proxy))
     else:
         run_gui()
