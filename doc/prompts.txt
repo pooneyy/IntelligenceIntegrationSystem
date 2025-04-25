@@ -39,6 +39,36 @@
 
 
 
+帮我写一个FeedsValidation的python脚本，提供本地API，WebAPI，命令行和界面四种界面。
+本地API行为如下：
+    传入一个URL，同步验证其是否能得到一个合法的RSS XML数据。
+    传入一个Feeds字典，异步验证其中每一个URL能得到一个合法的RSS XML数据。
+    维护一个 {Feed URL：状态} 字典，用户可以调用对应接口查询Feed的状态（未知，有效，无效，Busy等等）。
+    提供另一个接口，清除Feed状态字典。
+WebAPI则支持提交一个Feeds字典，同样更新到{Feed URL：状态} 字典，通过另一个wei api查询状态。
+    同时给出调用该服务的测试代码。
+命令行则接受一个url，同步验证其是否能得到一个合法的RSS XML数据，返回结果并退出。
+界面则使用pyqt5，左侧输入单个链接或json，右侧则以列表显示每个feed链接的状态，feed状态的更新必须是异步的。
+    用户可以勾选列表项，列表下方根据勾选项目动态生成json。程序提供“全选/全不选/仅选有效Feed/清除无效Feed”功能
+如果不带命令行参数，默认启动界面，如果参数为url，则使用命令行。你来指定一个参数让可以启动web api服务。
+将上面的功能实现在同一个py文件里，注意每个功能的独立性，比如pyqt5不存在不影响命令行的使用。
+
+接受的JSON的格式如下：
+"""
+{
+  "other keys just ignore": "........",
+  "feeds": {
+    "feed name 1": "feed url 1",
+    "feed name 2": "feed url 2",
+  }
+}
+"""
+
+其中：
+    列表要分列显示，列包括：Feed Name, Feed URL, Status
+    动态生成的json项为  Feed Name: Feed URL，而非状态。
+
+
 
 
 name	rss source
