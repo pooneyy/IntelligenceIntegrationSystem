@@ -2,8 +2,8 @@ import sys
 import argparse
 import json
 import threading
+import feedparser
 from concurrent.futures import ThreadPoolExecutor
-import requests
 from xml.etree import ElementTree as ET
 
 try:
@@ -13,15 +13,38 @@ except ImportError:
 
 
 # ==================== Core Validation Logic ====================
+
 class FeedValidator:
     def __init__(self, proxies=None):
-        self.feeds = {}  # {url: {'name': str, 'status': str}}
+        self.feeds = {}
         self.lock = threading.Lock()
-        self.status_change_callbacks = []
         self.proxies = proxies or {}
+        self.status_change_callbacks = []
+
+    def validate_sync(self, url):
+        self._update_status(url, 'busy')
+        status = 'invalid'
+        try:
+            feed = feedparser.parse(url)
+            return bool(
+                feed.get('version') and
+                len(feed.entries) > 0 and
+                'title' in feed.feed
+            )
+        except Exception as e:
+            status = 'error'
+        finally:
+            self._update_status(url, status)
+        return False
+
+    def validate_async(self, urls):
+        def _wrapper(url):
+            self.validate_sync(url)
+
+        with ThreadPoolExecutor() as executor:
+            executor.map(_wrapper, urls)
 
     def set_proxies(self, proxies):
-        """更新代理设置"""
         with self.lock:
             self.proxies = proxies
 
@@ -31,36 +54,6 @@ class FeedValidator:
                 if url not in self.feeds:
                     self.feeds[url] = {'name': name, 'status': 'unknown'}
                     self._emit_status_change(url, 'unknown')
-
-    def validate_sync(self, url):
-        """同步验证带代理支持"""
-        self._update_status(url, 'busy')
-        try:
-            response = requests.get(
-                url,
-                timeout=10,
-                proxies=self.proxies,
-                headers={'User-Agent': 'FeedValidator/1.0'}
-            )
-            valid = (
-                response.status_code == 200 and
-                'xml' in response.headers.get('Content-Type', '') and
-                self._is_valid_rss(response.content)
-            )
-            status = 'valid' if valid else 'invalid'
-        except requests.exceptions.ProxyError:
-            status = 'proxy_error'
-        except Exception as e:
-            status = 'error'
-        self._update_status(url, status)
-        return status == 'valid'
-
-    def validate_async(self, urls):
-        def _wrapper(url):
-            self.validate_sync(url)
-
-        with ThreadPoolExecutor() as executor:
-            executor.map(_wrapper, urls)
 
     def get_status(self, url=None):
         with self.lock:
