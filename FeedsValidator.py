@@ -1,10 +1,12 @@
 import sys
-import argparse
 import json
+import argparse
 import threading
 import feedparser
-from concurrent.futures import ThreadPoolExecutor
 from xml.etree import ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
+
+from RSSFetcher import fetch_feed
 
 try:
     from flask import Flask, request, jsonify
@@ -24,18 +26,16 @@ class FeedValidator:
     def validate_sync(self, url):
         self._update_status(url, 'busy')
         status = 'invalid'
+        valid = False
         try:
-            feed = feedparser.parse(url)
-            return bool(
-                feed.get('version') and
-                len(feed.entries) > 0 and
-                'title' in feed.feed
-            )
+            feed = fetch_feed(url, proxy=self.proxies)
+            valid = len(feed.get('entries', [])) > 0
+            status = 'valid' if valid else 'invalid'
         except Exception as e:
             status = 'error'
         finally:
             self._update_status(url, status)
-        return False
+        return valid
 
     def validate_async(self, urls):
         def _wrapper(url):
@@ -234,7 +234,12 @@ def run_gui():
             # 获取代理设置
             proxy = self.proxy_input.text().strip() or None
             if proxy:
-                self.validator.set_proxies({'http': proxy, 'https': proxy})
+                proxy_config = {
+                    "server": proxy,
+                    "username": "",
+                    "password": ""
+                }
+                self.validator.set_proxies(proxy_config)
             else:
                 self.validator.set_proxies({})
 

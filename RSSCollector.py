@@ -4,7 +4,6 @@ import json
 import sqlite3
 import hashlib
 import traceback
-from typing import Dict
 from pathlib import Path
 
 import requests

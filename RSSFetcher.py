@@ -8,15 +8,15 @@ Complete implementation with:
 - Comprehensive error handling
 - Type annotations
 """
-import traceback
-from typing import Optional, Dict, Any, List
-import feedparser
-from playwright.sync_api import sync_playwright, Browser
-import random
-import time
 import re
+import time
+import random
+import traceback
+import feedparser
 from html import unescape
 from bs4 import BeautifulSoup
+from typing import Optional, Dict, Any, List
+from playwright.sync_api import sync_playwright, Browser
 
 
 # Constants
