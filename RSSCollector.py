@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 from markdownify import markdownify as md
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from RSSFetcher import fetch_feed, BrowserManager, fetch_page_content
+from RSSFetcher import fetch_feed, BrowserManager, fetch_feed_content
 
 
 def html_to_clean_md(html: str) -> str:
@@ -242,7 +242,7 @@ class RSSProcessor:
         """
         try:
             with BrowserManager(headless=True, proxy=self.proxy) as browser:
-                content = fetch_page_content(url, browser, proxy=self.proxy)
+                content = fetch_feed_content(url, browser, proxy=self.proxy)
             return content
         except (requests.RequestException, ValueError) as e:
             print(f"Failed to download {url}: {str(e)}")
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     }
     processor = RSSProcessor(proxy=None)
     try:
-        feeds = processor.read_feeds_from_json("feeds_ai.json")
+        feeds = processor.read_feeds_from_json("feeds_tech.json")
         print(f'Feeds count: {len(feeds)}')
 
         processor.process_all_feeds()

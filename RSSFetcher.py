@@ -12,19 +12,12 @@ import re
 import time
 import random
 import traceback
+
 import feedparser
 from html import unescape
 from bs4 import BeautifulSoup
 from typing import Optional, Dict, Any, List
 from playwright.sync_api import sync_playwright, Browser
-
-
-# Constants
-DEFAULT_USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)",
-]
 
 DEFAULT_TIMEOUT_MS = 3000  # 3 seconds
 MINIMAL_WAIT_SEC = 2
@@ -32,6 +25,14 @@ MINIMAL_WAIT_SEC = 2
 class ProxyConnectionError(Exception):
     """Custom exception for proxy related errors"""
     pass
+
+# 更新UA列表为完整现代浏览器标识
+DEFAULT_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+]
+
 
 class BrowserManager:
     """Manage browser instance with proxy and anti-detection settings"""
@@ -50,14 +51,18 @@ class BrowserManager:
         self.browser = self.playwright.chromium.launch(**launch_options)
 
     def _prepare_launch_options(self, headless: bool) -> Dict[str, Any]:
-        """Configure browser launch options with proxy settings"""
         options = {
             "headless": headless,
             "args": [
                 '--disable-blink-features=AutomationControlled',
+                '--disable-automation-software-banner',  # 隐藏自动化提示
                 '--disable-dev-shm-usage',
-                '--no-sandbox'
-            ]
+                '--no-sandbox',
+                '--disable-site-isolation-trials',  # 禁用站点隔离
+                '--disable-features=IsolateOrigins,site-per-process',
+                f'--window-size={random.randint(1000, 1400)},{random.randint(800, 1200)}'  # 随机窗口尺寸
+            ],
+            "slow_mo": random.uniform(100, 500),  # 模拟人类操作间隔
         }
 
         if self.proxy:
@@ -85,67 +90,57 @@ class BrowserManager:
         self.browser.close()
         self.playwright.stop()
 
-def fetch_page_content(
-    url: str,
-    browser: Browser,
-    timeout: int = DEFAULT_TIMEOUT_MS,
-    proxy: Optional[Dict[str, str]] = None
+def fetch_feed_content(
+        url: str,
+        browser: Browser,
+        timeout: int = DEFAULT_TIMEOUT_MS,
+        proxy: Optional[Dict[str, str]] = None
 ) -> Optional[str]:
-    """
-    Fetch page content with advanced browser settings
-
-    Args:
-        url: Target URL to load
-        browser: Playwright browser instance
-        timeout: Load timeout in milliseconds
-        proxy: Proxy configuration (for per-request override)
-
-    Returns:
-        Page content as HTML string or None
-    """
     context_args = {
         "user_agent": random.choice(DEFAULT_USER_AGENTS),
-        "java_script_enabled": True,
-        "ignore_https_errors": True
+        "viewport": {"width": 1366, "height": 768},
+        "locale": "en-US",
+        "timezone_id": "America/New_York",
+        "java_script_enabled": False,  # 禁用JavaScript
+        "ignore_https_errors": True,
+        "extra_http_headers": {
+            "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8",  # 指定内容类型
+        }
     }
 
-    # Handle proxy authentication
-    if proxy and "server" in proxy:
-        context_args["proxy"] = {"server": proxy["server"]}
-        if proxy.get("username") and proxy.get("password"):
-            context_args["http_credentials"] = {
-                "username": proxy["username"],
-                "password": proxy["password"]
-            }
+    if proxy:
+        context_args["proxy"] = {
+            "server": proxy["server"],
+            "username": proxy.get("username"),
+            "password": proxy.get("password")
+        }
 
     context = browser.new_context(**context_args)
     page = context.new_page()
 
     try:
-        response = page.goto(url, timeout=timeout)
+        # 发起请求并等待到响应完成
+        response = page.goto(url, timeout=timeout, wait_until="load")
         if not response or response.status >= 400:
-            raise ProxyConnectionError(f"HTTP {response.status if response else 'N/A'}")
+            raise ValueError(f"HTTP {response.status if response else 'N/A'}")
 
-        # Wait for dynamic content
-        page.wait_for_load_state("networkidle", timeout=timeout)
-        time.sleep(MINIMAL_WAIT_SEC)
+        # 验证内容类型是否为XML
+        content_type = response.headers.get('content-type', '').lower()
+        if 'xml' not in content_type:
+            print(f"Warning: Unexpected content type {content_type} for URL {url}")
 
-        content = page.content()
-        clean_content = unescape(content)
-
-        with open('content.txt', 'wt', encoding='utf-8') as f:
-            f.write(clean_content)
-
-        return clean_content
+        # 获取原始响应文本
+        raw_content = response.text()
+        return raw_content
 
     except Exception as e:
-        if "Proxy connection failed" in str(e):
-            raise ProxyConnectionError(f"Proxy error: {str(e)}")
-        print(f"Error loading {url}: {str(e)}")
+        if "timeout" in str(e).lower():
+            print(f"Timeout occurred: {url}")
+        elif "net::ERR_PROXY_CONNECTION_FAILED" in str(e):
+            raise ProxyConnectionError("Proxy connection failed")
         return None
     finally:
         context.close()
-
 
 def parse_feed(content: str) -> dict:
     """
@@ -250,7 +245,7 @@ def fetch_feed(
     """
     try:
         with BrowserManager(headless=headless, proxy=proxy) as browser:
-            content = fetch_page_content(url, browser, proxy=proxy)
+            content = fetch_feed_content(url, browser, proxy=proxy)
 
             if not content:
                 return {
@@ -261,9 +256,6 @@ def fetch_feed(
 
             parsed = parse_feed(content)
             return parsed
-
-    except ProxyConnectionError as e:
-        return {"errors": [str(e)]}
     except Exception as e:
         traceback.print_exc()
         return {"errors": [str(e)]}
