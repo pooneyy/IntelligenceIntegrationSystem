@@ -1,29 +1,19 @@
-bs4~=0.0.1
 lxml
-tenacity~=9.0.0
-pandas~=1.4.2
-feedparser~=6.0.11
-markdownify~=1.1.0
 fastapi
 pydantic
 uvicorn
 urllib3
-
-# 基础依赖
-requests>=2.26.0
-requests[socks]>=2.26.0  # SOCKS代理支持
-
-# Web服务依赖（可选）
+bs4~=0.0.1
 Flask>=2.0.3
-
-# 图形界面依赖（可选）
 PyQt5>=5.15.6
-
-
-beautifulsoup4~=4.9.3
+pandas~=1.4.2
 urllib3~=1.26.9
-
-
+tenacity~=9.0.0
 playwright==1.48.0            # Then run: playwright install chromium
 feedparser==6.0.10
-pyee==8.2.2
+markdownify~=1.1.0
+beautifulsoup4~=4.9.3
+
+# requests>=2.26.0          # Basic
+requests[socks]>=2.26.0     # Support SOCKS
+
