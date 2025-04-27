@@ -14,6 +14,8 @@ from typing import Dict, List, Optional
 from markdownify import markdownify as md
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from RSSFetcher import fetch_feed, BrowserManager, fetch_page_content
+
 
 def html_to_clean_md(html: str) -> str:
     # 预处理清洗
@@ -105,8 +107,9 @@ def _parse_pub_date(entry) -> str:
 class RSSProcessor:
     """RSS feed processor with modular functions for JSON reading, feed parsing and content downloading"""
 
-    def __init__(self):
+    def __init__(self, proxy=None):
         self.feeds = {}
+        self.proxy = proxy
         self.articles = []
         self.session = requests.Session()
         self.session.headers.update({
@@ -161,13 +164,12 @@ class RSSProcessor:
             raise ValueError(f"Invalid JSON file: {str(e)}") from e
 
     def process_all_feeds(self):
-        """改进后的处理流程"""
         for feed_name, feed_url in self.feeds.items():
             try:
                 print(f'Process feed: {feed_name} : {feed_url}')
 
-                articles = self.parse_feed(feed_url)
-                for article in articles:
+                result = self.parse_feed(feed_url)
+                for article in result['entries']:
                     article['feed_name'] = feed_name
                     article['feed_url'] = feed_url
                     self._process_article(article)
@@ -175,7 +177,7 @@ class RSSProcessor:
                 print(f"Process feed fail: {feed_url} - {str(e)}")
                 print(traceback.format_exc())
 
-    def parse_feed(self, url: str) -> List[Dict]:
+    def parse_feed(self, url: str) -> Dict:
         """Parse a single RSS feed and extract article metadata
         Args:
             url (str): RSS feed URL
@@ -183,19 +185,13 @@ class RSSProcessor:
             List[Dict]: List of articles with metadata
         """
         try:
-            feed = feedparser.parse(url)
-            if feed.bozo:
-                raise ValueError(f"Feed parse error: {feed.bozo_exception.getMessage()}")
-
-            return [{
-                'title': entry.get('title', 'No Title'),
-                'published': _parse_pub_date(entry),
-                'link': entry.get('link', ''),
-                'feed_url': url
-            } for entry in feed.entries]
+            result = fetch_feed(url)
+            if 'entries' not in result:
+                raise ValueError(f"Feed parse error: {result["errors"]}")
+            return result
         except Exception as e:
             print(f"Error parsing {url}: {str(e)}")
-            return []
+            return {'entries': [], 'errors': str(e)}
 
     def _process_article(self, article):
         url = article['link']
@@ -245,9 +241,9 @@ class RSSProcessor:
             Optional[str]: Cleaned article content or None
         """
         try:
-            response = self.session.get(url, timeout=5)
-            response.raise_for_status()
-            return response.text
+            with BrowserManager(headless=True, proxy=self.proxy) as browser:
+                content = fetch_page_content(url, browser, proxy=self.proxy)
+            return content
         except (requests.RequestException, ValueError) as e:
             print(f"Failed to download {url}: {str(e)}")
             return None
@@ -255,9 +251,14 @@ class RSSProcessor:
 
 # 使用示例
 if __name__ == "__main__":
-    processor = RSSProcessor()
+    proxy_config = {
+        "server": "socks5://127.0.0.1:10808",
+        "username": "",
+        "password": ""
+    }
+    processor = RSSProcessor(proxy=None)
     try:
-        feeds = processor.read_feeds_from_json("feeds_tech.json")
+        feeds = processor.read_feeds_from_json("feeds_ai.json")
         print(f'Feeds count: {len(feeds)}')
 
         processor.process_all_feeds()

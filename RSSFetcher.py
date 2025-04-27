@@ -26,7 +26,7 @@ DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)",
 ]
 
-DEFAULT_TIMEOUT_MS = 45000  # 45 seconds
+DEFAULT_TIMEOUT_MS = 3000  # 3 seconds
 MINIMAL_WAIT_SEC = 2
 
 class ProxyConnectionError(Exception):
@@ -279,7 +279,7 @@ if __name__ == "__main__":
 
     result = fetch_feed(
         "http://machinelearningmastery.com/blog/feed",
-        proxy=proxy_config
+        proxy=None
     )
 
     if 'entries' in result:
@@ -287,6 +287,18 @@ if __name__ == "__main__":
             print(f'Item {index} : ')
             for k in sorted(entry.keys()):
                 print(f'    {k} : {entry[k]}')
+
+    # The entry dict looks like:
+    # {
+    #     'authors':        ['...'],
+    #     'categories':     ['...'],
+    #     'description':    '...',
+    #     'guid':           '...',
+    #     'link':           '...',
+    #     'media':          { '...': '...' },
+    #     'published':      '...',
+    #     'title':          '...',
+    # }
 
     if 'errors' in result:
         print(f'Errors: {result["errors"]}')
