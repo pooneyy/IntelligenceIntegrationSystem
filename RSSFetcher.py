@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 from typing import Optional, Dict, Any, List
 from playwright.sync_api import sync_playwright, Browser
 
-DEFAULT_TIMEOUT_MS = 3000  # 3 seconds
+DEFAULT_TIMEOUT_MS = 8000  # 3 seconds
 MINIMAL_WAIT_SEC = 2
 
 class ProxyConnectionError(Exception):
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     }
 
     result = fetch_feed(
-        "http://machinelearningmastery.com/blog/feed",
+        "https://blogs.technet.microsoft.com/machinelearning/feed",
         proxy=None
     )
 
