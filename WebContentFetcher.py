@@ -96,16 +96,17 @@ class AdvancedWebScraper:
         """Fetch page using browser automation"""
         page = self.context.new_page()
         try:
-            response = page.goto(url, timeout=self.timeout)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
             if response.status >= 400:
                 raise RuntimeError(f"HTTP Error {response.status}")
+            # page.wait_for_load_state('load', timeout=self.timeout)
             # page.wait_for_load_state('networkidle', timeout=self.timeout)
             # page.wait_for_load_state("domcontentloaded", timeout=self.timeout)
             return page.content()
         except Exception as e:
             print(traceback.format_exc())
             print(str(e))
-            return ''
+            return page.content()
         finally:
             page.close()
 
