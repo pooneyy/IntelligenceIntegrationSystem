@@ -7,14 +7,13 @@ import traceback
 from pathlib import Path
 
 import requests
-import feedparser
 from bs4 import BeautifulSoup
 from datetime import datetime
+from RSSFetcher import fetch_feed
 from typing import Dict, List, Optional
 from markdownify import markdownify as md
-from tenacity import retry, stop_after_attempt, wait_exponential
 
-from RSSFetcher import fetch_feed, BrowserManager, fetch_feed_content
+from WebContentFetcher import fetch_web_content
 
 
 def html_to_clean_md(html: str) -> str:
@@ -202,7 +201,7 @@ class RSSProcessor:
             return
 
         print(f'  - Fetching article: {article["title"]}')
-        html = self._fetch_article_content(url)
+        html = fetch_web_content(url)
         if not html:
             print(f'  ! Article empty: {article["title"]}')
             return
@@ -232,25 +231,10 @@ class RSSProcessor:
             except sqlite3.IntegrityError:
                 print(f"Conflict detect: {url} is handling by other process.")
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential())
-    def _fetch_article_content(self, url: str) -> Optional[str]:
-        """Download full article content from a given URL
-        Args:
-            url (str): Article URL
-        Returns:
-            Optional[str]: Cleaned article content or None
-        """
-        try:
-            with BrowserManager(headless=True, proxy=self.proxy) as browser:
-                content = fetch_feed_content(url, browser, proxy=self.proxy)
-            return content
-        except (requests.RequestException, ValueError) as e:
-            print(f"Failed to download {url}: {str(e)}")
-            return None
 
+# ----------------------------------------------------------------------------------------------------------------------
 
-# 使用示例
-if __name__ == "__main__":
+def main():
     proxy_config = {
         "server": "socks5://127.0.0.1:10808",
         "username": "",
@@ -267,3 +251,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Process fail: {str(e)}")
         print(traceback.format_exc())
+
+
+if __name__ == "__main__":
+    main()

@@ -9,17 +9,15 @@ Complete implementation with:
 - Type annotations
 """
 import re
-import time
 import random
 import traceback
 
 import feedparser
-from html import unescape
 from bs4 import BeautifulSoup
 from typing import Optional, Dict, Any, List
 from playwright.sync_api import sync_playwright, Browser
 
-DEFAULT_TIMEOUT_MS = 8000  # 3 seconds
+DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 MINIMAL_WAIT_SEC = 2
 
 class ProxyConnectionError(Exception):
@@ -260,8 +258,10 @@ def fetch_feed(
         traceback.print_exc()
         return {"errors": [str(e)]}
 
-# Example Usage
-if __name__ == "__main__":
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def main():
     # SOCKS5 Proxy Example
     proxy_config = {
         "server": "socks5://127.0.0.1:10808",
@@ -294,3 +294,6 @@ if __name__ == "__main__":
 
     if 'errors' in result:
         print(f'Errors: {result["errors"]}')
+
+if __name__ == "__main__":
+    main()
