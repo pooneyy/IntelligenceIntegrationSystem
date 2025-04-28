@@ -21,7 +21,7 @@ class AdvancedWebScraper:
     def __init__(self,
                  proxy: Optional[str] = None,
                  headless: bool = True,
-                 timeout: int = 8000):
+                 timeout: int = 20000):
         """
         Initialize scraper instance
 
@@ -100,11 +100,12 @@ class AdvancedWebScraper:
             if response.status >= 400:
                 raise RuntimeError(f"HTTP Error {response.status}")
             # page.wait_for_load_state('networkidle', timeout=self.timeout)
-            page.wait_for_load_state("domcontentloaded", timeout=self.timeout)
+            # page.wait_for_load_state("domcontentloaded", timeout=self.timeout)
             return page.content()
         except Exception as e:
             print(traceback.format_exc())
             print(str(e))
+            return ''
         finally:
             page.close()
 
@@ -133,7 +134,7 @@ class AdvancedWebScraper:
         self.session.close()
 
 
-def fetch_web_content(url: str, proxy: Optional[str] = None, headless: bool = True, timeout: int = 8000):
+def fetch_web_content(url: str, proxy: Optional[str] = None, headless: bool = True, timeout: int = 20000):
     try:
         with AdvancedWebScraper(
                 proxy=proxy,
