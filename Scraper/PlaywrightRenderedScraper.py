@@ -6,6 +6,8 @@ from requests.adapters import HTTPAdapter
 from urllib.parse import urlparse
 import logging
 
+from Scraper.PlaywrightRawScraper import request_by_browser, BrowserManager
+
 
 class AdvancedWebScraper:
     """Web scraping module with anti-bot bypass capabilities
@@ -73,7 +75,7 @@ class AdvancedWebScraper:
             'password': parsed.password
         } if parsed.username else {'server': f'{parsed.hostname}:{parsed.port}'}
 
-    def fetch(self, url: str, render_js: bool = True) -> Optional[str]:
+    def fetch(self, url: str) -> Optional[str]:
         """
         Fetch webpage content with anti-bot measures
 
@@ -85,16 +87,14 @@ class AdvancedWebScraper:
             Page HTML content or None if failed
         """
         try:
-            if render_js:
-                return self._fetch_with_playwright(url)
-            return self._fetch_with_requests(url)
+            return self._fetch_with_playwright(url)
         except Exception as e:
             self.logger.error(f"Failed to fetch {url}: {str(e)}")
             return None
 
     def _fetch_with_playwright(self, url: str) -> str:
         """Fetch page using browser automation"""
-        page = self.context.new_page()
+        _, response = request_by_browser(url, browser, timeout_ms, proxy)
         try:
             response = page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
             if response.status >= 400:
@@ -110,17 +110,6 @@ class AdvancedWebScraper:
         finally:
             page.close()
 
-    def _fetch_with_requests(self, url: str) -> str:
-        """Fetch page using direct HTTP request"""
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.google.com/'
-        }
-        response = self.session.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.text
-
     def __enter__(self):
         return self
 
@@ -135,28 +124,37 @@ class AdvancedWebScraper:
         self.session.close()
 
 
-def fetch_web_content(url: str, proxy: Optional[str] = None, headless: bool = True, timeout: int = 20000):
+def fetch_content(
+    url: str,
+    timeout_ms: int,
+    proxy: Optional[Dict[str, str]] = None
+) -> Dict[str, Any]:
     try:
-        with AdvancedWebScraper(
-                proxy=proxy,
-                headless=headless,
-                timeout=timeout
-        ) as scraper:
-            html = scraper.fetch(url)
-            return html
+        with BrowserManager(headless=True, proxy=proxy) as browser:
+            page, response = request_by_browser(url, browser, timeout_ms, proxy)
+
+            if response.status >= 400:
+                raise RuntimeError(f"HTTP Error {response.status}")
+
+            # page.wait_for_load_state('load', timeout=self.timeout)
+            page.wait_for_load_state('domcontentloaded', timeout=timeout_ms)
+            # page.wait_for_load_state('networkidle', timeout=self.timeout)
+
+            page_content = page.content()
+            return {'content': page_content, "errors": ''}
     except Exception as e:
         print(traceback.format_exc())
-        print(str(e))
-        return ''
+        return {'content': page.content(), "errors": [str(e)]}
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
-    html = fetch_web_content("https://machinelearningmastery.com/further-applications-with-context-vectors/",
-                             proxy=None, headless=True)
+    result = fetch_content("https://machinelearningmastery.com/further-applications-with-context-vectors/",
+                           timeout_ms=20000)
+    html = result['content']
     if html:
-        with open('web.html', 'wt', encoding='utf-8') as f:
+        with open('../web.html', 'wt', encoding='utf-8') as f:
             f.write(html)
 
 

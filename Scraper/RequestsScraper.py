@@ -181,6 +181,17 @@ def fetch_content(
     timeout_ms: int,
     proxy: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
+    """
+    The same to base.
+    :param url: The same to base.
+    :param timeout_ms: The same to base.
+    :param proxy: Format:
+        {
+            "http": "socks5://user:password@proxy_host:port",
+            "https": "socks5://user:password@proxy_host:port"
+        }
+    :return: The same to base.
+    """
 
     scraper = RequestsScraper(proxy)
     html_content = scraper.fetch(url, int(timeout_ms / 1000))

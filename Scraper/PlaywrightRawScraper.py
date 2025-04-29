@@ -11,15 +11,12 @@ Complete implementation with:
 import re
 import random
 import traceback
+from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
 from playwright.sync_api import sync_playwright, Browser
 
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
-MINIMAL_WAIT_SEC = 2
 
-class ProxyConnectionError(Exception):
-    """Custom exception for proxy related errors"""
-    pass
 
 # 更新UA列表为完整现代浏览器标识
 DEFAULT_USER_AGENTS = [
@@ -32,32 +29,66 @@ DEFAULT_USER_AGENTS = [
 class BrowserManager:
     """Manage browser instance with proxy and anti-detection settings"""
 
+    ANTI_DETECTION_ARGS = [
+        '--disable-blink-features=AutomationControlled',
+        '--disable-automation-software-banner',  # 隐藏自动化提示
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--enable-features=NetworkService,NetworkServiceInProcess',
+        '--disable-site-isolation-for-enterprise-policy'
+    ]
+
     def __init__(
         self,
         headless: bool = True,
         proxy: Optional[Dict[str, str]] = None,
         user_agents: Optional[List[str]] = None
     ):
-        self.playwright = sync_playwright().start()
+        self.playwright = None
+        self.browser = None
         self.proxy = proxy
-        self.user_agents = user_agents or DEFAULT_USER_AGENTS
 
-        launch_options = self._prepare_launch_options(headless)
-        self.browser = self.playwright.chromium.launch(**launch_options)
+    def __enter__(self):
+        try:
+            self.open()
+            return self.browser
+        except Exception as e:
+            self.close()
+            raise RuntimeError(f"Browser launch fail: {str(e)}")
+
+    def __exit__(self, *args):
+        self.close()
+
+    def open(self):
+        if not self.playwright:
+            self.playwright = sync_playwright().start()
+            try:
+                options = self._prepare_launch_options(headless=True)
+                self.browser = self.playwright.chromium.launch(**options)
+            except Exception as e:
+                self.playwright.stop()
+                raise
+
+    def close(self):
+        if self.browser:
+            try:
+                self.browser.close()
+            except Exception as e:
+                print(f"Browser close exception: {e}")
+        if self.playwright:
+            try:
+                self.playwright.stop()
+            except Exception as e:
+                print(f"Playwright close exception: {e}")
 
     def _prepare_launch_options(self, headless: bool) -> Dict[str, Any]:
         options = {
-            "headless": headless,
-            "args": [
-                '--disable-blink-features=AutomationControlled',
-                '--disable-automation-software-banner',  # 隐藏自动化提示
-                '--disable-dev-shm-usage',
-                '--no-sandbox',
-                '--disable-site-isolation-trials',  # 禁用站点隔离
-                '--disable-features=IsolateOrigins,site-per-process',
-                f'--window-size={random.randint(1000, 1400)},{random.randint(800, 1200)}'  # 随机窗口尺寸
+            "args": BrowserManager.ANTI_DETECTION_ARGS + [
+                f'--window-size={random.randint(1000, 1400)},{random.randint(800, 1200)}',  # 随机窗口尺寸
+                f'--lang=en-US',
             ],
-            "slow_mo": random.uniform(100, 500),  # 模拟人类操作间隔
+            "headless": headless,
+            "slow_mo": random.randint(100, 500),  # 模拟人类操作间隔
         }
 
         if self.proxy:
@@ -71,80 +102,82 @@ class BrowserManager:
         return options
 
     def _validate_proxy_config(self):
-        """Validate proxy configuration format"""
-        if not re.match(
-            r"^(http|https|socks5)://([a-zA-Z0-9\-]+\.)*[a-zA-Z0-9\-]+:\d+$",
-            self.proxy["server"]
-        ):
-            raise ValueError(f"Invalid proxy server format: {self.proxy['server']}")
-
-    def __enter__(self) -> Browser:
-        return self.browser
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.browser.close()
-        self.playwright.stop()
+        try:
+            parsed = urlparse(self.proxy["server"])
+            if not all([parsed.scheme, parsed.hostname, parsed.port]):
+                raise ValueError
+            if parsed.scheme not in ['http', 'https', 'socks5']:
+                raise ValueError
+        except:
+            raise ValueError(f"Invalid proxy format: {self.proxy['server']}")
 
 
-def _fetch_content_by_browser(
+def request_by_browser(
         url: str,
-        browser: Browser,
+        handler: callable,
         timeout: int = DEFAULT_TIMEOUT_MS,
         proxy: Optional[Dict[str, str]] = None
-) -> Optional[str]:
+):
+    """
+    Request by headless browser. Handle request result by callable.
+    :param url: The request url.
+    :param browser: The browser instance.
+    :param handler:
+    :param timeout:
+    :param proxy:
+    :return:
+    """
     context_args = {
         "user_agent": random.choice(DEFAULT_USER_AGENTS),
         "viewport": {"width": 1366, "height": 768},
         "locale": "en-US",
         "timezone_id": "America/New_York",
-        "java_script_enabled": False,  # 禁用JavaScript
+        "java_script_enabled": True,
         "ignore_https_errors": True,
         "extra_http_headers": {
             "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8",  # 指定内容类型
         }
     }
 
-    if proxy:
-        context_args["proxy"] = {
-            "server": proxy["server"],
-            "username": proxy.get("username"),
-            "password": proxy.get("password")
-        }
-
-    context = browser.new_context(**context_args)
-    page = context.new_page()
-
-    try:
-        response = page.goto(url, timeout=timeout, wait_until="load")
-        if not response or response.status >= 400:
-            raise ValueError(f"HTTP {response.status if response else 'N/A'}")
-        raw_content = response.text()
-        return raw_content
-    except Exception as e:
-        return ''
-    finally:
-        context.close()
+    with BrowserManager(headless=True, proxy=proxy) as browser:
+        with browser.new_context(**context_args) as context:
+            with context.new_page() as page:
+                try:
+                    response = page.goto(url, timeout=timeout, wait_until="load")
+                    return handler(page, response)
+                except Exception as e:
+                    print(f'request_by_browser gets exception: {str(e)}')
+                    print(traceback.format_exc())
+                    return {'content': '', "errors": [str(e)]}
 
 
 def fetch_content(
     url: str,
-    timeout_ms: int,
+    timeout_ms: Optional[int] = DEFAULT_TIMEOUT_MS,
     proxy: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
-    Main entry point for fetching and parsing feeds
-
-    Args:
-        url: Feed URL
-        proxy: Proxy configuration
-
-    Returns:
-        Result dictionary with status details
+    The same to base.
+    :param url: The same to base.
+    :param timeout_ms: The same to base.
+    :param proxy: Format:
+        {
+            "server": "socks5://127.0.0.1:10808",
+            "username": "",
+            "password": ""
+        }
+    :return: The same to base.
     """
     try:
-        with BrowserManager(headless=True, proxy=proxy) as browser:
-            content = _fetch_content_by_browser(url, browser, proxy=proxy)
-            return {'content': content, "errors": ''}
+        def handler(_, response):
+            if not response:
+                return {'content': '', "errors": 'No response'}
+            if response.status >= 400:
+                return {'content': '', "errors": f'HTTP response: {response.status}'}
+            raw_content = response.text()
+            return {'content': raw_content, "errors": ''}
+        result = request_by_browser(url, handler, timeout_ms, proxy)
+        return result
     except Exception as e:
         traceback.print_exc()
         return {'content': '', "errors": [str(e)]}

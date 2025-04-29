@@ -10,10 +10,10 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from RSSFetcher import fetch_feed
-from typing import Dict, List, Optional
+from typing import Dict, List
 from markdownify import markdownify as md
 
-from WebContentFetcher import fetch_web_content
+from Scraper.PlaywrightRenderedScraper import fetch_web_content
 
 
 def html_to_clean_md(html: str) -> str:
