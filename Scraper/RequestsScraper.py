@@ -11,7 +11,7 @@ except ImportError:
     brotli = None
 
 
-class AdvancedScraper:
+class RequestsScraper:
     def __init__(self, proxies: Optional[dict] = None):
         self.session = requests.Session()
         self.session.proxies = proxies or {}
@@ -182,7 +182,7 @@ def fetch_content(
     proxy: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
 
-    scraper = AdvancedScraper(proxy)
+    scraper = RequestsScraper(proxy)
     html_content = scraper.fetch(url, int(timeout_ms / 1000))
     if html_content:
         is_valid, score, issues = check_content_quality(html_content)
@@ -218,4 +218,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
