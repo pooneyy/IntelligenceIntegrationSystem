@@ -176,6 +176,7 @@ def fetch_content(
                 return {'content': '', "errors": f'HTTP response: {response.status}'}
             raw_content = response.text()
             return {'content': raw_content, "errors": ''}
+
         result = request_by_browser(url, handler, timeout_ms, proxy)
         return result
     except Exception as e:

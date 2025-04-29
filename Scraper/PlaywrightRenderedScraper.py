@@ -1,127 +1,6 @@
 import traceback
 from typing import Optional, Dict, Any
-from playwright.sync_api import sync_playwright
-import requests
-from requests.adapters import HTTPAdapter
-from urllib.parse import urlparse
-import logging
-
-from Scraper.PlaywrightRawScraper import request_by_browser, BrowserManager
-
-
-class AdvancedWebScraper:
-    """Web scraping module with anti-bot bypass capabilities
-
-    Features:
-    - Browser automation via Playwright
-    - SOCKS5/HTTP/HTTPS proxy support
-    - Request header randomization
-    - Automatic retry mechanism
-    - Multi-instance isolation
-    """
-
-    def __init__(self,
-                 proxy: Optional[str] = None,
-                 headless: bool = True,
-                 timeout: int = 20000):
-        """
-        Initialize scraper instance
-
-        Args:
-            proxy: Proxy URL in format protocol://host:port
-            headless: Run browser in headless mode
-            timeout: Page load timeout in milliseconds
-        """
-        self.proxy = proxy
-        self.headless = headless
-        self.timeout = timeout
-        self._init_browser()
-        self._init_session()
-        self.logger = logging.getLogger(self.__class__.__name__)
-
-    def _init_browser(self):
-        """Initialize Playwright browser instance"""
-        self.playwright = sync_playwright().start()
-        launch_args = {
-            'headless': self.headless,
-            'proxy': self._parse_proxy(self.proxy) if self.proxy else None,
-            'timeout': self.timeout
-        }
-        self.browser = self.playwright.chromium.launch(**launch_args)
-        self.context = self.browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                       '(KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'
-        )
-
-    def _init_session(self):
-        """Initialize HTTP session with proxy support"""
-        self.session = requests.Session()
-        if self.proxy:
-            parsed = urlparse(self.proxy)
-            proxies = {
-                'http': f'{parsed.scheme}://{parsed.netloc}',
-                'https': f'{parsed.scheme}://{parsed.netloc}'
-            }
-            self.session.mount('http://', HTTPAdapter(max_retries=3))
-            self.session.mount('https://', HTTPAdapter(max_retries=3))
-            self.session.proxies.update(proxies)
-
-    def _parse_proxy(self, proxy_url: str) -> Dict[str, str]:
-        """Parse proxy URL for Playwright configuration"""
-        parsed = urlparse(proxy_url)
-        return {
-            'server': f'{parsed.hostname}:{parsed.port}',
-            'username': parsed.username,
-            'password': parsed.password
-        } if parsed.username else {'server': f'{parsed.hostname}:{parsed.port}'}
-
-    def fetch(self, url: str) -> Optional[str]:
-        """
-        Fetch webpage content with anti-bot measures
-
-        Args:
-            url: Target URL to scrape
-            render_js: Enable JavaScript rendering
-
-        Returns:
-            Page HTML content or None if failed
-        """
-        try:
-            return self._fetch_with_playwright(url)
-        except Exception as e:
-            self.logger.error(f"Failed to fetch {url}: {str(e)}")
-            return None
-
-    def _fetch_with_playwright(self, url: str) -> str:
-        """Fetch page using browser automation"""
-        _, response = request_by_browser(url, browser, timeout_ms, proxy)
-        try:
-            response = page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
-            if response.status >= 400:
-                raise RuntimeError(f"HTTP Error {response.status}")
-            # page.wait_for_load_state('load', timeout=self.timeout)
-            # page.wait_for_load_state('networkidle', timeout=self.timeout)
-            # page.wait_for_load_state("domcontentloaded", timeout=self.timeout)
-            return page.content()
-        except Exception as e:
-            print(traceback.format_exc())
-            print(str(e))
-            return page.content()
-        finally:
-            page.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-    def close(self):
-        """Clean up resources"""
-        self.context.close()
-        self.browser.close()
-        self.playwright.stop()
-        self.session.close()
+from Scraper.PlaywrightRawScraper import request_by_browser
 
 
 def fetch_content(
@@ -130,21 +9,27 @@ def fetch_content(
     proxy: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     try:
-        with BrowserManager(headless=True, proxy=proxy) as browser:
-            page, response = request_by_browser(url, browser, timeout_ms, proxy)
-
+        def handler(page, response):
+            if not response:
+                return {'content': '', "errors": 'No response'}
             if response.status >= 400:
-                raise RuntimeError(f"HTTP Error {response.status}")
+                return {'content': '', "errors": f'HTTP response: {response.status}'}
 
-            # page.wait_for_load_state('load', timeout=self.timeout)
-            page.wait_for_load_state('domcontentloaded', timeout=timeout_ms)
-            # page.wait_for_load_state('networkidle', timeout=self.timeout)
+            try:
+                # page.wait_for_load_state('load', timeout=self.timeout)
+                page.wait_for_load_state('domcontentloaded', timeout=timeout_ms)
+                # page.wait_for_load_state('networkidle', timeout=self.timeout)
+            except Exception as e:
+                print(f'Rendered scraper gets error: {str(e)}')
+            finally:
+                page_content = page.content()
+                return {'content': page_content, "errors": []}
 
-            page_content = page.content()
-            return {'content': page_content, "errors": ''}
+        result = request_by_browser(url, handler, timeout_ms, proxy)
+        return result
     except Exception as e:
         print(traceback.format_exc())
-        return {'content': page.content(), "errors": [str(e)]}
+        return {'content': '', "errors": [str(e)]}
 
 
 # ----------------------------------------------------------------------------------------------------------------------
