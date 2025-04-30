@@ -143,7 +143,7 @@ def request_by_browser(
         with browser.new_context(**context_args) as context:
             with context.new_page() as page:
                 try:
-                    response = page.goto(url, timeout=timeout, wait_until="load")
+                    response = page.goto(url, timeout=timeout, wait_until="domcontentloaded")
                     return handler(page, response)
                 except Exception as e:
                     print(f'request_by_browser gets exception: {str(e)}')

@@ -221,10 +221,10 @@ def main():
     result = fetch_content('https://blogs.technet.microsoft.com/machinelearning/feed', 15000)
 
     if result['content']:
-        print(f'Content : {result['content']}')
+        print(f'Content : {result["content"]}')
         print('')
-        print(f'Valid : {result['valid']}')
-        print(f'Score : {result['score']}')
+        print(f'Valid : {result["valid"]}')
+        print(f'Score : {result["score"]}')
     print(f'Errors : {result["errors"]}')
 
 if __name__ == "__main__":

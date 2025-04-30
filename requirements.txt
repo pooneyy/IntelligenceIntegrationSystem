@@ -1,21 +1,18 @@
 lxml
-brotli
+chardet
 fastapi
-pydantic
+pydantic<2.0.0
 uvicorn
-urllib3
+urllib3~=1.26.9
 cryptography
 bs4~=0.0.1
 Flask>=2.0.3
 PyQt5>=5.15.6
 pandas~=1.4.2
-urllib3~=1.26.9
-tenacity~=9.0.0
+tenacity>=8.2.3
 playwright==1.48.0            # Then run: playwright install chromium
 feedparser==6.0.10
 markdownify~=1.1.0
 beautifulsoup4~=4.9.3
-
-# requests>=2.26.0          # Basic
-requests[socks]>=2.26.0     # Support SOCKS
-
+brotli
+requests[socks]>=2.26.0

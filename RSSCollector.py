@@ -1,34 +1,58 @@
 import os
 import re
 import json
+import chardet
 import sqlite3
 import hashlib
 import traceback
 from pathlib import Path
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 from datetime import datetime
 from RSSFetcher import fetch_feed
 from typing import Dict, List
 from markdownify import markdownify as md
 
-from Scraper.PlaywrightRenderedScraper import fetch_web_content
+from Scraper.PlaywrightRenderedScraper import fetch_content
 
 
 def html_to_clean_md(html: str) -> str:
-    # 预处理清洗
-    soup = BeautifulSoup(html, 'lxml')
-    for tag in soup(['script', 'style', 'nav', 'footer']):
+    # 输入验证
+    if not isinstance(html, (str, bytes)):
+        raise ValueError(f"Invalid input type {type(html)}, expected str/bytes")
+
+    # 编码处理
+    if isinstance(html, bytes):
+        detected_enc = chardet.detect(html)['encoding'] or 'utf-8'
+        html = html.decode(detected_enc, errors='replace')
+
+    # 容错解析
+    try:
+        soup = BeautifulSoup(html, 'lxml')
+    except Exception:
+        soup = BeautifulSoup(html, 'html.parser')
+
+    # 深度清理
+    UNWANTED_TAGS = ['script', 'style', 'nav', 'footer', 'form', 'noscript']
+    for tag in soup(UNWANTED_TAGS + ['svg', 'iframe']):
         tag.decompose()
 
-    # 转换增强配置
-    return md(
-        str(soup),
-        heading_style="ATX",
-        strip=['a[href^="#"]', 'img.avatar'],  # 过滤锚点链接和头像图片
-        autolinks=False  # 禁用自动链接转换
+    for comment in soup.find_all(text=lambda t: isinstance(t, Comment)):
+        comment.extract()
+
+    # 转换配置
+    markdown = md(
+        html,
+        strip=['script', 'style', 'nav', 'footer', 'form', 'noscript'],
+        heading_style="ATX"
     )
+
+    # 后处理
+    markdown = re.sub(r'\n{3,}', '\n\n', markdown)
+    markdown = re.sub(r'[ \t]{2,}', ' ', markdown)
+    return markdown.strip()
+
 
 def _generate_filepath(article: dict, base_dir: str = "output") -> Path:
     """生成带校验的文件存储路径
@@ -186,7 +210,7 @@ class RSSProcessor:
         try:
             result = fetch_feed(url)
             if 'entries' not in result:
-                raise ValueError(f"Feed parse error: {result["errors"]}")
+                raise ValueError(f'Feed parse error: {result["errors"]}')
             return result
         except Exception as e:
             print(f"Error parsing {url}: {str(e)}")
@@ -201,7 +225,9 @@ class RSSProcessor:
             return
 
         print(f'  - Fetching article: {article["title"]}')
-        html = fetch_web_content(url)
+        result = fetch_content(url, 25000)
+
+        html = result['content']
         if not html:
             print(f'  ! Article empty: {article["title"]}')
             return
