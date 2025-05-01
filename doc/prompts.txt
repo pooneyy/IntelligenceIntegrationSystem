@@ -129,6 +129,39 @@ Imports :
 
 
 
+我使用sync_playwright和requests实现不同模块来抓取网页，但它们的代理配置似乎不一样。
+
+sync_playwright的格式是：
+
+    proxy_config = {
+        "server": "socks5://127.0.0.1:10808",
+        "username": "",
+        "password": ""
+    }
+
+
+而requests的格式是：
+
+
+    proxies = {
+        "http": "socks5://user:password@proxy_host:port",
+        "https": "socks5://user:password@proxy_host:port"
+    }
+
+
+我希望它们能使用同样的格式，或者通过适配函数将格式转成一致。
+注意要考虑到代理不需要认证，即username和password不存在的情况，一个函数要能同时处理有认证的情况和无认证的情况。
+各个函数需要有标准英文注释，包括描述输入格式，输出格式。
+
+
+
+
+
+针对 parse_proxy，to_playwright，to_requests，考虑各种情况，包括非法输入情况，为它们各自编写测试函数。不需要使用任何测试框架，只需要使用assert进行断言即可。
+
+
+
+
 
 
 

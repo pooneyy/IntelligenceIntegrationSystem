@@ -151,7 +151,7 @@ def main():
     }
 
     result = fetch_feed(
-        "https://blogs.technet.microsoft.com/machinelearning/feed",
+        "https://feeds.feedburner.com/zhihu-daily",
         proxy=None
     )
 

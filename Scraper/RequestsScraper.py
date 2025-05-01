@@ -218,7 +218,7 @@ def main():
         "https": "socks5://user:password@proxy_host:port"
     }
 
-    result = fetch_content('https://blogs.technet.microsoft.com/machinelearning/feed', 15000)
+    result = fetch_content('https://feeds.feedburner.com/zhihu-daily', 15000)
 
     if result['content']:
         print(f'Content : {result["content"]}')
