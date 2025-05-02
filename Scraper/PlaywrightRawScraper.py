@@ -15,6 +15,8 @@ from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
 from playwright.sync_api import sync_playwright, Browser
 
+from Scraper.ScraperBase import parse_proxy, to_playwright
+
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 
 
@@ -157,18 +159,15 @@ def fetch_content(
     proxy: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
-    The same to base.
-    :param url: The same to base.
-    :param timeout_ms: The same to base.
-    :param proxy: Format:
-        {
-            "server": "socks5://127.0.0.1:10808",
-            "username": "",
-            "password": ""
-        }
-    :return: The same to base.
+    The same as base.
+    :param url: The same as base.
+    :param timeout_ms: The same as base.
+    :param proxy: Format: The same as base.
+    :return: The same as base.
     """
     try:
+        if proxy:
+            proxy = to_playwright(parse_proxy(proxy))
         def handler(_, response):
             if not response:
                 return {'content': '', "errors": 'No response'}

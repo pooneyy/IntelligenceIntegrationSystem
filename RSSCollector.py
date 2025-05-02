@@ -208,7 +208,7 @@ class RSSProcessor:
             List[Dict]: List of articles with metadata
         """
         try:
-            result = fetch_feed(url)
+            result = fetch_feed(url, self.proxy)
             if 'entries' not in result:
                 raise ValueError(f'Feed parse error: {result["errors"]}')
             return result
@@ -262,21 +262,24 @@ class RSSProcessor:
 
 def main():
     proxy_config = {
-        "server": "socks5://127.0.0.1:10808",
-        "username": "",
-        "password": ""
+        "http": "socks5://127.0.0.1:10808",
+        "https": "socks5://127.0.0.1:10808"
     }
-    processor = RSSProcessor(proxy=None)
-    try:
-        feeds = processor.read_feeds_from_json("feeds_tech.json")
-        print(f'Feeds count: {len(feeds)}')
 
-        processor.process_all_feeds()
-        print(f"Successfully got {len(processor.articles)} articles.")
+    # feed_configs = ['feeds_test.json']
+    feed_configs = ['feeds_tech.json', 'feeds_ai.json']
 
-    except Exception as e:
-        print(f"Process fail: {str(e)}")
-        print(traceback.format_exc())
+    for feed_config in feed_configs:
+        processor = RSSProcessor(proxy=proxy_config)
+        try:
+            feeds = processor.read_feeds_from_json(feed_config)
+            print(f'{feed_config}: Feeds count: {len(feeds)}')
+
+            processor.process_all_feeds()
+            print(f"{feed_config}: Successfully got {len(processor.articles)} articles.")
+        except Exception as e:
+            print(f"{feed_config}: Process fail: {str(e)}")
+            print(traceback.format_exc())
 
 
 if __name__ == "__main__":

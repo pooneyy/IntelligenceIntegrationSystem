@@ -8,6 +8,14 @@ def fetch_content(
     timeout_ms: int,
     proxy: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
+    """
+    The same as base.
+    :param url: The same as base.
+    :param timeout_ms: The same as base.
+    :param proxy: Format: The same as base.
+    :return: The same as base.
+    """
+
     try:
         def handler(page, response):
             if not response:

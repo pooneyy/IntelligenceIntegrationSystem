@@ -115,17 +115,25 @@ def fetch_feed(
 ) -> Dict[str, Any]:
     """
     Main entry point for fetching and parsing feeds
-
-    Args:
-        url: Feed URL
-        proxy: Proxy configuration
-        headless: Browser visibility mode
-
-    Returns:
-        Result dictionary with status details
+    :param url: Feed URL
+    :param proxy: Proxy configuration in request style:
+        {
+            "http": "socks5://user:password@proxy_host:port",
+            "https": "socks5://user:password@proxy_host:port"
+        }
+    :param headless: Browser visibility mode.
+    :return: Result dictionary with status details.
+        {
+            "url": "url",
+            "meta": {...},
+            "entries": [...],
+            "error": "Error description",
+            "status": "Fetch status",
+            ......
+        }
     """
     try:
-        result = RequestsScraper.fetch_content(url, timeout_ms=DEFAULT_TIMEOUT_MS)
+        result = RequestsScraper.fetch_content(url, timeout_ms=DEFAULT_TIMEOUT_MS, proxy=proxy)
         if result['content']:
             parsed = parse_feed(result['content'])
             return parsed
@@ -137,7 +145,7 @@ def fetch_feed(
             }
     except Exception as e:
         traceback.print_exc()
-        return {"url": url, "errors": [str(e)]}
+        return {"url": url, "errors": [str(e)], "status": "Fetch Failed"}
 
 
 # ----------------------------------------------------------------------------------------------------------------------
