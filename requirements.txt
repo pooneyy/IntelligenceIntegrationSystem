@@ -16,3 +16,9 @@ markdownify~=1.1.0
 beautifulsoup4~=4.9.3
 brotli
 requests[socks]>=2.26.0
+pymongo
+pytest
+
+faiss-cpu           # Windows
+# faiss-gpu           # Linux/Mac with NVIDIA card
+
