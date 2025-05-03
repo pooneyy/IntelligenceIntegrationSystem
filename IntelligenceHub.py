@@ -1,12 +1,15 @@
-import os
+import copy
 import uuid
 import time
 import queue
 import logging
+import datetime
+import traceback
+
+import pymongo
 import requests
 import threading
 from flask import Flask, request, jsonify
-from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from werkzeug.serving import make_server
 from requests.exceptions import RequestException
@@ -107,7 +110,6 @@ class IntelligenceHub:
 
         # -------------- Queues Related --------------
 
-        self.lock = threading.Lock()
         self.input_queue = queue.PriorityQueue()    # 待处理队列 (优先级, timestamp, data)
         self.processing_map = {}                    # 正在处理的任务映射 {uuid: (retry_count, data)}
         self.output_queue = queue.Queue()           # 完成处理队列
@@ -127,85 +129,25 @@ class IntelligenceHub:
 
         # ----------------- Threads -----------------
 
-        # processor_thread_count = os.cpu_count() or 4
-        # self.processor_threads = [
-        #     threading.Thread(target=self._process_data_worker, daemon=True)
-        #     for _ in range(processor_thread_count)
-        # ]
-
+        self.lock = threading.Lock()
         self.shutdown_flag = threading.Event()
 
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.archive_thread = threading.Thread(target=self._archive_worker, daemon=True)
         self.processor_thread = threading.Thread(target=self._process_data_worker, daemon=True)
-        self.timeout_checker_thread = threading.Thread(target=self._check_timeouts, daemon=True)
+        self.timeout_checker_thread = threading.Thread(target=self._check_timeout_worker, daemon=True)
 
         self.server_thread.start()
         self.archive_thread.start()
         self.processor_thread.start()
         self.timeout_checker_thread.start()
 
-    @property
-    def queue_sizes(self):
-        """获取队列状态"""
-        return {
-            'input': self.input_queue.qsize(),
-            'processing': len(self.processing_map),
-            'output': self.output_queue.qsize()
-        }
-
-    def shutdown(self, timeout=10):
-        """优雅关闭系统"""
-        logging.info("启动关闭流程...")
-
-        # 1. 设置关闭标志
-        self.shutdown_flag.set()
-
-        # 2. 停止WEB服务器
-        self.server.shutdown()
-        self.server_thread.join(timeout=2)
-
-        # 3. 等待工作线程结束
-        self.archive_thread.join(timeout=timeout)
-        self.processor_thread.join(timeout=timeout)
-        self.timeout_checker_thread.join(timeout=timeout)
-
-        # 4. 清理资源
-        self._cleanup_resources()
-        logging.info("服务已安全停止")
-
-    def _cleanup_resources(self):
-        """资源清理"""
-        # 关闭数据库连接
-        self.mongo_client.close()
-
-        # 清空队列（根据业务需求选择）
-        self._clear_queues()
-
-        # 保存索引等持久化操作
-        self._save_vector_index()
-
-    def _clear_queues(self):
-        """持久化未处理数据示例"""
-        unprocessed = []
-        with self.lock:
-            while not self.input_queue.empty():
-                item = self.input_queue.get()
-                unprocessed.append(item)
-                self.input_queue.task_done()
-
-        # 保存到文件或数据库
-        # self._save_to_file(unprocessed, 'pending_tasks.json')
-
-    def _save_vector_index(self):
-        """向量索引持久化示例"""
-        if hasattr(self, 'vector_index'):
-            self.vector_index.save('vector_index.ann')
+    # ----------------------------------------------------- Setups -----------------------------------------------------
 
     def _setup_mongo_db(self) -> bool:
         # MongoDB连接池
         try:
-            self.mongo_client = MongoClient(
+            self.mongo_client = pymongo.MongoClient(
                 self.mongo_db_uri,
                 maxPoolSize=100,
                 serverSelectionTimeoutMS=5000
@@ -213,6 +155,31 @@ class IntelligenceHub:
             self.mongo_client.admin.command('ping')  # 验证连接
             self.db = self.mongo_client["intelligence_db"]
             self.archive_col = self.db["processed_data"]
+
+            self.archive_col.create_indexes([
+                # 主键索引（自动创建）
+
+                # 时间范围查询优化
+                pymongo.IndexModel(
+                    [("metadata.created_at", pymongo.ASCENDING)],
+                    name="created_at_idx"
+                ),
+
+                # 向量维度元数据索引
+                pymongo.IndexModel(
+                    [("vector.dim", pymongo.ASCENDING)],
+                    name="vector_dim_idx",
+                    partialFilterExpression={"vector": {"$exists": True}}
+                ),
+
+                # 文本搜索索引（可选）
+                pymongo.IndexModel(
+                    [("raw_data.value", "text")],
+                    name="content_text_idx",
+                    weights={"raw_data.value": 5}
+                )
+            ])
+
             return True
         except ConnectionFailure as e:
             logging.critical(f"MongoDB连接失败: {str(e)}")
@@ -261,6 +228,68 @@ class IntelligenceHub:
                 print(str(e))
                 return jsonify({"status": "error", "uuid": ""})
 
+    # ------------------------------------------------ Public Functions ------------------------------------------------
+
+    @property
+    def queue_sizes(self):
+        return {
+            'input': self.input_queue.qsize(),
+            'processing': len(self.processing_map),
+            'output': self.output_queue.qsize()
+        }
+
+    def shutdown(self, timeout=10):
+        """优雅关闭系统"""
+        logging.info("启动关闭流程...")
+
+        # 1. 设置关闭标志
+        self.shutdown_flag.set()
+
+        # 2. 停止WEB服务器
+        self.server.shutdown()
+        self.server_thread.join(timeout=2)
+
+        # 3. 等待工作线程结束
+        self.archive_thread.join(timeout=timeout)
+        self.processor_thread.join(timeout=timeout)
+        self.timeout_checker_thread.join(timeout=timeout)
+
+        # 4. 清理资源
+        self._cleanup_resources()
+        logging.info("服务已安全停止")
+
+    # --------------------------------------------------- Shutdowns ----------------------------------------------------
+
+    def _cleanup_resources(self):
+        """资源清理"""
+        # 关闭数据库连接
+        self.mongo_client.close()
+
+        # 清空队列（根据业务需求选择）
+        self._clear_queues()
+
+        # 保存索引等持久化操作
+        self._save_vector_index()
+
+    def _clear_queues(self):
+        """持久化未处理数据示例"""
+        unprocessed = []
+        with self.lock:
+            while not self.input_queue.empty():
+                item = self.input_queue.get()
+                unprocessed.append(item)
+                self.input_queue.task_done()
+
+        # 保存到文件或数据库
+        # self._save_to_file(unprocessed, 'pending_tasks.json')
+
+    def _save_vector_index(self):
+        """向量索引持久化示例"""
+        if hasattr(self, 'vector_index'):
+            self.vector_index.save('vector_index.ann')
+
+    # ---------------------------------------------------- Workers -----------------------------------------------------
+
     def _process_data_worker(self):
         while not self.shutdown_flag.is_set():
             try:
@@ -300,7 +329,7 @@ class IntelligenceHub:
             finally:
                 self.input_queue.task_done()
 
-    def _check_timeouts(self):
+    def _check_timeout_worker(self):
         while not self.shutdown_flag.is_set():
             current_time = time.time()
             with self.lock:
@@ -321,10 +350,6 @@ class IntelligenceHub:
                         logging.error(f"数据 {uuid_str} 超时且重试次数耗尽")
             time.sleep(self.intelligence_process_timeout / 2)  # 检查频率调整为超时时间的一半
 
-    def _calculate_priority(self, retry_count):
-        # 重试次数越多优先级越高（数值越小优先级越高）
-        return max(0, self.intelligence_process_max_retries - retry_count)
-
     # # 归档模块
     # def _archive_worker(self):
     #     while True:
@@ -340,24 +365,115 @@ class IntelligenceHub:
     #             time.sleep(0.5)
 
 
-def _archive_worker(self):
-    # self.vector_index = VectorIndex()  # 初始化向量索引
+    def _archive_worker(self):
+        # self.vector_index = VectorIndex()  # 初始化向量索引
 
-    while not self.shutdown_flag.is_set():
-        try:
-            data = self.output_queue.get(timeout=1)
-            # MongoDB写入
+        while not self.shutdown_flag.is_set():
             try:
-                doc = self._create_document(data)
-                doc_id = self.archive_col.insert_one(doc).inserted_id
-                # 生成向量并创建索引（示例）
-                # if 'embedding' in data:
-                #     self.vector_index.add_vector(doc_id, data['embedding'])
-            except Exception as e:
-                logging.error(f"归档失败: {str(e)}")
-                self.output_queue.put(data)  # 重新放回队列
-            finally:
-                self.output_queue.task_done()
-        except queue.Empty:
-            continue
+                data = self.output_queue.get(timeout=1)
+                # MongoDB写入
+                try:
+                    doc = self._create_document(data)
+                    doc_id = self.archive_col.insert_one(doc).inserted_id
+                    # 生成向量并创建索引（示例）
+                    # if 'embedding' in data:
+                    #     self.vector_index.add_vector(doc_id, data['embedding'])
+                except Exception as e:
+                    logging.error(f"归档失败: {str(e)}")
+                    self.output_queue.put(data)  # 重新放回队列
+                finally:
+                    self.output_queue.task_done()
+            except queue.Empty:
+                continue
+
+    # ---------------------------------------------------- Helpers -----------------------------------------------------
+
+    def _mongo_db_valid(self) -> bool:
+        return self.mongo_client and self.db and self.archive_col
+
+    def _calculate_priority(self, retry_count):
+        # 重试次数越多优先级越高（数值越小优先级越高）
+        return max(0, self.intelligence_process_max_retries - retry_count)
+
+    def _create_document(self, raw_data: dict) -> dict:
+        """构建符合MongoDB存储规范的文档结构"""
+        try:
+            # 1. 基础字段校验
+            if 'UUID' not in raw_data:
+                raise ValueError("文档必须包含UUID字段")
+
+            # 2. 构建标准文档结构
+            doc = {
+                '_id': raw_data['UUID'],  # 使用UUID作为主键
+                'metadata': {
+                    'created_at': datetime.datetime.utcnow(),
+                    'source_system': 'IntelligenceHub',
+                    'version': '1.0'
+                },
+                'raw_data': copy.deepcopy(raw_data)
+            }
+
+            # 3. 处理特殊字段
+            if 'processed' in raw_data:
+                doc['processed'] = {
+                    'timestamp': raw_data.get('processed_time', datetime.datetime.utcnow()),
+                    'result': raw_data['processed']
+                }
+                del doc['raw_data']['processed']
+
+            # 4. 向量数据提取
+            if 'embedding' in raw_data:
+                doc['vector'] = {
+                    'values': raw_data['embedding'],
+                    'dim': len(raw_data['embedding']),
+                    'model_version': 'text-embedding-3-small'
+                }
+                del doc['raw_data']['embedding']
+
+            # 5. 数据清洗（示例）
+            self._sanitize_data(doc)
+
+            return doc
+        except Exception as e:
+            logging.error(f"文档创建失败: {str(e)}")
+            # 保存原始数据用于调试
+            self._save_error_data(raw_data)
+            return None
+
+    def _save_error_data(self, data: dict):
+        """保存格式错误的数据"""
+        error_col = self.db["error_data"]
+        try:
+            error_col.insert_one({
+                "raw": data,
+                "error_time": datetime.datetime.utcnow(),
+                "error_reason": traceback.format_exc()
+            })
+        except Exception as e:
+            logging.critical(f"连错误数据都无法保存: {str(e)}")
+
+    def _sanitize_data(self, doc: dict):
+        """数据清洗和标准化"""
+        # 时间格式标准化
+        if 'timestamp' in doc['raw_data']:
+            try:
+                doc['raw_data']['timestamp'] = datetime.datetime.fromisoformat(
+                    doc['raw_data']['timestamp']
+                )
+            except (TypeError, ValueError):
+                doc['raw_data']['timestamp'] = datetime.datetime.utcnow()
+
+        # 敏感信息过滤
+        sensitive_fields = ['password', 'token', 'credit_card']
+        for field in sensitive_fields:
+            if field in doc['raw_data']:
+                del doc['raw_data'][field]
+                logging.warning(f"已过滤敏感字段 {field}")
+
+        # 字段长度限制（防止文档过大）
+        max_length = 1000
+        for key in list(doc['raw_data'].keys()):
+            if isinstance(doc['raw_data'][key], str) and len(doc['raw_data'][key]) > max_length:
+                doc['raw_data'][key] = doc['raw_data'][key][:max_length] + '...'
+
 
