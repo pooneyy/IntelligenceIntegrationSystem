@@ -1,13 +1,14 @@
-import random
 import uuid
-
-import pytest
 import time
+import random
 import threading
 import requests
 from flask import Flask, request, jsonify
 
-from IntelligenceHub import IntelligenceHub
+from IntelligenceHub import IntelligenceHub, post_collected_intelligence
+from TestContent import CONTENT_TRUMP_GOT_FUCKED
+from prompts import DEFAULT_ANALYSIS_PROMPT
+from utility.DictPrinter import DictPrinter
 
 
 class MockCollector:
@@ -57,26 +58,37 @@ class MockIntelligenceProcessor:
 
         @self.app.route('/process', methods=['POST'])
         def process():
-            data = request.json
-            time.sleep(self.process_delay)  # 模拟处理延迟
+            try:
+                data = request.json
 
-            # 记录接收数据
-            self.received_data.append(data)
+                print(DictPrinter.pretty_print(
+                    data,
+                    indent=2,
+                    sort_keys=True,
+                    colorize=True,
+                    max_depth=4
+                ))
 
-            # 模拟随机失败
-            if random.random() < self.failure_rate:
-                return jsonify({"status": "error"}), 500
+                self.received_data.append(data)
 
-            # 异步反馈处理结果
-            threading.Thread(target=self.send_feedback, args=(data,)).start()
-            return jsonify({"status": "accepted"})
+                # # 模拟随机失败
+                # if random.random() < self.failure_rate:
+                #     return jsonify({"status": "error"}), 500
+
+                # 异步反馈处理结果
+                threading.Thread(target=self.send_feedback, args=(data,)).start()
+                return jsonify({"status": "accepted"})
+
+            except Exception as e:
+                print(f'Process error: {str(e)}')
+                return jsonify({"status": "rejected"})
 
     def send_feedback(self, original_data):
         """模拟处理完成后的反馈"""
         processed_data = {
             "UUID": original_data["UUID"],
             "processed": True,
-            "analysis": f"result_{original_data['value']}",
+            "analysis": f"",
             "timestamp": time.time()
         }
         requests.post(
@@ -92,7 +104,6 @@ class MockIntelligenceProcessor:
         self.server.start()
 
 
-@pytest.fixture(scope="module")
 def hub():
     """测试用IntelligenceHub实例"""
     hub = IntelligenceHub(
@@ -108,7 +119,6 @@ def hub():
     hub.shutdown()
 
 
-@pytest.fixture
 def processor():
     """模拟处理服务"""
     processor = MockIntelligenceProcessor("http://localhost:5000")
@@ -190,5 +200,28 @@ def test_error_handling(hub, processor):
     assert hub.archive_col.count_documents({"UUID": data["UUID"]}) == 0
 
 
-#
+def main():
+    mock_processor = MockIntelligenceProcessor('http://localhost:5000')
+    mock_processor.start()
+
+    while True:
+        data = {
+            'UUID': str(uuid.uuid4()),
+            'Token': 'SleepySoft',
+            'source': 'IntelligenceHubTest',
+            'target': '',
+            'prompt': DEFAULT_ANALYSIS_PROMPT,
+            'content': CONTENT_TRUMP_GOT_FUCKED,
+        }
+        try:
+            print('------------------------------------------------------------------------------')
+            result = post_collected_intelligence('http://127.0.0.1:5000', data, timeout=5)
+            print(result)
+        except Exception as e:
+            print(str(e))
+        time.sleep(1)
+
+
+if __name__ == '__main__':
+    main()
 

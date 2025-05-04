@@ -17,6 +17,7 @@ from requests.exceptions import RequestException
 from faiss import IndexFlatL2
 import numpy as np
 
+
 class VectorIndex:
     def __init__(self, dim=512):
         self.index = IndexFlatL2(dim)
@@ -87,14 +88,25 @@ def post_processed_intelligence(url: str, data: dict, timeout=10):
         return {"status": "error", "uuid": '', "reason": str(e)}
 
 
-COLLECTOR_DATA_MUST_FIELD = ['UUID', 'content', 'prompt']
-PROCESSED_DATA_MUST_FIELD = ['UUID']
+COLLECTOR_DATA_FIELDS = {
+    'UUID': 'M',        # [MUST]: The UUID to identify a message.
+    'Token': 'M',       # [MUST]: The token to identify the legal end point.
+    'source': 'O',      # (Optional): Message source. If it requires reply.
+    'target': 'O',      # (Optional): Use for message routing to special module.
+    'prompt': 'M',      # [MUST]: The prompt to ask LLM to process this message.
+    'content': 'M',     # [MUST]: The content to be processed.
+}
+
+
+PROCESSED_DATA_FIELDS = {
+    'UUID': 'M',        # [MUST]: The UUID to identify a message.
+}
 
 
 class IntelligenceHub:
     def __init__(self, serve_port: int = 5000,
                  mongo_db_uri="mongodb://localhost:27017/",
-                 intelligence_processor_uri="",
+                 intelligence_processor_uri="http://localhost:5001/process",
                  intelligence_process_timeout: int = 5 * 60,
                  intelligence_process_max_retries=3,
                  request_timeout: int = 5):
@@ -119,7 +131,6 @@ class IntelligenceHub:
         self.db = None
         self.archive_col = None
         self.mongo_client = None
-        self._setup_mongo_db()
 
         # ---------------- Web Service----------------
 
@@ -137,10 +148,10 @@ class IntelligenceHub:
         self.processor_thread = threading.Thread(target=self._process_data_worker, daemon=True)
         self.timeout_checker_thread = threading.Thread(target=self._check_timeout_worker, daemon=True)
 
-        self.server_thread.start()
-        self.archive_thread.start()
-        self.processor_thread.start()
-        self.timeout_checker_thread.start()
+        # self.server_thread.start()
+        # self.archive_thread.start()
+        # self.processor_thread.start()
+        # self.timeout_checker_thread.start()
 
     # ----------------------------------------------------- Setups -----------------------------------------------------
 
@@ -230,13 +241,13 @@ class IntelligenceHub:
 
     # ------------------------------------------------ Public Functions ------------------------------------------------
 
-    @property
-    def queue_sizes(self):
-        return {
-            'input': self.input_queue.qsize(),
-            'processing': len(self.processing_map),
-            'output': self.output_queue.qsize()
-        }
+    def startup(self):
+        self._setup_mongo_db()
+
+        self.server_thread.start()
+        self.archive_thread.start()
+        self.processor_thread.start()
+        self.timeout_checker_thread.start()
 
     def shutdown(self, timeout=10):
         """优雅关闭系统"""
@@ -257,6 +268,14 @@ class IntelligenceHub:
         # 4. 清理资源
         self._cleanup_resources()
         logging.info("服务已安全停止")
+
+    @property
+    def queue_sizes(self):
+        return {
+            'input': self.input_queue.qsize(),
+            'processing': len(self.processing_map),
+            'output': self.output_queue.qsize()
+        }
 
     # --------------------------------------------------- Shutdowns ----------------------------------------------------
 
@@ -366,7 +385,7 @@ class IntelligenceHub:
 
 
     def _archive_worker(self):
-        # self.vector_index = VectorIndex()  # 初始化向量索引
+        self.vector_index = VectorIndex()  # 初始化向量索引
 
         while not self.shutdown_flag.is_set():
             try:
@@ -376,8 +395,8 @@ class IntelligenceHub:
                     doc = self._create_document(data)
                     doc_id = self.archive_col.insert_one(doc).inserted_id
                     # 生成向量并创建索引（示例）
-                    # if 'embedding' in data:
-                    #     self.vector_index.add_vector(doc_id, data['embedding'])
+                    if 'embedding' in data:
+                        self.vector_index.add_vector(doc_id, data['embedding'])
                 except Exception as e:
                     logging.error(f"归档失败: {str(e)}")
                     self.output_queue.put(data)  # 重新放回队列
@@ -477,3 +496,13 @@ class IntelligenceHub:
                 doc['raw_data'][key] = doc['raw_data'][key][:max_length] + '...'
 
 
+def main():
+    hub = IntelligenceHub()
+    hub.startup()
+    while True:
+        print(f'Hub queue size: {hub.queue_sizes}')
+        time.sleep(1)
+
+
+if __name__ == '__main__':
+    main()
