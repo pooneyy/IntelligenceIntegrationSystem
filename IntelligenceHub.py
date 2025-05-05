@@ -13,6 +13,8 @@ from flask import Flask, request, jsonify
 from pymongo.errors import ConnectionFailure
 from werkzeug.serving import make_server
 from requests.exceptions import RequestException
+from concurrent.futures import ThreadPoolExecutor
+import os
 
 from faiss import IndexFlatL2
 import numpy as np
@@ -103,13 +105,26 @@ PROCESSED_DATA_FIELDS = {
 }
 
 
+APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
+APPENDIX_TIME_POST      = '__TIME_POST__'           # Timestamp of post to processor
+APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from processor
+APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
+
+APPENDIX_FIELDS = [
+    APPENDIX_TIME_GOT,
+    APPENDIX_TIME_POST,
+    APPENDIX_TIME_DONE,
+    APPENDIX_RETRY_COUNT
+]
+
+
 class IntelligenceHub:
     def __init__(self, serve_port: int = 5000,
                  mongo_db_uri="mongodb://localhost:27017/",
                  intelligence_processor_uri="http://localhost:5001/process",
                  intelligence_process_timeout: int = 5 * 60,
                  intelligence_process_max_retries=3,
-                 request_timeout: int = 5):
+                 request_timeout: int = 2):
 
         # ---------------- Parameters ----------------
 
@@ -122,15 +137,20 @@ class IntelligenceHub:
 
         # -------------- Queues Related --------------
 
-        self.input_queue = queue.PriorityQueue()    # 待处理队列 (优先级, timestamp, data)
-        self.processing_map = {}                    # 正在处理的任务映射 {uuid: (retry_count, data)}
+        self.input_queue = queue.Queue()            # 待处理队列
+        self.processing_map = {}                    # 正在处理的任务映射 {uuid: data}
         self.output_queue = queue.Queue()           # 完成处理队列
+        self.drop_counter = 0
 
         # ----------------- Mongo DB -----------------
 
         self.db = None
         self.archive_col = None
         self.mongo_client = None
+
+        # --------------------------------------------
+
+        self.vector_index = VectorIndex()
 
         # ---------------- Web Service----------------
 
@@ -145,8 +165,13 @@ class IntelligenceHub:
 
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.archive_thread = threading.Thread(target=self._archive_worker, daemon=True)
-        self.processor_thread = threading.Thread(target=self._process_data_worker, daemon=True)
         self.timeout_checker_thread = threading.Thread(target=self._check_timeout_worker, daemon=True)
+
+        worker_count = max(1, os.cpu_count() // 2)
+        self.processor_executor = ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix="ProcessorWorker"
+        )
 
         # self.server_thread.start()
         # self.archive_thread.start()
@@ -168,39 +193,16 @@ class IntelligenceHub:
             self.archive_col = self.db["processed_data"]
 
             self.archive_col.create_indexes([
-                # 主键索引（自动创建）
-
-                # 时间范围查询优化
-                pymongo.IndexModel(
-                    [("metadata.created_at", pymongo.ASCENDING)],
-                    name="created_at_idx"
-                ),
-
-                # 向量维度元数据索引
-                pymongo.IndexModel(
-                    [("vector.dim", pymongo.ASCENDING)],
-                    name="vector_dim_idx",
-                    partialFilterExpression={"vector": {"$exists": True}}
-                ),
-
-                # 文本搜索索引（可选）
-                pymongo.IndexModel(
-                    [("raw_data.value", "text")],
-                    name="content_text_idx",
-                    weights={"raw_data.value": 5}
-                )
+                pymongo.IndexModel([("metadata.created_at", pymongo.ASCENDING)], name="created_at_idx"),
+                pymongo.IndexModel([("vector.dim", pymongo.ASCENDING)], name="vector_dim_idx"),
+                pymongo.IndexModel([("raw_data.value", "text")], name="content_text_idx")
             ])
-
             return True
-        except ConnectionFailure as e:
-            logging.critical(f"MongoDB连接失败: {str(e)}")
-            return False
         except Exception as e:
-            logging.critical(f"MongoDB连接失败: {str(e)}")
+            logging.critical(f"MongoDB Connect Fail: {str(e)}")
             return False
 
     def _setup_apis(self):
-        # 信息收集API
         @self.app.route('/collect', methods=['POST'])
         def collect_api():
             try:
@@ -208,16 +210,18 @@ class IntelligenceHub:
                 if 'UUID' not in data:
                     return jsonify({"status": "error", "msg": "UUID required"}), 400
 
-                with self.lock:
-                    priority = self._calculate_priority(data.get('retry_count', 0))
-                    self.input_queue.put((priority, time.time(), data))
+                data[APPENDIX_TIME_GOT] = time.time()
+                if APPENDIX_RETRY_COUNT in data:
+                    logging.warning('Input data has appendix fields')
+                    del data[APPENDIX_RETRY_COUNT]
+
+                self.input_queue.put(data)
 
                 return jsonify({"status": "queued", "uuid": data["UUID"]})
             except Exception as e:
                 logging.error(f"Collection API fail: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
 
-        # 处理反馈API
         @self.app.route('/feedback', methods=['POST'])
         def feedback_api():
             try:
@@ -226,6 +230,8 @@ class IntelligenceHub:
                     return jsonify({"status": "error"}), 400
 
                 uuid_str = processed_data["UUID"]
+                processed_data[APPENDIX_TIME_DONE] = time.time()
+
                 with self.lock:
                     if uuid_str in self.processing_map:
                         # original_retry_count, original_data = self.processing_map.pop(uuid_str)
@@ -236,7 +242,7 @@ class IntelligenceHub:
 
                 return jsonify({"status": "acknowledged", "uuid": uuid_str})
             except Exception as e:
-                print(str(e))
+                logging.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
 
     # ------------------------------------------------ Public Functions ------------------------------------------------
@@ -244,9 +250,11 @@ class IntelligenceHub:
     def startup(self):
         self._setup_mongo_db()
 
+        for _ in range(self.processor_executor._max_workers):
+            self.processor_executor.submit(self._processing_loop)
+
         self.server_thread.start()
         self.archive_thread.start()
-        self.processor_thread.start()
         self.timeout_checker_thread.start()
 
     def shutdown(self, timeout=10):
@@ -258,145 +266,135 @@ class IntelligenceHub:
 
         # 2. 停止WEB服务器
         self.server.shutdown()
-        self.server_thread.join(timeout=2)
 
-        # 3. 等待工作线程结束
+        # 3. Clear and persists unprocessed data. Put None to un-block all threads.
+        self._clear_queues()
+        for _ in range(self.processor_executor._max_workers * 2):
+            self.input_queue.put(None)
+
+        # 4. 等待工作线程结束
+        self.server_thread.join(timeout=timeout)
         self.archive_thread.join(timeout=timeout)
-        self.processor_thread.join(timeout=timeout)
         self.timeout_checker_thread.join(timeout=timeout)
 
-        # 4. 清理资源
+        # 5.关闭线程池
+        self.processor_executor.shutdown(wait=True)
+        logging.info("线程池已安全关闭")
+
+        # 6. 清理资源
         self._cleanup_resources()
         logging.info("服务已安全停止")
 
     @property
-    def queue_sizes(self):
+    def statistics(self):
         return {
             'input': self.input_queue.qsize(),
             'processing': len(self.processing_map),
-            'output': self.output_queue.qsize()
+            'output': self.output_queue.qsize(),
+            'dropped': self.drop_counter
         }
 
     # --------------------------------------------------- Shutdowns ----------------------------------------------------
 
-    def _cleanup_resources(self):
-        """资源清理"""
-        # 关闭数据库连接
-        self.mongo_client.close()
-
-        # 清空队列（根据业务需求选择）
-        self._clear_queues()
-
-        # 保存索引等持久化操作
-        self._save_vector_index()
-
     def _clear_queues(self):
-        """持久化未处理数据示例"""
         unprocessed = []
         with self.lock:
             while not self.input_queue.empty():
                 item = self.input_queue.get()
                 unprocessed.append(item)
                 self.input_queue.task_done()
-
         # 保存到文件或数据库
         # self._save_to_file(unprocessed, 'pending_tasks.json')
 
-    def _save_vector_index(self):
-        """向量索引持久化示例"""
-        if hasattr(self, 'vector_index'):
+    def _cleanup_resources(self):
+        """资源清理"""
+        # 关闭数据库连接
+        self.mongo_client.close()
+
+        # 保存索引等持久化操作
+        if self.vector_index:
             self.vector_index.save('vector_index.ann')
 
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
-    def _process_data_worker(self):
+    def _processing_loop(self):
         while not self.shutdown_flag.is_set():
             try:
-                priority, timestamp, data = self.input_queue.get_nowait()
+                data = self.input_queue.get(block=True)
+
+                # Shutdown will put None to make thread un-blocking
+                if not data:
+                    self.input_queue.task_done()
+                    continue
+
+                self._process_data(data)
             except queue.Empty:
-                time.sleep(0.1)
                 continue
-
-            uuid_str = data['UUID']
-            retry_count = data.get('retry_count', 0)
-
-            try:
-                # 发送处理请求
-                response = requests.post(
-                    self.intelligence_processor_uri,
-                    json=data,
-                    timeout=self.request_timeout
-                )
-                response.raise_for_status()
-
-                # 记录处理开始时间
-                with self.lock:
-                    self.processing_map[uuid_str] = (retry_count, data)
-                    data['_enqueue_time'] = time.time()
-
             except Exception as e:
-                logging.error(f"处理请求失败 UUID={uuid_str}: {str(e)}")
-                new_retry = retry_count + 1
-                if new_retry <= self.intelligence_process_max_retries:
-                    data['retry_count'] = new_retry
-                    priority = self._calculate_priority(new_retry)
-                    with self.lock:
-                        self.input_queue.put((priority, time.time(), data))
-                else:
-                    logging.error(f"数据 {uuid_str} 超过最大重试次数，丢弃")
-
+                logging.error(f"_processing_loop error: {str(e)}")
             finally:
                 self.input_queue.task_done()
+
+    def _process_data(self, data: dict):
+        try:
+            uuid_str = data['UUID']
+            data[APPENDIX_TIME_POST] = time.time()
+
+            # Record data first avoiding request gets exception which makes data lost.
+            self.processing_map[uuid_str] = data
+
+            response = requests.post(
+                self.intelligence_processor_uri,
+                json=data,
+                timeout=self.request_timeout
+            )
+            response.raise_for_status()
+
+            # TODO: If the request is actively rejected. Just drop this data.
+
+        except Exception as e:
+            logging.error(f"_process_data got error: {str(e)}")
 
     def _check_timeout_worker(self):
         while not self.shutdown_flag.is_set():
             current_time = time.time()
+
             with self.lock:
-                timeout_uuids = []
-                for uuid_str, (retry_count, data) in self.processing_map.items():
-                    if current_time - data['_enqueue_time'] > self.intelligence_process_timeout:
-                        timeout_uuids.append(uuid_str)
+                for _uuid, data in self.processing_map.keys():
+                    if APPENDIX_TIME_POST not in data not in data:
+                        del self.processing_map[_uuid]
+                        self.drop_counter += 1
+                        logging.error(f'{data["uuid"]} has no must have fields - drop.')
+                        continue
 
-                for uuid_str in timeout_uuids:
-                    retry_count, data = self.processing_map.pop(uuid_str)
-                    new_retry = retry_count + 1
-                    if new_retry <= self.intelligence_process_max_retries:
-                        data['retry_count'] = new_retry
-                        data['_enqueue_time'] = current_time
-                        priority = self._calculate_priority(new_retry)
-                        self.input_queue.put((priority, current_time, data))
+                    if APPENDIX_RETRY_COUNT not in data:
+                        data[APPENDIX_RETRY_COUNT] = self.intelligence_process_max_retries
                     else:
-                        logging.error(f"数据 {uuid_str} 超时且重试次数耗尽")
-            time.sleep(self.intelligence_process_timeout / 2)  # 检查频率调整为超时时间的一半
+                        if data[APPENDIX_RETRY_COUNT] <= 0:
+                            del self.processing_map[_uuid]
+                            self.drop_counter += 1
+                            logging.error(f'{data["uuid"]} has no retry times - drop.')
+                            continue
 
-    # # 归档模块
-    # def _archive_worker(self):
-    #     while True:
-    #         try:
-    #             data = self.output_queue.get()
-    #             # MongoDB写入
-    #             doc_id = self.archive_col.insert_one(data).inserted_id
-    #             # TODO: 创建向量索引
-    #             self.output_queue.task_done()
-    #
-    #             # TODO: Call post processor plugins
-    #         except queue.Empty:
-    #             time.sleep(0.5)
+                    if current_time - data[APPENDIX_TIME_POST] > self.intelligence_process_timeout:
+                        data[APPENDIX_RETRY_COUNT] -= 1
+                        self.input_queue.put(data)
 
+            time.sleep(self.intelligence_process_timeout / 2)
 
     def _archive_worker(self):
-        self.vector_index = VectorIndex()  # 初始化向量索引
-
         while not self.shutdown_flag.is_set():
             try:
                 data = self.output_queue.get(timeout=1)
-                # MongoDB写入
+
                 try:
                     doc = self._create_document(data)
                     doc_id = self.archive_col.insert_one(doc).inserted_id
                     # 生成向量并创建索引（示例）
                     if 'embedding' in data:
                         self.vector_index.add_vector(doc_id, data['embedding'])
+
+                    # TODO: Call post processor plugins
                 except Exception as e:
                     logging.error(f"归档失败: {str(e)}")
                     self.output_queue.put(data)  # 重新放回队列
@@ -500,7 +498,7 @@ def main():
     hub = IntelligenceHub()
     hub.startup()
     while True:
-        print(f'Hub queue size: {hub.queue_sizes}')
+        print(f'Hub queue size: {hub.statistics}')
         time.sleep(1)
 
 
