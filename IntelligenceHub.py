@@ -181,25 +181,79 @@ class IntelligenceHub:
     # ----------------------------------------------------- Setups -----------------------------------------------------
 
     def _setup_mongo_db(self) -> bool:
-        # MongoDB连接池
+        """初始化MongoDB连接并创建必要索引"""
         try:
+            # 连接配置
             self.mongo_client = pymongo.MongoClient(
                 self.mongo_db_uri,
                 maxPoolSize=100,
                 serverSelectionTimeoutMS=5000
             )
-            self.mongo_client.admin.command('ping')  # 验证连接
+
+            # 验证连接
+            self.mongo_client.admin.command('ping')
             self.db = self.mongo_client["intelligence_db"]
             self.archive_col = self.db["processed_data"]
 
-            self.archive_col.create_indexes([
-                pymongo.IndexModel([("metadata.created_at", pymongo.ASCENDING)], name="created_at_idx"),
-                pymongo.IndexModel([("vector.dim", pymongo.ASCENDING)], name="vector_dim_idx"),
-                pymongo.IndexModel([("raw_data.value", "text")], name="content_text_idx")
-            ])
+            # 定义索引规范（名称、字段、选项）
+            index_specs = [
+                {
+                    "name": "created_at_idx",
+                    "keys": [("metadata.created_at", pymongo.ASCENDING)],
+                    "description": "基于创建时间的时间范围查询加速"
+                },
+                {
+                    "name": "vector_dim_idx",
+                    "keys": [("vector.dim", pymongo.ASCENDING)],
+                    "options": {
+                        "partialFilterExpression": {"vector": {"$exists": True}},
+                        "background": True  # 后台创建避免阻塞
+                    },
+                    "description": "向量维度查询优化（仅当存在vector字段时建立）"
+                },
+                {
+                    "name": "content_text_idx",
+                    "keys": [("raw_data.value", "text")],
+                    "options": {
+                        "weights": {"raw_data.value": 5},
+                        "default_language": "english",
+                        "language_override": "language"
+                    },
+                    "description": "全文检索索引（字段权重优化）"
+                }
+            ]
+
+            # 检查并创建索引
+            existing_indexes = {idx["name"]: idx for idx in self.archive_col.list_indexes()}
+
+            for spec in index_specs:
+                index_name = spec["name"]
+                index_model = pymongo.IndexModel(spec["keys"], **spec.get("options", {}))
+
+                # 索引存在性检查
+                if index_name in existing_indexes:
+                    existing = existing_indexes[index_name]
+                    # 检查索引定义是否一致
+                    if (existing["key"] == index_model.document['key'] and
+                            existing.get("partialFilterExpression") == spec.get("options", {}).get(
+                                "partialFilterExpression")):
+                        logging.info(f"索引 {index_name} 已存在，跳过创建")
+                        continue
+
+                    # 删除不一致的旧索引
+                    logging.warning(f"检测到不一致索引 {index_name}，重新创建...")
+                    self.archive_col.drop_index(index_name)
+
+                # 创建新索引
+                logging.info(f"创建索引 {index_name}：{spec['description']}")
+                self.archive_col.create_indexes([index_model])
+
             return True
+        except pymongo.errors.OperationFailure as e:
+            logging.critical(f"MongoDB索引操作失败: {str(e)}")
+            return False
         except Exception as e:
-            logging.critical(f"MongoDB Connect Fail: {str(e)}")
+            logging.critical(f"MongoDB连接失败: {str(e)}")
             return False
 
     def _setup_apis(self):
@@ -345,7 +399,7 @@ class IntelligenceHub:
 
             response = requests.post(
                 self.intelligence_processor_uri,
-                json=data,
+                json=self._data_without_appendix(data),
                 timeout=self.request_timeout
             )
             response.raise_for_status()
@@ -360,7 +414,7 @@ class IntelligenceHub:
             current_time = time.time()
 
             with self.lock:
-                for _uuid, data in self.processing_map.keys():
+                for _uuid, data in self.processing_map.items():
                     if APPENDIX_TIME_POST not in data not in data:
                         del self.processing_map[_uuid]
                         self.drop_counter += 1
@@ -405,12 +459,11 @@ class IntelligenceHub:
 
     # ---------------------------------------------------- Helpers -----------------------------------------------------
 
+    def _data_without_appendix(self, data: dict) -> dict:
+        return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
+
     def _mongo_db_valid(self) -> bool:
         return self.mongo_client and self.db and self.archive_col
-
-    def _calculate_priority(self, retry_count):
-        # 重试次数越多优先级越高（数值越小优先级越高）
-        return max(0, self.intelligence_process_max_retries - retry_count)
 
     def _create_document(self, raw_data: dict) -> dict:
         """构建符合MongoDB存储规范的文档结构"""
