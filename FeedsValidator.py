@@ -2,7 +2,6 @@ import sys
 import json
 import argparse
 import threading
-import feedparser
 from xml.etree import ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 

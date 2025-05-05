@@ -258,6 +258,30 @@ class RSSProcessor:
                 print(f"Conflict detect: {url} is handling by other process.")
 
 
+def load_json_config(rss_cfg_file: str):
+    try:
+        with open(rss_cfg_file, 'r', encoding='utf-8') as f:
+            json_data = json.load(f)
+            return {
+                'proxy': json_data.get('proxy', {}),
+                'ihub': json_data.get('proxy', {})
+            }
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise ValueError(f"Invalid JSON file: {str(e)}") from e
+
+
+def collect(rss_cfg_file: str, hub_url: str):
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            self.feeds = config.get('feeds', {})
+            return self.feeds
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise ValueError(f"Invalid JSON file: {str(e)}") from e
+
+    processor = RSSProcessor()
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
