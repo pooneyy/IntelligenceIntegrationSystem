@@ -118,10 +118,15 @@ APPENDIX_FIELDS = [
 ]
 
 
+DEFAULT_IHUB_PORT = 5000
+DEFAULT_MONGO_DB_URL = "mongodb://localhost:27017/"
+DEFAULT_PROCESSOR_URL = "http://localhost:5001/process"
+
+
 class IntelligenceHub:
-    def __init__(self, serve_port: int = 5000,
-                 mongo_db_uri="mongodb://localhost:27017/",
-                 intelligence_processor_uri="http://localhost:5001/process",
+    def __init__(self, serve_port: int = DEFAULT_IHUB_PORT,
+                 mongo_db_uri=DEFAULT_MONGO_DB_URL,
+                 intelligence_processor_uri=DEFAULT_PROCESSOR_URL,
                  intelligence_process_timeout: int = 5 * 60,
                  intelligence_process_max_retries=3,
                  request_timeout: int = 2):

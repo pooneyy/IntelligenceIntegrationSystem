@@ -18,6 +18,8 @@ brotli
 requests[socks]>=2.26.0
 pymongo
 pytest
+numpy
+werkzeug
 
 faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card

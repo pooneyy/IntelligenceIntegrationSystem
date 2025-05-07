@@ -1,6 +1,9 @@
 import os
 import re
 import json
+import threading
+import time
+
 import chardet
 import sqlite3
 import hashlib
@@ -10,11 +13,16 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup, Comment
 from datetime import datetime
+
+from pydantic.class_validators import partial
+
+from IntelligenceHub import DEFAULT_IHUB_PORT, post_collected_intelligence
 from RSSFetcher import fetch_feed
-from typing import Dict, List
+from typing import Dict, List, Any, Optional
 from markdownify import markdownify as md
 
 from Scraper.PlaywrightRenderedScraper import fetch_content
+from utility.DictPrinter import DictPrinter
 
 
 def html_to_clean_md(html: str) -> str:
@@ -130,8 +138,11 @@ def _parse_pub_date(entry) -> str:
 class RSSProcessor:
     """RSS feed processor with modular functions for JSON reading, feed parsing and content downloading"""
 
-    def __init__(self, proxy=None):
+    def __init__(self, article_handlers=None, proxy=None):
         self.feeds = {}
+        self.article_handlers = article_handlers \
+            if article_handlers else (
+            self.article_default_handlers())
         self.proxy = proxy
         self.articles = []
         self.session = requests.Session()
@@ -171,22 +182,8 @@ class RSSProcessor:
 
     # ---------------------------------------------------------------------
 
-    def read_feeds_from_json(self, filepath: str) -> Dict[str, str]:
-        """Read RSS feed URLs from JSON configuration file
-        Args:
-            filepath (str): Path to JSON config file
-        Returns:
-            Dict[str, str]: Dictionary of feed names to URLs
-        """
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                self.feeds = config.get('feeds', {})
-                return self.feeds
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            raise ValueError(f"Invalid JSON file: {str(e)}") from e
-
-    def process_all_feeds(self):
+    def process_all_feeds(self, feeds: dict):
+        self.feeds = feeds
         for feed_name, feed_url in self.feeds.items():
             try:
                 print(f'Process feed: {feed_name} : {feed_url}')
@@ -236,14 +233,38 @@ class RSSProcessor:
         article['content_html'] = html
         article['content_markdown'] = markdown
 
-        # 生成存储路径
-        filepath = _generate_filepath(article)
+        if isinstance(self.article_handlers, list):
+            for handler in self.article_handlers:
+                try:
+                    handler(article)
+                except Exception as e:
+                    print(f'Article handler error: {str(e)}')
 
-        # 原子化写入
+    def set_article_handlers(self, article_handlers: list):
+        self.article_handlers = article_handlers
+
+    def article_default_handlers(self) -> List:
+        return [
+            self.article_handler_append,
+            self.article_handler_to_file,
+            self.article_handler_log_history
+        ]
+
+    def article_handler_append(self, article: dict):
+        self.articles.append(article)
+
+    def article_handler_to_file(self, article: dict):
+        markdown = article['content_markdown']
+        filepath = _generate_filepath(article)
+        article['filepath'] = filepath
+
+        _write_md_file(filepath, markdown)
+
+    def article_handler_log_history(self, article: dict):
         with self.conn:
             try:
-                # 写入文件
-                _write_md_file(filepath, markdown)
+                url = article['link']
+                filepath = article.get('filepath', '')
 
                 # 更新记录
                 cursor = self.conn.cursor()
@@ -258,28 +279,168 @@ class RSSProcessor:
                 print(f"Conflict detect: {url} is handling by other process.")
 
 
-def load_json_config(rss_cfg_file: str):
+CONFIG_DEFAULT_VALUE = {
+    'feeds': {},
+    'proxy': {},
+    'polling_interval_s': 10 * 60,
+    'intelligence_hub_url': f'http://localhost:{DEFAULT_IHUB_PORT}'
+}
+
+
+def load_json_config(rss_cfg_file: str, default_config: Optional[Dict]):
     try:
+        default_config = default_config or { }
         with open(rss_cfg_file, 'r', encoding='utf-8') as f:
-            json_data = json.load(f)
+            json_config = json.load(f)
             return {
-                'proxy': json_data.get('proxy', {}),
-                'ihub': json_data.get('proxy', {})
+                k: json_config.get(k, default_config.get(k, v))
+                for k, v in CONFIG_DEFAULT_VALUE.items()
             }
     except (FileNotFoundError, json.JSONDecodeError) as e:
         raise ValueError(f"Invalid JSON file: {str(e)}") from e
 
 
-def collect(rss_cfg_file: str, hub_url: str):
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-            self.feeds = config.get('feeds', {})
-            return self.feeds
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        raise ValueError(f"Invalid JSON file: {str(e)}") from e
+class FeedProcessorManager:
+    def __init__(self):
+        self.threads: Dict[str, Dict[str, Any]] = {}
+        self.lock = threading.Lock()
 
-    processor = RSSProcessor()
+    def start_processing_task(self,
+                              rss_cfg_file: str,
+                              default_config: Optional[Dict] = None,
+                              force: bool = False) -> bool:
+        try:
+            config = load_json_config(rss_cfg_file, default_config)
+        except ValueError as e:
+            print(f"Config file f{rss_cfg_file} load failed: {str(e)}")
+            return False
+
+        if not config['feeds']:
+            print(f"Config file f{rss_cfg_file} has no feeds - ignore.")
+            return False
+
+        with self.lock:
+            if rss_cfg_file in self.threads:
+                if not force:
+                    return False
+                self._stop_thread(rss_cfg_file)
+
+            stop_event = threading.Event()
+            thread = threading.Thread(
+                target=self._process_loop,
+                args=(rss_cfg_file, config, stop_event),
+                daemon=True
+            )
+            thread.start()
+
+            self.threads[rss_cfg_file] = {
+                "thread": thread,
+                "stop_event": stop_event,
+                "stats": {
+                    "executions": 0,
+                    "successes": 0,
+                    "failures": 0,
+                    "total_articles": 0,
+                    "last_execution": None
+                }
+            }
+            return True
+
+    def _process_loop(self, filename: str, config: dict, stop_event: threading.Event):
+        feeds = config['feeds']
+        proxy = config['proxy']
+        interval = config['polling_interval_s']
+        post_url = config['intelligence_hub_url']
+
+        print(f'Start task for: {filename}')
+
+        while not stop_event.is_set():
+            start_time = time.time()
+            try:
+                processor = RSSProcessor(proxy=proxy)
+
+                article_handlers = processor.article_default_handlers()
+                article_handlers.insert(1, partial(self._article_handler_post_to_hub, post_url))
+                processor.set_article_handlers(article_handlers)
+
+                processor.process_all_feeds(feeds)
+
+                with self.lock:
+                    self.threads[filename]['stats']['executions'] += 1
+                    self.threads[filename]['stats']['successes'] += 1
+                    # self.threads[filename]['stats']['total_articles'] += len(articles)
+                    self.threads[filename]['stats']['last_execution'] = start_time
+            except Exception as e:
+                with self.lock:
+                    self.threads[filename]['stats']['executions'] += 1
+                    self.threads[filename]['stats']['failures'] += 1
+                print(f"Processing failed [{filename}]: {str(e)}")
+                traceback.print_exc()
+
+            elapsed = time.time() - start_time
+            sleep_time = max(0, int(interval - elapsed))
+            stop_event.wait(sleep_time)
+
+    def _article_handler_post_to_hub(self, post_url: str, article: dict):
+        try:
+            print(DictPrinter.pretty_print(
+                article,
+                indent=2,
+                sort_keys=True,
+                colorize=True,
+                max_depth=4
+            ))
+            # post_collected_intelligence(post_url, article)
+        except Exception as e:
+            print(f'Post to hub fail: {str(e)}')
+
+    def get_task_stats(self) -> Dict[str, Dict]:
+        """获取当前所有任务的统计信息"""
+        with self.lock:
+            return {
+                filename: info['stats'].copy()
+                for filename, info in self.threads.items()
+            }
+
+    def stop_task(self, filename: str) -> bool:
+        with self.lock:
+            if filename not in self.threads:
+                return False
+            self._stop_thread(filename)
+            return True
+
+    def _stop_thread(self, filename: str):
+        self.threads[filename]['stop_event'].set()
+        self.threads[filename]['thread'].join()
+        del self.threads[filename]
+
+    def stop_all_tasks(self):
+        with self.lock:
+            for filename in list(self.threads.keys()):
+                self._stop_thread(filename)
+
+
+def collect(feeds: dict, proxy: dict) -> List:
+    try:
+        processor = RSSProcessor(proxy=proxy)
+        processor.process_all_feeds(feeds)
+        return processor.articles
+    except Exception as e:
+        print(f"Feed collect fail: {str(e)}")
+        print(traceback.format_exc())
+        return []
+
+
+def collect_by_json_configs(feed_configs: List[str], default_config: dict):
+    for feed_cfg in feed_configs:
+        try:
+            config = load_json_config(feed_cfg, default_config)
+            print(f'{config['config_file']}: Feeds count: {len(config['feeds'])}')
+
+            articles = collect(config['feeds'], config['proxy'])
+            print(f"{config['config_file']}: Got {len(articles)} articles.")
+        except Exception as e:
+            print(f'Collect config {feed_cfg} Error: str(e)')
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -292,18 +453,14 @@ def main():
 
     # feed_configs = ['feeds_test.json']
     feed_configs = ['feeds_tech.json', 'feeds_ai.json']
+    # collect_by_json_configs(feed_configs, {'proxy': {}})
 
-    for feed_config in feed_configs:
-        processor = RSSProcessor(proxy=proxy_config)
-        try:
-            feeds = processor.read_feeds_from_json(feed_config)
-            print(f'{feed_config}: Feeds count: {len(feeds)}')
+    fpm = FeedProcessorManager()
+    for json_file in feed_configs:
+        fpm.start_processing_task(json_file)
 
-            processor.process_all_feeds()
-            print(f"{feed_config}: Successfully got {len(processor.articles)} articles.")
-        except Exception as e:
-            print(f"{feed_config}: Process fail: {str(e)}")
-            print(traceback.format_exc())
+    while True:
+        time.sleep(1)
 
 
 if __name__ == "__main__":
