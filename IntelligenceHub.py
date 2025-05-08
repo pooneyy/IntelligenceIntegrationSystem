@@ -1,4 +1,5 @@
 import copy
+import json
 import uuid
 import time
 import queue
@@ -93,9 +94,15 @@ def post_processed_intelligence(url: str, data: dict, timeout=10):
 
 
 def post_to_ai_processor(url: str, data: dict, timeout=10):
+    json_data = json.dumps(
+        {field: data[field] for field in POST_PROCESS_DATA_FIELDS},
+        ensure_ascii=False
+    )
+    headers = {"Content-Type": "application/json; charset=UTF-8"}
     response = requests.post(
         url,
-        json={ field: data[field] for field in POST_PROCESS_DATA_FIELDS },
+        data=json_data.encode("utf-8"),
+        headers=headers,
         timeout=timeout
     )
     return response
