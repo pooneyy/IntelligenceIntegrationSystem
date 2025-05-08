@@ -19,6 +19,8 @@ import os
 from faiss import IndexFlatL2
 import numpy as np
 
+from prompts import DEFAULT_ANALYSIS_PROMPT
+
 
 class VectorIndex:
     def __init__(self, dim=512):
@@ -90,18 +92,44 @@ def post_processed_intelligence(url: str, data: dict, timeout=10):
         return {"status": "error", "uuid": '', "reason": str(e)}
 
 
+def post_to_ai_processor(url: str, data: dict, timeout=10):
+    response = requests.post(
+        url,
+        json={ field: data[field] for field in POST_PROCESS_DATA_FIELDS },
+        timeout=timeout
+    )
+    return response
+
+
 COLLECTOR_DATA_FIELDS = {
     'UUID': 'M',        # [MUST]: The UUID to identify a message.
-    'Token': 'M',       # [MUST]: The token to identify the legal end point.
+    'token': 'M',       # [MUST]: The token to identify the legal end point.
     'source': 'O',      # (Optional): Message source. If it requires reply.
     'target': 'O',      # (Optional): Use for message routing to special module.
-    'prompt': 'M',      # [MUST]: The prompt to ask LLM to process this message.
+    'prompt': 'O',      # (Optional): The prompt to ask LLM to process this message.
+    'title': 'O',       # [MUST]: The content to be processed.
+    'author': 'O',      # (Optional): Article author.
     'content': 'M',     # [MUST]: The content to be processed.
+    'informant': 'O',   # (Optional): The source of message.
+}
+
+
+POST_PROCESS_DATA_FIELDS = {
+    'UUID': 'M',        # [MUST]: The UUID to identify a message.
+    'PROMPT': 'M',
+    'TEXT': 'M',
 }
 
 
 PROCESSED_DATA_FIELDS = {
     'UUID': 'M',        # [MUST]: The UUID to identify a message.
+    'TIME': 'M',
+    'LOCATION': 'M',
+    'PEOPLE': 'M',
+    'ORGANIZATION': 'M',
+    'EVENT_BRIEF': 'M',
+    'EVENT_TEXT': 'M',
+    'RATE': 'M',
 }
 
 
@@ -146,6 +174,7 @@ class IntelligenceHub:
         self.processing_map = {}                    # 正在处理的任务映射 {uuid: data}
         self.output_queue = queue.Queue()           # 完成处理队列
         self.drop_counter = 0
+        self.processed_counter = 0
 
         # ----------------- Mongo DB -----------------
 
@@ -407,6 +436,14 @@ class IntelligenceHub:
                 json=self._data_without_appendix(data),
                 timeout=self.request_timeout
             )
+            response = post_to_ai_processor(
+                self.intelligence_processor_uri,
+                {
+                    'UUID': data['UUID'],
+                    'PROMPT': DEFAULT_ANALYSIS_PROMPT,
+                    'TEXT': data[''],
+                }
+            )
             response.raise_for_status()
 
             # TODO: If the request is actively rejected. Just drop this data.
@@ -452,6 +489,8 @@ class IntelligenceHub:
                     # 生成向量并创建索引（示例）
                     if 'embedding' in data:
                         self.vector_index.add_vector(doc_id, data['embedding'])
+
+                    self.processed_counter += 1
 
                     # TODO: Call post processor plugins
                 except Exception as e:

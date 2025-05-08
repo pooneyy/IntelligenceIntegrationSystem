@@ -383,14 +383,14 @@ class FeedProcessorManager:
 
     def _article_handler_post_to_hub(self, post_url: str, article: dict):
         try:
-            print(DictPrinter.pretty_print(
-                article,
-                indent=2,
-                sort_keys=True,
-                colorize=True,
-                max_depth=4
-            ))
-            # post_collected_intelligence(post_url, article)
+            # print(DictPrinter.pretty_print(
+            #     article,
+            #     indent=2,
+            #     sort_keys=True,
+            #     colorize=True,
+            #     max_depth=4
+            # ))
+            post_collected_intelligence(post_url, article)
         except Exception as e:
             print(f'Post to hub fail: {str(e)}')
 
@@ -435,7 +435,7 @@ def collect_by_json_configs(feed_configs: List[str], default_config: dict):
     for feed_cfg in feed_configs:
         try:
             config = load_json_config(feed_cfg, default_config)
-            print(f'{config['config_file']}: Feeds count: {len(config['feeds'])}')
+            print(f"{config['config_file']}: Feeds count: {len(config['feeds'])}")
 
             articles = collect(config['feeds'], config['proxy'])
             print(f"{config['config_file']}: Got {len(articles)} articles.")
