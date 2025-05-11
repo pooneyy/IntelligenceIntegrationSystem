@@ -38,11 +38,73 @@ class VectorIndex:
 logging.basicConfig(level=logging.INFO)
 
 
+def validate_fields(key_attrs, checked_dict):
+    must_missing = 0
+    optional_exist = 0
+    attribute_keys = set(key_attrs.keys())
+    checked_keys = set(checked_dict.keys())
+
+    # 统计MUST/Optional字段
+    for key, flag in key_attrs.items():
+        if flag == 'M' and key not in checked_keys:
+            must_missing += 1
+        elif flag == 'O' and key in checked_keys:
+            optional_exist += 1
+
+    # 修正后的额外字段计算：排除属性表中已定义的字段
+    defined_fields = attribute_keys & checked_keys  # 已定义的合法字段
+    extra_fields = len(checked_keys - defined_fields)
+
+    return must_missing, optional_exist, extra_fields
+
+
+COLLECTOR_DATA_FIELDS = {
+    'UUID': 'M',        # [MUST]: The UUID to identify a message.
+
+    'token': 'M',       # [MUST]: The token to identify the legal end point.
+    'source': 'O',      # (Optional): Message source. If it requires reply.
+    'target': 'O',      # (Optional): Use for message routing to special module.
+    'prompt': 'O',      # (Optional): The prompt to ask LLM to process this message.
+
+    'title': 'O',       # [MUST]: The content to be processed.
+    'authors': 'O',      # (Optional): Article author.
+    'content': 'M',     # [MUST]: The content to be processed.
+    'pub_time': 'O',       # [MUST]: The content to be processed.
+    'informant': 'O',   # (Optional): The source of message.
+}
+
+
+POST_PROCESS_DATA_FIELDS = {
+    'UUID': 'M',
+    'PROMPT': 'M',
+    'TEXT': 'M',
+}
+
+
+PROCESSED_DATA_FIELDS = {
+    'UUID': 'M',        # [MUST]: The UUID to identify a message.
+    'TIME': 'M',
+    'LOCATION': 'M',
+    'PEOPLE': 'M',
+    'ORGANIZATION': 'M',
+    'EVENT_BRIEF': 'M',
+    'EVENT_TEXT': 'M',
+    'RATE': 'M',
+    'IMPACT': 'O'
+}
+
+
 def post_collected_intelligence(url: str, data: dict, timeout=10):
     try:
         if 'UUID' not in data:
             data['UUID'] = str(uuid.uuid4())
             logging.info(f"Generated new UUID: {data['UUID']}")
+
+        must_missing, optional_exist, extra_fields = validate_fields(COLLECTOR_DATA_FIELDS, data)
+        if must_missing:
+            print(f'Post data error - '
+                  f'MUST fields missing: {must_missing}, '
+                  f'Optional/Extra: {optional_exist}/{extra_fields}')
 
         response = requests.post(
             f'{url}/collect',
@@ -102,41 +164,6 @@ def post_to_ai_processor(url: str, data: dict, timeout=10):
         timeout=timeout
     )
     return response
-
-
-COLLECTOR_DATA_FIELDS = {
-    'UUID': 'M',        # [MUST]: The UUID to identify a message.
-
-    'token': 'M',       # [MUST]: The token to identify the legal end point.
-    'source': 'O',      # (Optional): Message source. If it requires reply.
-    'target': 'O',      # (Optional): Use for message routing to special module.
-    'prompt': 'O',      # (Optional): The prompt to ask LLM to process this message.
-
-    'title': 'O',       # [MUST]: The content to be processed.
-    'author': 'O',      # (Optional): Article author.
-    'content': 'M',     # [MUST]: The content to be processed.
-    'informant': 'O',   # (Optional): The source of message.
-}
-
-
-POST_PROCESS_DATA_FIELDS = {
-    'UUID': 'M',        # [MUST]: The UUID to identify a message.
-    'PROMPT': 'M',
-    'TEXT': 'M',
-}
-
-
-PROCESSED_DATA_FIELDS = {
-    'UUID': 'M',        # [MUST]: The UUID to identify a message.
-    'TIME': 'M',
-    'LOCATION': 'M',
-    'PEOPLE': 'M',
-    'ORGANIZATION': 'M',
-    'EVENT_BRIEF': 'M',
-    'EVENT_TEXT': 'M',
-    'RATE': 'M',
-    'IMPACT': 'O'
-}
 
 
 APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
@@ -458,7 +485,9 @@ class IntelligenceHub:
             current_time = time.time()
 
             with self.lock:
-                for _uuid, data in self.processing_map.items():
+                uuids = list(self.processing_map.keys())
+                for _uuid in uuids:
+                    data = self.processing_map[_uuid]
                     if APPENDIX_TIME_POST not in data:
                         del self.processing_map[_uuid]
                         self.drop_counter += 1
@@ -471,7 +500,7 @@ class IntelligenceHub:
                         if data[APPENDIX_RETRY_COUNT] <= 0:
                             del self.processing_map[_uuid]
                             self.drop_counter += 1
-                            logging.error(f'{data["uuid"]} has no retry times - drop.')
+                            logging.error(f'{data["UUID"]} has no retry times - drop.')
                             continue
 
                     if current_time - data[APPENDIX_TIME_POST] > self.intelligence_process_timeout:
@@ -509,8 +538,10 @@ class IntelligenceHub:
         appendix = []
         if 'title' in data:
             appendix.append(f"Title: {data['title']}")
-        if 'author' in data:
-            appendix.append(f"Author: {data['author']}")
+        if 'authors' in data:
+            appendix.append(f"Author: {data['authors']}")
+        if 'pub_time' in data:
+            appendix.append(f"Publish Time: {data['pub_time']}")
         if 'informant' in data:
             appendix.append(f"Informant: {data['informant']}")
         return '\n'.join(appendix) + data['content']
@@ -606,7 +637,7 @@ class IntelligenceHub:
 
 def main():
     hub = IntelligenceHub(
-        intelligence_processor_uri='https://0.0.0.0:5678/webhook/intelligence_process')
+        intelligence_processor_uri='http://192.168.50.220:5678/webhook-test/intelligence_process')
     hub.startup()
     while True:
         print(f'Hub queue size: {hub.statistics}')

@@ -247,6 +247,20 @@ processor_thread是一个IO线程，因为等待超时所以会成为性能瓶�
 
 
 
+写一个函数，接受两个参数：key属性表，待检查的dict。
+key属性表类似下面的例子：
+
+COLLECTOR_DATA_FIELDS = {
+    'UUID': 'M',
+    'source': 'O',
+}
+
+基中M代表MUST，O代表OPTIONAL。函数返回 (MUST字段的缺失数，OPTIONAL字段的存在数，不在属性表中的字段数)
+
+
+
+
+
 
 
 

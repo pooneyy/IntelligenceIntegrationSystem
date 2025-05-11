@@ -8,6 +8,7 @@ import chardet
 import sqlite3
 import hashlib
 import traceback
+import html2text
 from pathlib import Path
 
 import requests
@@ -62,6 +63,24 @@ def html_to_clean_md(html: str) -> str:
     return markdown.strip()
 
 
+def html_to_clean_text(html: str) -> str:
+    h = html2text.HTML2Text()
+
+    # 关键配置项
+    h.ignore_links = True  # 过滤超链接标记
+    h.ignore_images = True  # 排除图片标签
+    h.ignore_tables = True  # 移除复杂表格结构
+    h.body_width = 0  # 禁用自动换行
+    h.wrap_list_items = False  # 保持列表项原始格式
+
+    # 处理特殊字符
+    h.escape_all = True  # 转义特殊符号如<>&
+
+    # 执行转换（网页1基础方法）
+    markdown = h.handle(html)
+    return markdown.strip()  # 去除首尾空白
+
+
 def _generate_filepath(article: dict, base_dir: str = "output") -> Path:
     """生成带校验的文件存储路径
 
@@ -80,7 +99,7 @@ def _generate_filepath(article: dict, base_dir: str = "output") -> Path:
     clean_title = re.sub(r'\s+', ' ', clean_title)[:100]  # 限制长度
 
     # 3. 内容哈希生成（参考网页5的校验机制）
-    content_hash = hashlib.md5(article['content_markdown'].encode()).hexdigest()[:6]
+    content_hash = hashlib.md5(article['text'].encode()).hexdigest()[:6]
 
     # 4. 构建完整文件名（参考网页7的时间戳策略）
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -228,10 +247,12 @@ class RSSProcessor:
         if not html:
             print(f'  ! Article empty: {article["title"]}')
             return
-        markdown = html_to_clean_md(html)
+
+        # markdown = html_to_clean_md(html)
+        text = html_to_clean_text(html)
 
         article['content_html'] = html
-        article['content_markdown'] = markdown
+        article['text'] = text
 
         if isinstance(self.article_handlers, list):
             for handler in self.article_handlers:
@@ -239,6 +260,7 @@ class RSSProcessor:
                     handler(article)
                 except Exception as e:
                     print(f'Article handler error: {str(e)}')
+                    print(traceback.format_exc())
 
     def set_article_handlers(self, article_handlers: list):
         self.article_handlers = article_handlers
@@ -254,7 +276,7 @@ class RSSProcessor:
         self.articles.append(article)
 
     def article_handler_to_file(self, article: dict):
-        markdown = article['content_markdown']
+        markdown = article['text']
         filepath = _generate_filepath(article)
         article['filepath'] = filepath
 
@@ -383,14 +405,15 @@ class FeedProcessorManager:
 
     def _article_handler_post_to_hub(self, post_url: str, article: dict):
         try:
-            # print(DictPrinter.pretty_print(
-            #     article,
-            #     indent=2,
-            #     sort_keys=True,
-            #     colorize=True,
-            #     max_depth=4
-            # ))
-            post_collected_intelligence(post_url, article)
+            article_post = {
+                'token': 'SleepySoft',
+                'title': article.get('title', ''),
+                'authors': article.get('authors', ''),
+                'content': article.get('text', ''),
+                'pub_time': article.get('published', ''),
+                'informant': article.get('link', ''),
+            }
+            post_collected_intelligence(post_url, article_post)
         except Exception as e:
             print(f'Post to hub fail: {str(e)}')
 
