@@ -1,0 +1,11 @@
+{
+  "proxy": {
+    "http": "socks5://127.0.0.1:10808",
+    "https": "socks5://127.0.0.1:10808"
+  },
+  "polling_interval_s": 30,
+  "intelligence_hub_url": "http://127.0.0.1:3000",
+  "feeds": {
+    "name": "url"
+  }
+}

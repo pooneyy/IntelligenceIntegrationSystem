@@ -39,7 +39,6 @@ logging.basicConfig(level=logging.INFO)
 
 
 def post_collected_intelligence(url: str, data: dict, timeout=10):
-    """发送采集数据到收集端点"""
     try:
         if 'UUID' not in data:
             data['UUID'] = str(uuid.uuid4())
@@ -94,10 +93,7 @@ def post_processed_intelligence(url: str, data: dict, timeout=10):
 
 
 def post_to_ai_processor(url: str, data: dict, timeout=10):
-    json_data = json.dumps(
-        {field: data[field] for field in POST_PROCESS_DATA_FIELDS},
-        ensure_ascii=False
-    )
+    json_data = json.dumps(data, ensure_ascii=False)
     headers = {"Content-Type": "application/json; charset=UTF-8"}
     response = requests.post(
         url,
@@ -110,10 +106,12 @@ def post_to_ai_processor(url: str, data: dict, timeout=10):
 
 COLLECTOR_DATA_FIELDS = {
     'UUID': 'M',        # [MUST]: The UUID to identify a message.
+
     'token': 'M',       # [MUST]: The token to identify the legal end point.
     'source': 'O',      # (Optional): Message source. If it requires reply.
     'target': 'O',      # (Optional): Use for message routing to special module.
     'prompt': 'O',      # (Optional): The prompt to ask LLM to process this message.
+
     'title': 'O',       # [MUST]: The content to be processed.
     'author': 'O',      # (Optional): Article author.
     'content': 'M',     # [MUST]: The content to be processed.
@@ -137,6 +135,7 @@ PROCESSED_DATA_FIELDS = {
     'EVENT_BRIEF': 'M',
     'EVENT_TEXT': 'M',
     'RATE': 'M',
+    'IMPACT': 'O'
 }
 
 
@@ -302,13 +301,12 @@ class IntelligenceHub:
         def collect_api():
             try:
                 data = request.json
-                if 'UUID' not in data:
-                    return jsonify({"status": "error", "msg": "UUID required"}), 400
+
+                for field, require in COLLECTOR_DATA_FIELDS:
+                    if field not in data and require == 'M':
+                        return jsonify({"status": "error", "msg": "Require data missing."}), 400
 
                 data[APPENDIX_TIME_GOT] = time.time()
-                if APPENDIX_RETRY_COUNT in data:
-                    logging.warning('Input data has appendix fields')
-                    del data[APPENDIX_RETRY_COUNT]
 
                 self.input_queue.put(data)
 
@@ -432,24 +430,21 @@ class IntelligenceHub:
 
     def _process_data(self, data: dict):
         try:
+            if 'prompt' not in data:
+                data['prompt'] = DEFAULT_ANALYSIS_PROMPT
+
+            data['PROMPT'] = data.pop('prompt')
+            data['TEXT'] = self._format_message_text(data)
+
             uuid_str = data['UUID']
             data[APPENDIX_TIME_POST] = time.time()
 
             # Record data first avoiding request gets exception which makes data lost.
             self.processing_map[uuid_str] = data
 
-            response = requests.post(
-                self.intelligence_processor_uri,
-                json=self._data_without_appendix(data),
-                timeout=self.request_timeout
-            )
             response = post_to_ai_processor(
                 self.intelligence_processor_uri,
-                {
-                    'UUID': data['UUID'],
-                    'PROMPT': DEFAULT_ANALYSIS_PROMPT,
-                    'TEXT': data[''],
-                }
+                self._data_without_appendix(data)
             )
             response.raise_for_status()
 
@@ -464,7 +459,7 @@ class IntelligenceHub:
 
             with self.lock:
                 for _uuid, data in self.processing_map.items():
-                    if APPENDIX_TIME_POST not in data not in data:
+                    if APPENDIX_TIME_POST not in data:
                         del self.processing_map[_uuid]
                         self.drop_counter += 1
                         logging.error(f'{data["uuid"]} has no must have fields - drop.')
@@ -493,7 +488,7 @@ class IntelligenceHub:
                 try:
                     doc = self._create_document(data)
                     doc_id = self.archive_col.insert_one(doc).inserted_id
-                    # 生成向量并创建索引（示例）
+
                     if 'embedding' in data:
                         self.vector_index.add_vector(doc_id, data['embedding'])
 
@@ -510,8 +505,19 @@ class IntelligenceHub:
 
     # ---------------------------------------------------- Helpers -----------------------------------------------------
 
+    def _format_message_text(self, data: dict) -> str:
+        appendix = []
+        if 'title' in data:
+            appendix.append(f"Title: {data['title']}")
+        if 'author' in data:
+            appendix.append(f"Author: {data['author']}")
+        if 'informant' in data:
+            appendix.append(f"Informant: {data['informant']}")
+        return '\n'.join(appendix) + data['content']
+
     def _data_without_appendix(self, data: dict) -> dict:
         return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
+
 
     def _mongo_db_valid(self) -> bool:
         return self.mongo_client and self.db and self.archive_col
