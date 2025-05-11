@@ -302,7 +302,7 @@ class IntelligenceHub:
             try:
                 data = request.json
 
-                for field, require in COLLECTOR_DATA_FIELDS:
+                for field, require in COLLECTOR_DATA_FIELDS.items():
                     if field not in data and require == 'M':
                         return jsonify({"status": "error", "msg": "Require data missing."}), 400
 
@@ -605,7 +605,8 @@ class IntelligenceHub:
 
 
 def main():
-    hub = IntelligenceHub()
+    hub = IntelligenceHub(
+        intelligence_processor_uri='https://0.0.0.0:5678/webhook/intelligence_process')
     hub.startup()
     while True:
         print(f'Hub queue size: {hub.statistics}')

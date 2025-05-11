@@ -452,7 +452,7 @@ def main():
     }
 
     # feed_configs = ['feeds_test.json']
-    feed_configs = ['feeds_tech.json', 'feeds_ai.json']
+    feed_configs = ['rssfeeds/feeds_chinanews.json']
     # collect_by_json_configs(feed_configs, {'proxy': {}})
 
     fpm = FeedProcessorManager()
