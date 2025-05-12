@@ -4,84 +4,24 @@ import json
 import threading
 import time
 
-import chardet
 import sqlite3
 import hashlib
 import traceback
-import html2text
 from pathlib import Path
+from functools import partial
 
 import requests
-from bs4 import BeautifulSoup, Comment
 from datetime import datetime
-
-from pydantic.class_validators import partial
 
 from IntelligenceHub import DEFAULT_IHUB_PORT, post_collected_intelligence
 from RSSFetcher import fetch_feed
 from typing import Dict, List, Any, Optional
-from markdownify import markdownify as md
 
 from Scraper.PlaywrightRenderedScraper import fetch_content
-from utility.DictPrinter import DictPrinter
+from utility.ContentCleaner import clean_html_content, html_to_clean_text
 
 
-def html_to_clean_md(html: str) -> str:
-    # 输入验证
-    if not isinstance(html, (str, bytes)):
-        raise ValueError(f"Invalid input type {type(html)}, expected str/bytes")
-
-    # 编码处理
-    if isinstance(html, bytes):
-        detected_enc = chardet.detect(html)['encoding'] or 'utf-8'
-        html = html.decode(detected_enc, errors='replace')
-
-    # 容错解析
-    try:
-        soup = BeautifulSoup(html, 'lxml')
-    except Exception:
-        soup = BeautifulSoup(html, 'html.parser')
-
-    # 深度清理
-    UNWANTED_TAGS = ['script', 'style', 'nav', 'footer', 'form', 'noscript']
-    for tag in soup(UNWANTED_TAGS + ['svg', 'iframe']):
-        tag.decompose()
-
-    for comment in soup.find_all(text=lambda t: isinstance(t, Comment)):
-        comment.extract()
-
-    # 转换配置
-    markdown = md(
-        html,
-        strip=['script', 'style', 'nav', 'footer', 'form', 'noscript'],
-        heading_style="ATX"
-    )
-
-    # 后处理
-    markdown = re.sub(r'\n{3,}', '\n\n', markdown)
-    markdown = re.sub(r'[ \t]{2,}', ' ', markdown)
-    return markdown.strip()
-
-
-def html_to_clean_text(html: str) -> str:
-    h = html2text.HTML2Text()
-
-    # 关键配置项
-    h.ignore_links = True  # 过滤超链接标记
-    h.ignore_images = True  # 排除图片标签
-    h.ignore_tables = True  # 移除复杂表格结构
-    h.body_width = 0  # 禁用自动换行
-    h.wrap_list_items = False  # 保持列表项原始格式
-
-    # 处理特殊字符
-    h.escape_all = True  # 转义特殊符号如<>&
-
-    # 执行转换（网页1基础方法）
-    markdown = h.handle(html)
-    return markdown.strip()  # 去除首尾空白
-
-
-def _generate_filepath(article: dict, base_dir: str = "output") -> Path:
+def _generate_filepath(article: dict, suffix: str, base_dir: str = "output") -> Path:
     """生成带校验的文件存储路径
 
     Args:
@@ -99,18 +39,18 @@ def _generate_filepath(article: dict, base_dir: str = "output") -> Path:
     clean_title = re.sub(r'\s+', ' ', clean_title)[:100]  # 限制长度
 
     # 3. 内容哈希生成（参考网页5的校验机制）
-    content_hash = hashlib.md5(article['text'].encode()).hexdigest()[:6]
+    content_hash = hashlib.md5(article['content_text'].encode()).hexdigest()[:6]
 
     # 4. 构建完整文件名（参考网页7的时间戳策略）
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{clean_title}_{content_hash}_{timestamp}.md"
+    filename = f"{clean_title}_{content_hash}_{timestamp}{suffix}"
 
     # 5. 路径冲突检测（参考网页2的防重复机制）
     final_path = Path(feed_dir) / filename
     if final_path.exists():
         # 添加毫秒级时间戳避免冲突
         timestamp_ms = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
-        filename = f"{clean_title}_{content_hash}_{timestamp_ms}.md"
+        filename = f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
         final_path = Path(feed_dir) / filename
 
     return final_path
@@ -128,21 +68,6 @@ def _create_feed_dir(base_dir: str, feed_name: str) -> str:
 def _get_content_checksum(content: str) -> str:
     """生成内容摘要"""
     return hashlib.md5(content.encode()).hexdigest()
-
-def _write_md_file(filepath: Path, content: str):
-    """带校验的写入"""
-    checksum = _get_content_checksum(content)
-
-    # 校验现有文件
-    if filepath.exists():
-        with open(filepath, 'r') as f:
-            existing = _get_content_checksum(f.read())
-            if existing == checksum:
-                return
-
-    # 写入新文件
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(content)
 
 
 def _parse_pub_date(entry) -> str:
@@ -248,11 +173,12 @@ class RSSProcessor:
             print(f'  ! Article empty: {article["title"]}')
             return
 
+        html_clean = clean_html_content(html)
+        text = html_to_clean_text(html_clean)
         # markdown = html_to_clean_md(html)
-        text = html_to_clean_text(html)
 
-        article['content_html'] = html
-        article['text'] = text
+        article['content_html'] = html_clean
+        article['content_text'] = text
 
         if isinstance(self.article_handlers, list):
             for handler in self.article_handlers:
@@ -276,11 +202,18 @@ class RSSProcessor:
         self.articles.append(article)
 
     def article_handler_to_file(self, article: dict):
-        markdown = article['text']
-        filepath = _generate_filepath(article)
-        article['filepath'] = filepath
+        filepath_html = _generate_filepath(article, '.html')
+        filepath_text = filepath_html.with_suffix(".md")
 
-        _write_md_file(filepath, markdown)
+        html = article['content_html']
+        text = article['content_text']
+
+        with open(filepath_html, 'wt', encoding='utf-8') as f:
+            f.write(html)
+        with open(filepath_text, 'wt', encoding='utf-8') as f:
+            f.write(text)
+
+        article['filepath'] = filepath_text
 
     def article_handler_log_history(self, article: dict):
         with self.conn:
@@ -409,7 +342,7 @@ class FeedProcessorManager:
                 'token': 'SleepySoft',
                 'title': article.get('title', ''),
                 'authors': article.get('authors', ''),
-                'content': article.get('text', ''),
+                'content': article.get('content_text', ''),
                 'pub_time': article.get('published', ''),
                 'informant': article.get('link', ''),
             }

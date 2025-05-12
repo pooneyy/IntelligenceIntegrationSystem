@@ -1,7 +1,6 @@
 lxml
 chardet
 fastapi
-pydantic<2.0.0
 uvicorn
 urllib3~=1.26.9
 cryptography
