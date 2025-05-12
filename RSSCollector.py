@@ -18,7 +18,7 @@ from RSSFetcher import fetch_feed
 from typing import Dict, List, Any, Optional
 
 from Scraper.PlaywrightRenderedScraper import fetch_content
-from utility.ContentCleaner import clean_html_content, html_to_clean_text
+from utility.ContentCleaner import clean_html_content, html_to_clean_text, html_to_clean_md
 
 
 def _generate_filepath(article: dict, suffix: str, base_dir: str = "output") -> Path:
@@ -45,13 +45,14 @@ def _generate_filepath(article: dict, suffix: str, base_dir: str = "output") -> 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"{clean_title}_{content_hash}_{timestamp}{suffix}"
 
-    # 5. 路径冲突检测（参考网页2的防重复机制）
     final_path = Path(feed_dir) / filename
-    if final_path.exists():
-        # 添加毫秒级时间戳避免冲突
-        timestamp_ms = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
-        filename = f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
-        final_path = Path(feed_dir) / filename
+
+    # # 5. 路径冲突检测（参考网页2的防重复机制）
+    # if final_path.exists():
+    #     # 添加毫秒级时间戳避免冲突
+    #     timestamp_ms = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    #     filename = f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
+    #     final_path = Path(feed_dir) / filename
 
     return final_path
 
@@ -175,10 +176,12 @@ class RSSProcessor:
 
         html_clean = clean_html_content(html)
         text = html_to_clean_text(html_clean)
-        # markdown = html_to_clean_md(html)
+        markdown = html_to_clean_md(html_clean)
 
+        article['content_html_origin'] = html
         article['content_html'] = html_clean
         article['content_text'] = text
+        article['content_markdown'] = markdown
 
         if isinstance(self.article_handlers, list):
             for handler in self.article_handlers:
@@ -202,16 +205,21 @@ class RSSProcessor:
         self.articles.append(article)
 
     def article_handler_to_file(self, article: dict):
-        filepath_html = _generate_filepath(article, '.html')
-        filepath_text = filepath_html.with_suffix(".md")
+        filepath_base = _generate_filepath(article, '.base')
 
-        html = article['content_html']
-        text = article['content_text']
+        filepath_html_origin = filepath_base.with_suffix(".origin.html")
+        filepath_html = filepath_base.with_suffix(".html")
+        filepath_text = filepath_base.with_suffix(".txt")
+        filepath_md = filepath_base.with_suffix(".md")
 
+        with open(filepath_html_origin, 'wt', encoding='utf-8') as f:
+            f.write(article['content_html_origin'])
         with open(filepath_html, 'wt', encoding='utf-8') as f:
-            f.write(html)
+            f.write(article['content_html'])
         with open(filepath_text, 'wt', encoding='utf-8') as f:
-            f.write(text)
+            f.write(article['content_text'])
+        with open(filepath_md, 'wt', encoding='utf-8') as f:
+            f.write(article['content_markdown'])
 
         article['filepath'] = filepath_text
 
