@@ -2,6 +2,7 @@ import sys
 import time
 import threading
 import importlib.util
+import traceback
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -10,8 +11,8 @@ from watchdog.events import FileSystemEventHandler
 class TaskManager:
     def __init__(self, watch_dir: str, security_config=None):
         self.watch_dir = Path(watch_dir)
-        self.security = security_config or SecurityConfig()
-        self.tasks = {}     # {file_path: (module_ref, thread, stop_event)}
+        self.security = security_config     # SecurityConfig()
+        self.tasks = {}                     # {file_path: (module_ref, thread, stop_event)}
         self.scan_existing_files()
 
     def scan_existing_files(self):
@@ -58,21 +59,21 @@ class TaskManager:
         del sys.modules[module.__name__]
         del self.tasks[file_path]
 
-    def verify_security(self, file_path):
-        # 哈希白名单校验
-        if self.security.enable_hash:
-            expected_hash = self.security.whitelist.get(file_path)
-            if not SecurityValidator.verify_hash(file_path, expected_hash):
-                return False
-
-        # 数字签名校验
-        if self.security.enable_signature and self.security.public_key:
-            sig_path = f"{file_path}.sig"
-            if not SecurityValidator.verify_signature(file_path,
-                                                      self.security.public_key,
-                                                      sig_path):
-                return False
-        return True
+    # def verify_security(self, file_path):
+    #     # 哈希白名单校验
+    #     if self.security.enable_hash:
+    #         expected_hash = self.security.whitelist.get(file_path)
+    #         if not SecurityValidator.verify_hash(file_path, expected_hash):
+    #             return False
+    #
+    #     # 数字签名校验
+    #     if self.security.enable_signature and self.security.public_key:
+    #         sig_path = f"{file_path}.sig"
+    #         if not SecurityValidator.verify_signature(file_path,
+    #                                                   self.security.public_key,
+    #                                                   sig_path):
+    #             return False
+    #     return True
 
 
 class FileHandler(FileSystemEventHandler):
@@ -88,32 +89,34 @@ class FileHandler(FileSystemEventHandler):
             self.task_manager.remove_task(event.src_path)
 
 
-if __name__ == "__main__":
-    config  = SecurityConfig(
-        enable_hash=True,
-        enable_signature=True,
-        public_key_path="public_key.pem",
-        whitelist_hashes={
-            "/path/to/valid.py": "a1b2c3...sha256哈希值"
-        }
-    )
+def main():
+    # config  = SecurityConfig(
+    #     enable_hash=True,
+    #     enable_signature=True,
+    #     public_key_path="public_key.pem",
+    #     whitelist_hashes={
+    #         "/path/to/valid.py": "a1b2c3...sha256哈希值"
+    #     }
+    # )
 
-    hash_valid = SecurityValidator.verify_hash("example.txt", config.whitelist["example.txt"])
-
-    signature_valid = SecurityValidator.verify_signature(
-        "example.txt", config.public_key, "signature.bin"
-    )
-
-    task_manager = TaskManager('tasks', config)
+    task_manager = TaskManager('tasks')
     event_handler = FileHandler(task_manager)
 
     observer = Observer()
     observer.schedule(event_handler, path="tasks", recursive=False)
     observer.start()
-    
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
