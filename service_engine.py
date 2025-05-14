@@ -34,12 +34,12 @@ class TaskManager:
         if plugin_name not in self.tasks:
             return
 
-        module, thread, stop_event = self.tasks[file_path]
+        module, thread, stop_event = self.tasks[plugin_name]
         stop_event.set()
 
         thread.join(timeout=30)
 
-        del self.tasks[file_path]
+        del self.tasks[plugin_name]
         self.plugin_manager.remove_plugin(plugin_name)
 
     def on_model_enter(self, plugin: PluginWrapper):
