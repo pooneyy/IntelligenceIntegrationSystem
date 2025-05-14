@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import traceback
@@ -8,65 +9,112 @@ from plugin_manager import PluginManager, PluginWrapper, logger
 
 
 class TaskManager:
+    THREAD_JOIN_TIMEOUT = 2
+    THREAD_JOIN_ATTEMPTS = 10
+
     def __init__(self, watch_dir: str, security_config=None):
         self.watch_dir = watch_dir
-        self.security = security_config     # SecurityConfig()
-        self.tasks = {}                     # {file_path: (module_ref, thread, stop_event)}
+        self.security = security_config     # Reserved for SecurityConfig
+
+        # {plugin_name: (module_ref, thread, stop_event)}
+        self.tasks: dict[str, tuple[PluginWrapper, threading.Thread, threading.Event]] = {}
+        self.tasks_lock = threading.Lock()
+
         self.plugin_manager = PluginManager(['start_task'])
         self.scan_existing_files()
 
     def scan_existing_files(self):
-        plugins = self.plugin_manager.scan_path(self.watch_dir)
-        for plugin in plugins:
-            self.__add_module(plugin)
+        try:
+            if not os.path.exists(self.watch_dir):
+                os.makedirs(self.watch_dir, exist_ok=True)
+            plugins = self.plugin_manager.scan_path(self.watch_dir)
+            for plugin in plugins:
+                self.__add_module(plugin)
+        except OSError as e:
+            logger.error(f"Failed to create directory {self.watch_dir}: {e}")
+        except Exception as e:
+            logger.error(f"Scan directory {self.watch_dir} crashed: {e}", exc_info=True)
 
     def add_task(self, file_path: str):
-        plugin = self.plugin_manager.add_plugin(file_path)
-
-        if not plugin or not plugin.has_function('start_task'):
-            logger.error('Load plugin {file_path} fail.')
+        plugin = None
+        try:
+            self.__remove_module(file_path)
+            plugin = self.plugin_manager.add_plugin(file_path)
+            if not plugin:
+                raise ValueError('Plugin load None')
+            return self.__add_module(plugin)
+        except Exception as e:
+            logger.error(f"Load plugin {file_path} fail: {e}", exc_info=True)
+            if plugin:
+                self.plugin_manager.remove_plugin(plugin.plugin_name)
             return False
-
-        return self.__add_module(plugin)
     
-    def remove_task(self, file_path):
-        plugin_name = PluginManager.plugin_name(file_path)
-        if plugin_name not in self.tasks:
-            return
+    def remove_task(self, file_path: str):
+        self.__remove_module(file_path)
 
-        module, thread, stop_event = self.tasks[plugin_name]
-        stop_event.set()
-
-        thread.join(timeout=30)
-
-        del self.tasks[plugin_name]
-        self.plugin_manager.remove_plugin(plugin_name)
+    def shutdown(self):
+        with self.tasks_lock:
+            tasks = list(self.tasks.keys())
+        for plugin_name in tasks:
+            self.__remove_module(plugin_name)
 
     def on_model_enter(self, plugin: PluginWrapper):
-        print(f'Plugin {plugin.plugin_name} Enters.')
+        logger.info(f'Plugin {plugin.plugin_name} loaded')
 
     def on_model_quit(self, plugin: PluginWrapper):
-        print(f'Plugin {plugin.plugin_name} Quits.')
+        logger.info(f'Plugin {plugin.plugin_name} unloaded')
+
+    # ---------------------------------------------------------------------------
 
     def __add_module(self, plugin: PluginWrapper) -> bool:
-        if not plugin.has_function('start_task'):
-            return False
-
         stop_event = threading.Event()
         thread = threading.Thread(
             target=self.__run_module,
+            name=f"PluginThread-{plugin.plugin_name}",
             args=(plugin, stop_event),
             daemon=True
         )
-        thread.start()
 
-        self.tasks[plugin.plugin_name] = (plugin, thread, stop_event)
+        try:
+            thread.start()
+        except RuntimeError as e:
+            logger.error(f"Create thread for {plugin.plugin_name} fail: {e}")
+            return False
+
+        with self.tasks_lock:
+            self.tasks[plugin.plugin_name] = (plugin, thread, stop_event)
+
         return True
+
+    def __remove_module(self, file_path: str):
+        with self.tasks_lock:
+            plugin_name = PluginManager.plugin_name(file_path)
+
+            if plugin_name not in self.tasks:
+                return
+
+            self.plugin_manager.remove_plugin(plugin_name)
+            task_info = self.tasks.pop(plugin_name)
+            module, thread, stop_event = task_info
+            stop_event.set()
+
+        for _ in range(TaskManager.THREAD_JOIN_ATTEMPTS):
+            thread.join(timeout=TaskManager.THREAD_JOIN_TIMEOUT)
+            if not thread.is_alive():
+                break
+
+        if thread.is_alive():
+            logger.warning(f"Plugin {plugin_name} thread (ID: {thread.ident}) "
+                           f"still alive after {TaskManager.THREAD_JOIN_ATTEMPTS} attempts.")
 
     def __run_module(self, plugin: PluginWrapper, stop_event: threading.Event):
         self.on_model_enter(plugin)
-        plugin.start_task(stop_event)
-        self.on_model_quit(plugin)
+        try:
+            plugin.start_task(stop_event)
+        except Exception as e:
+            logger.error(f"Plugin {plugin.plugin_name} crashed: {e}", exc_info=True)
+        finally:
+            self.on_model_quit(plugin)
 
     # def verify_security(self, file_path):
     #     # 哈希白名单校验
@@ -90,13 +138,23 @@ class FileHandler(FileSystemEventHandler):
         self.task_manager = task_manager
     
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith('.py'):
+        if self.__file_accept(event):
             self.task_manager.add_task(event.src_path)
     
     def on_deleted(self, event):
-        if not event.is_directory and event.src_path.endswith('.py'):
+        if self.__file_accept(event):
             self.task_manager.remove_task(event.src_path)
 
+    def on_modified(self, event):
+        if self.__file_accept(event):
+            self.task_manager.remove_task(event.src_path)
+            self.task_manager.add_task(event.src_path)
+
+    @staticmethod
+    def __file_accept(event) -> bool:
+        return not event.is_directory and \
+            not os.path.basename(event.src_path).startswith(('~', '.')) and \
+            event.src_path.endswith('.py')
 
 def main():
     # config  = SecurityConfig(
