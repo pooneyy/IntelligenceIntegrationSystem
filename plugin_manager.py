@@ -100,28 +100,35 @@ class PluginWrapper:
     def __getattr__(self, attr):
         return partial(self.invoke, attr)
 
-    def invoke(self, _function: str, *args, **kwargs) -> any:
+    def invoke(self, function_name: str, *args, **kwargs) -> any:
         try:
-            func = getattr(self.module_inst, _function)
+            func = getattr(self.module_inst, function_name)
         except AttributeError:
-            logger.warning(f"Function {_function} not found")
+            logger.warning(f"Function {function_name} not found")
             return None
         if not callable(func):
-            logger.warning(f"Attribute {_function} is not callable")
+            logger.warning(f"Attribute {function_name} is not callable")
             return None
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Runtime error in {self.plugin_name}.{_function}: {e}", exc_info=True)
+            logger.error(f"Runtime error in {self.plugin_name}.{function_name}: {e}", exc_info=True)
             return None
 
     def has_function(self, function: str) -> bool:
-        return hasattr(self.module_inst, function) and callable(getattr(self.module_inst, function))
+        try:
+            attr = getattr(self.module_inst, function)
+            return callable(attr)
+        except Exception:
+            return False
 
     def get_attribute(self, attribute: str) -> any:
         try:
             return getattr(self.module_inst, attribute)
         except AttributeError:
+            return None
+        except Exception as e:
+            logger.error(f"Error accessing {attribute}: {e}")
             return None
 
 
@@ -210,8 +217,6 @@ class PluginManager:
             module_name = plugin.module_inst.__name__
             if module_name in sys.modules:
                 del sys.modules[module_name]
-            import gc
-            gc.collect()
 
     def __get_plugin(self, name_or_path: str) -> Optional[PluginWrapper]:
         abs_path = os.path.abspath(name_or_path)

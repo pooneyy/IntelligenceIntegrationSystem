@@ -42,26 +42,31 @@ class TaskManager:
         del self.tasks[file_path]
         self.plugin_manager.remove_plugin(plugin_name)
 
-    def __add_module(self, plugin: PluginWrapper) -> bool:
-        # module_name = f"dynamic_{Path(file_path).stem}_{time.time()}"
-        # spec = importlib.util.spec_from_file_location(module_name, file_path)
-        # module = importlib.util.module_from_spec(spec)
-        # sys.modules[module_name] = module
-        # spec.loader.exec_module(module)
+    def on_model_enter(self, plugin: PluginWrapper):
+        print(f'Plugin {plugin.plugin_name} Enters.')
 
+    def on_model_quit(self, plugin: PluginWrapper):
+        print(f'Plugin {plugin.plugin_name} Quits.')
+
+    def __add_module(self, plugin: PluginWrapper) -> bool:
         if not plugin.has_function('start_task'):
             return False
 
         stop_event = threading.Event()
         thread = threading.Thread(
-            target=plugin.start_task,
-            args=(stop_event,),
+            target=self.__run_module,
+            args=(plugin, stop_event),
             daemon=True
         )
         thread.start()
 
         self.tasks[plugin.plugin_name] = (plugin, thread, stop_event)
         return True
+
+    def __run_module(self, plugin: PluginWrapper, stop_event: threading.Event):
+        self.on_model_enter(plugin)
+        plugin.start_task(stop_event)
+        self.on_model_quit(plugin)
 
     # def verify_security(self, file_path):
     #     # 哈希白名单校验
@@ -103,11 +108,11 @@ def main():
     #     }
     # )
 
-    task_manager = TaskManager('tasks')
+    task_manager = TaskManager('playground/tasks')
     event_handler = FileHandler(task_manager)
 
     observer = Observer()
-    observer.schedule(event_handler, path="tasks", recursive=False)
+    observer.schedule(event_handler, path="playground/tasks", recursive=False)
     observer.start()
 
     try:
