@@ -18,15 +18,18 @@ class ServiceContext:
     """
     def __init__(self):
         self.sys = sys
+        self.logger = logger
         self.project_root = project_root
 
     def solve_import_path(self):
-        import sys              # Import sys here because we must use the same sys with plugin
-        if self.project_root not in sys.path:
-            sys.path.insert(0, self.project_root)
+        import sys              # Import sys here because we must use the same sys with plugin.
+                                # Just for test.
         if self.sys == sys:
             print('The same sys')
         else:
+            if self.project_root not in sys.path:
+                sys.path.insert(0, self.project_root)
+
             print('Different sys')
 
             print('------------------------------- Service sys -------------------------------')
@@ -99,7 +102,7 @@ class TaskManager:
     def __add_module(self, plugin: PluginWrapper) -> bool:
         stop_event = threading.Event()
         thread = threading.Thread(
-            target=self.__launch_module,
+            target=self.__drive_module,
             name=f"PluginThread-{plugin.plugin_name}",
             args=(plugin, stop_event),
             daemon=True
@@ -137,15 +140,15 @@ class TaskManager:
             logger.warning(f"Plugin {plugin_name} thread (ID: {thread.ident}) "
                            f"still alive after {TaskManager.THREAD_JOIN_ATTEMPTS} attempts.")
 
-    def __launch_module(self, plugin: PluginWrapper, stop_event: threading.Event):
+    def __drive_module(self, plugin: PluginWrapper, stop_event: threading.Event):
         self.on_model_enter(plugin)
         try:
             plugin.module_init(ServiceContext())
-            plugin.start_task(stop_event)
+            while not stop_event.is_set():
+                plugin.start_task(stop_event)
         except Exception as e:
             logger.error(f"Plugin {plugin.plugin_name} crashed: {e}", exc_info=True)
-        finally:
-            self.on_model_quit(plugin)
+        self.on_model_quit(plugin)
 
     # def verify_security(self, file_path):
     #     # 哈希白名单校验

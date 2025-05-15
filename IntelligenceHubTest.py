@@ -1,12 +1,11 @@
 import uuid
 import time
-import random
 import threading
 import requests
 from flask import Flask, request, jsonify
 
 from IntelligenceHub import IntelligenceHub, post_collected_intelligence
-from TestContent import CONTENT_TRUMP_GOT_FUCKED
+from recycled.TestContent import CONTENT_TRUMP_GOT_FUCKED
 from prompts import DEFAULT_ANALYSIS_PROMPT
 from Tools.DictPrinter import DictPrinter
 

@@ -127,7 +127,18 @@ def fetch_feed(
         {
             "url": "url",
             "meta": {...},
-            "entries": [...],
+            "entries": [
+                    {
+                        "title": "",
+                        "link": "",
+                        "published": "",
+                        "authors": ["", ...],
+                        "description": "",
+                        "guid": "",
+                        "categories": ["", ...],
+                        "media": ["", ...]
+                    }, ...
+                ],
             "error": "Error description",
             "status": "Fetch status",
             ......
