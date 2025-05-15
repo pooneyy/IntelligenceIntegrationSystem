@@ -8,7 +8,8 @@ from typing import Optional, Dict, Any
 def fetch_content(
     url: str,
     timeout_ms: int,
-    proxy: Optional[Dict[str, str]] = None
+    proxy: Optional[Dict[str, str]] = None,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     Fetch web content from the specified url.

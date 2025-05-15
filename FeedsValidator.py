@@ -5,7 +5,7 @@ import threading
 from xml.etree import ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
-from RSSFetcher import fetch_feed
+from Tools.RSSFetcher import fetch_feed
 
 try:
     from flask import Flask, request, jsonify

@@ -6,7 +6,8 @@ from Scraper.PlaywrightRawScraper import request_by_browser
 def fetch_content(
     url: str,
     timeout_ms: int,
-    proxy: Optional[Dict[str, str]] = None
+    proxy: Optional[Dict[str, str]] = None,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     The same as base.

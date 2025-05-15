@@ -8,16 +8,15 @@ Complete implementation with:
 - Comprehensive error handling
 - Type annotations
 """
-import re
-import random
 import traceback
+from venv import logger
 
 import feedparser
 from bs4 import BeautifulSoup
-from typing import Optional, Dict, Any, List
-from playwright.sync_api import sync_playwright, Browser
+from typing import Optional, Dict, Any
 
 import Scraper.RequestsScraper as RequestsScraper
+from Scraper import ScraperBase
 
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 MINIMAL_WAIT_SEC = 2
@@ -76,7 +75,7 @@ def parse_feed(content: str) -> dict:
 
     except Exception as e:
         result["errors"].append(f"致命错误: {str(e)}")
-        print(f"解析过程异常: {e}", exc_info=True)
+        logger.error(f"解析过程异常: {e}", exc_info=True)
 
     return result
 
@@ -110,11 +109,13 @@ def extract_media(entry) -> list:
 
 def fetch_feed(
     url: str,
+    scraper: ScraperBase = RequestsScraper,
     proxy: Optional[Dict[str, str]] = None,
     headless: bool = True
 ) -> Dict[str, Any]:
     """
     Main entry point for fetching and parsing feeds
+    :param scraper: The scraper to fetch feed.
     :param url: Feed URL
     :param proxy: Proxy configuration in request style:
         {
@@ -133,7 +134,9 @@ def fetch_feed(
         }
     """
     try:
-        result = RequestsScraper.fetch_content(url, timeout_ms=DEFAULT_TIMEOUT_MS, proxy=proxy)
+        result = scraper.fetch_content(
+            url, timeout_ms=DEFAULT_TIMEOUT_MS, proxy=proxy,
+            headless=headless)
         if result['content']:
             parsed = parse_feed(result['content'])
             return parsed
@@ -146,9 +149,6 @@ def fetch_feed(
     except Exception as e:
         traceback.print_exc()
         return {"url": url, "errors": [str(e)], "status": "Fetch Failed"}
-
-
-
 
 
 # ----------------------------------------------------------------------------------------------------------------------

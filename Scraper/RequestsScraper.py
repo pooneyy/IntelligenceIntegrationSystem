@@ -179,7 +179,8 @@ def check_content_quality(html, target_keywords=None):
 def fetch_content(
     url: str,
     timeout_ms: int,
-    proxy: Optional[Dict[str, str]] = None
+    proxy: Optional[Dict[str, str]] = None,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     The same as base.

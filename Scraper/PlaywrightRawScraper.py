@@ -115,10 +115,11 @@ class BrowserManager:
 
 
 def request_by_browser(
-        url: str,
-        handler: callable,
-        timeout: int = DEFAULT_TIMEOUT_MS,
-        proxy: Optional[Dict[str, str]] = None
+    url: str,
+    handler: callable,
+    timeout: int = DEFAULT_TIMEOUT_MS,
+    proxy: Optional[Dict[str, str]] = None,
+    **kwargs
 ):
     """
     Request by headless browser. Handle request result by callable.
