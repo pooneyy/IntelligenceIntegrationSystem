@@ -101,7 +101,7 @@ class RSSProcessor:
 
     def _init_storage(self):
         """初始化持久化存储表"""
-        self.conn = sqlite3.connect('rss_records.db', timeout=10)
+        self.conn = sqlite3.connect('../rss_records.db', timeout=10)
         self._create_table()
         self._load_records()
         self.conn.execute('PRAGMA journal_mode=WAL')
