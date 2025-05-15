@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import threading
 import traceback
@@ -6,6 +7,35 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from plugin_manager import PluginManager, PluginWrapper, logger
+
+
+project_root = os.path.abspath(__file__)
+
+
+class ServiceContext:
+    """
+    Use this class to pass parameters to plugins and to selectively expose functions to plugins.
+    """
+    def __init__(self):
+        self.sys = sys
+        self.project_root = project_root
+
+    def solve_import_path(self):
+        import sys              # Import sys here because we must use the same sys with plugin
+        if self.project_root not in sys.path:
+            sys.path.insert(0, self.project_root)
+        if self.sys == sys:
+            print('The same sys')
+        else:
+            print('Different sys')
+
+            print('------------------------------- Service sys -------------------------------')
+            print(f"Search path：\n{chr(10).join(self.sys.path)}")
+            print(f"Project Root path：{os.path.abspath(self.os.curdir)}")
+
+            print('------------------------------- Plugin sys -------------------------------')
+            print(f"Search path：\n{chr(10).join(sys.path)}")
+            print(f"Project Root path：{os.path.abspath(os.curdir)}")
 
 
 class TaskManager:
@@ -20,7 +50,7 @@ class TaskManager:
         self.tasks: dict[str, tuple[PluginWrapper, threading.Thread, threading.Event]] = {}
         self.tasks_lock = threading.Lock()
 
-        self.plugin_manager = PluginManager(['start_task'])
+        self.plugin_manager = PluginManager(['module_init', 'start_task'])
         self.scan_existing_files()
 
     def scan_existing_files(self):
@@ -69,7 +99,7 @@ class TaskManager:
     def __add_module(self, plugin: PluginWrapper) -> bool:
         stop_event = threading.Event()
         thread = threading.Thread(
-            target=self.__run_module,
+            target=self.__launch_module,
             name=f"PluginThread-{plugin.plugin_name}",
             args=(plugin, stop_event),
             daemon=True
@@ -107,9 +137,10 @@ class TaskManager:
             logger.warning(f"Plugin {plugin_name} thread (ID: {thread.ident}) "
                            f"still alive after {TaskManager.THREAD_JOIN_ATTEMPTS} attempts.")
 
-    def __run_module(self, plugin: PluginWrapper, stop_event: threading.Event):
+    def __launch_module(self, plugin: PluginWrapper, stop_event: threading.Event):
         self.on_model_enter(plugin)
         try:
+            plugin.module_init(ServiceContext())
             plugin.start_task(stop_event)
         except Exception as e:
             logger.error(f"Plugin {plugin.plugin_name} crashed: {e}", exc_info=True)
@@ -166,11 +197,13 @@ def main():
     #     }
     # )
 
-    task_manager = TaskManager('playground/tasks')
+    crawl_task_path = 'CrawlTasks'
+
+    task_manager = TaskManager(crawl_task_path)
     event_handler = FileHandler(task_manager)
 
     observer = Observer()
-    observer.schedule(event_handler, path="playground/tasks", recursive=False)
+    observer.schedule(event_handler, path=crawl_task_path, recursive=False)
     observer.start()
 
     try:
