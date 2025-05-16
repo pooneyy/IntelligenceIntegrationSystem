@@ -3,8 +3,8 @@ import re
 import sqlite3
 import hashlib
 import threading
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
 
 # Singleton instance and initialization lock
 _instance = None
@@ -14,8 +14,8 @@ _init_lock = threading.Lock()
 class _ContentHistoryManager:
     """Actual implementation class (private)"""
 
-    def __init__(self, db_path='content_history.db', base_dir='content_storage'):
-        self.db_path = db_path
+    def __init__(self, base_dir='content_storage', db_name='content_history.db'):
+        self.db_path = os.path.join(base_dir, db_name)
         self.base_dir = Path(base_dir)
         self.operation_lock = threading.RLock()
         self.conn = sqlite3.connect(self.db_path, timeout=10)

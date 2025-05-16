@@ -13,9 +13,9 @@ import random
 import traceback
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
-from playwright.sync_api import sync_playwright, Browser
+from playwright.sync_api import sync_playwright
 
-from Scraper.ScraperBase import parse_proxy, to_playwright
+from Scraper.ScraperBase import parse_proxy, to_playwright, ScraperResult, ProxyConfig
 
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 
@@ -124,7 +124,6 @@ def request_by_browser(
     """
     Request by headless browser. Handle request result by callable.
     :param url: The request url.
-    :param browser: The browser instance.
     :param handler:
     :param timeout:
     :param proxy:
@@ -157,8 +156,8 @@ def request_by_browser(
 def fetch_content(
     url: str,
     timeout_ms: Optional[int] = DEFAULT_TIMEOUT_MS,
-    proxy: Optional[Dict[str, str]] = None
-) -> Dict[str, Any]:
+    proxy: Optional[ProxyConfig] = None,
+) -> ScraperResult:
     """
     The same as base.
     :param url: The same as base.

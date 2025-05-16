@@ -1,14 +1,15 @@
 import traceback
-from typing import Optional, Dict, Any
+from typing import Optional
+from Scraper.ScraperBase import ScraperResult, ProxyConfig
 from Scraper.PlaywrightRawScraper import request_by_browser
 
 
 def fetch_content(
     url: str,
     timeout_ms: int,
-    proxy: Optional[Dict[str, str]] = None,
+    proxy: Optional[ProxyConfig] = None,
     **kwargs
-) -> Dict[str, Any]:
+) -> ScraperResult:
     """
     The same as base.
     :param url: The same as base.

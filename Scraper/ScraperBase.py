@@ -2,15 +2,25 @@
 All scraper MUST provide the same interface and the same result format.
 """
 from urllib.parse import quote, unquote
-from typing import Optional, Dict, Any
+from typing import Required, Optional, TypedDict, List
+
+
+class ProxyConfig(TypedDict):
+    http: str
+    https: str
+
+
+class ScraperResult(TypedDict):
+    content: str
+    errors: List[str]
 
 
 def fetch_content(
     url: str,
     timeout_ms: int,
-    proxy: Optional[Dict[str, str]] = None,
+    proxy: Optional[ProxyConfig] = None,
     **kwargs
-) -> Dict[str, Any]:
+) -> ScraperResult:
     """
     Fetch web content from the specified url.
     :param url: The url to fetch.
@@ -29,11 +39,7 @@ def fetch_content(
     """
     return {
         'content': '',
-        'errors': ['This is just an example of scraper implementation,'],
-
-        'url': url,
-        'timeout_ms': timeout_ms,
-        'proxy': proxy
+        'errors': ['This is just an example of scraper implementation,']
     }
 
 
@@ -192,6 +198,7 @@ def to_requests(parsed_proxy: dict) -> dict:
 # --------------------------
 # Tests for parse_proxy()
 # --------------------------
+
 def test_parse_playwright_valid():
     # Standard case with auth
     input_conf = {"server": "socks5://proxy.com:1080", "username": "user", "password": "pass"}

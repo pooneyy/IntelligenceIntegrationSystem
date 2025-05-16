@@ -3,7 +3,9 @@ import zlib
 import random
 import requests
 from bs4 import BeautifulSoup
-from typing import Optional, Dict, Any
+from typing import Optional
+
+from Scraper.ScraperBase import ScraperResult, ProxyConfig
 
 try:
     import brotli
@@ -179,9 +181,9 @@ def check_content_quality(html, target_keywords=None):
 def fetch_content(
     url: str,
     timeout_ms: int,
-    proxy: Optional[Dict[str, str]] = None,
+    proxy: Optional[ProxyConfig] = None,
     **kwargs
-) -> Dict[str, Any]:
+) -> ScraperResult:
     """
     The same as base.
     :param url: The same as base.
