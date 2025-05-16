@@ -1,0 +1,29 @@
+import threading
+import traceback
+
+from service_engine import ServiceContext
+
+
+def drive_module(module):
+    stop_event = threading.Event()
+    service_context = ServiceContext()
+
+    module.module_init(service_context)
+    while not stop_event.is_set():
+        module.start_task(stop_event)
+
+
+def main():
+    from CrawlTasks import task_crawl_chinanews
+    drive_module(task_crawl_chinanews)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
+
+
+

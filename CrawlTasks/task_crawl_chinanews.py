@@ -1,5 +1,6 @@
 import logging
 import traceback
+import Scraper.RequestsScraper
 from Tools.RSSFetcher import fetch_feed
 
 
@@ -22,7 +23,7 @@ def start_task(stop_event):
     for feed_name, feed_url in feed_list.items():
         try:
             print(f'Process feed: {feed_name} : {feed_url}')
-            result = fetch_feed(feed_url, {})
+            result = fetch_feed(feed_url, Scraper.RequestsScraper, {})
 
             for article in result['entries']:
                 article_link = article['link']

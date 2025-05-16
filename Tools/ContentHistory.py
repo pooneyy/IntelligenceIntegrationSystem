@@ -54,7 +54,7 @@ class _ContentHistoryManager:
             if url in self._url_map:
                 return False, self._url_map[url]
 
-            filepath = self._generate_filepath(title, content, category, suffix)
+            filepath = self.generate_filepath(title, content, category, suffix)
 
             try:
                 filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,7 @@ class _ContentHistoryManager:
                     filepath.unlink()
                 raise RuntimeError(f"Content save failed: {str(e)}") from e
 
-    def _generate_filepath(self, title, content, category, suffix):
+    def generate_filepath(self, title, content, category, suffix):
         """Generate human-readable file path"""
         clean_category = re.sub(r'[\\/*?:"<>|]', '', category.strip())
         clean_title = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5\-_]', '_', title.strip())[:50]
@@ -135,6 +135,7 @@ def _get_instance():
 
 
 # Public interface functions
+
 def has_url(url):
     return _get_instance().has_url(url)
 
@@ -149,6 +150,10 @@ def get_filepath(url):
 
 def export_mappings(export_path, format='csv'):
     return _get_instance().export_mappings(export_path, format)
+
+
+def generate_filepath(title, content, category, suffix):
+    return _get_instance().generate_filepath(title, content, category, suffix)
 
 
 def close():

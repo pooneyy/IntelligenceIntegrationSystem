@@ -2,11 +2,12 @@
 Use the methods in this document to organize the process of
     check history -> crawling -> cleaning -> recording history -> submitting results
 """
-import ContentHistory
-from Scraper.PlaywrightRenderedScraper import fetch_content
-
-from bs4 import BeautifulSoup
 import html2text
+from bs4 import BeautifulSoup
+
+from Streamer.ToFileAndHistory import to_file_and_history
+from Tools import ContentHistory
+from Scraper.PlaywrightRenderedScraper import fetch_content
 
 
 def html_content_converter(html_content, selector, output_format='markdown'):
@@ -40,6 +41,8 @@ def crawl_article(url: str):
         return
 
     raw_html = fetch_content(url, 20)
+    markdown = html_content_converter(raw_html, 'div.left_zw')
+    to_file_and_history(url, markdown, '', 'abc', '.md')
 
 
 
