@@ -2,7 +2,7 @@ import logging
 import traceback
 import Scraper.RequestsScraper
 from Tools.RSSFetcher import fetch_feed
-
+from Workflow.CrawlArticle import crawl_article
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +21,16 @@ def module_init(service_context):
 
 def start_task(stop_event):
     for feed_name, feed_url in feed_list.items():
+        if stop_event.is_set():
+            break
         try:
             print(f'Process feed: {feed_name} : {feed_url}')
             result = fetch_feed(feed_url, Scraper.RequestsScraper, {})
 
             for article in result['entries']:
                 article_link = article['link']
+                crawl_article(article_link)
+
         except Exception as e:
             print(f"Process feed fail: {feed_url} - {str(e)}")
             print(traceback.format_exc())

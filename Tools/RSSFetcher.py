@@ -126,16 +126,22 @@ def fetch_feed(
     :return: Result dictionary with status details.
         {
             "url": "url",
-            "meta": {...},
+            "meta": {
+                        "title": "The title of channel (maybe)",
+                        "link": "Not the feed link. I have no idea.",
+                        "description": "",
+                        "language": "zh-cn",
+                        "updated": "",
+                    },
             "entries": [
                     {
-                        "title": "",
-                        "link": "",
-                        "published": "",
-                        "authors": ["", ...],
-                        "description": "",
-                        "guid": "",
-                        "categories": ["", ...],
+                        "title": "The title of article",
+                        "link": "The link of article",
+                        "published": "Published time",
+                        "authors": ["Authors but in most case is empty", ...],
+                        "description": "Description of this article",
+                        "guid": "In most case is empty",
+                        "categories": ["In most case is empty", ...],
                         "media": ["", ...]
                     }, ...
                 ],
