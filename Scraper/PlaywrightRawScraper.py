@@ -8,7 +8,6 @@ Complete implementation with:
 - Comprehensive error handling
 - Type annotations
 """
-import re
 import random
 import traceback
 from urllib.parse import urlparse
@@ -20,7 +19,6 @@ from Scraper.ScraperBase import parse_proxy, to_playwright, ScraperResult, Proxy
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 
 
-# 更新UA列表为完整现代浏览器标识
 DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",

@@ -218,7 +218,7 @@ def clean_html_content(html_content):
 # 示例使用
 if __name__ == "__main__":
     # 读取 HTML 文件
-    with open(r"C:\D\Code\git\IntelligenceIntegrationSystem\output\要闻导读\俄媒：观看二战电影，普京眼含热泪_d00d20_20250512-172515.origin.html", "r", encoding="utf-8") as f:
+    with open(r"/output/要闻导读/俄媒：观看二战电影，普京眼含热泪_d00d20_20250512-172515.origin.html", "r", encoding="utf-8") as f:
         raw_html = f.read()
 
     # 清洗内容

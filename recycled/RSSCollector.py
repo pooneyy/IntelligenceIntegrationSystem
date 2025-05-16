@@ -18,7 +18,7 @@ from Tools.RSSFetcher import fetch_feed
 from typing import Dict, List, Any, Optional
 
 from Scraper.PlaywrightRenderedScraper import fetch_content
-from Tools.ContentCleaner import clean_html_content, html_to_clean_text, html_to_clean_md
+from Scrubber.ContentCleaner import clean_html_content, html_to_clean_text, html_to_clean_md
 
 
 def _generate_filepath(article: dict, suffix: str, base_dir: str = "output") -> Path:
