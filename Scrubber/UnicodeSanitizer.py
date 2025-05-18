@@ -1,6 +1,13 @@
 import re
 import unicodedata
-from typing import Optional, TypeAlias, Literal
+from typing import Optional, Literal
+
+try:
+    from typing import TypeAlias
+    print("Success: Using Python 3.10+")
+except ImportError:
+    from typing_extensions import TypeAlias
+    print("Success: Using typing_extensions")
 
 
 NormalizationForm: TypeAlias = Literal["NFC", "NFD", "NFKC", "NFKD"]

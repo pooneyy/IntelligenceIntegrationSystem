@@ -20,7 +20,9 @@ pytest
 numpy
 werkzeug
 html2text
+watchdog
+pytest-asyncio
 
 faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card
-
+typing_extensions

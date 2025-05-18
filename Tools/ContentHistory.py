@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import sqlite3
@@ -5,6 +6,7 @@ import hashlib
 import threading
 from pathlib import Path
 from datetime import datetime
+from typing import Tuple
 
 # Singleton instance and initialization lock
 _instance = None
@@ -15,8 +17,9 @@ class _ContentHistoryManager:
     """Actual implementation class (private)"""
 
     def __init__(self, base_dir='content_storage', db_name='content_history.db'):
-        self.db_path = os.path.join(base_dir, db_name)
         self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path = os.path.join(base_dir, db_name)
         self.operation_lock = threading.RLock()
         self.conn = sqlite3.connect(self.db_path, timeout=10)
         self._create_table()
@@ -48,7 +51,7 @@ class _ContentHistoryManager:
         with self.operation_lock:
             return url in self._url_map
 
-    def save_content(self, url, content, title, category, suffix='.txt'):
+    def save_content(self, url, content, title, category, suffix='.txt') -> Tuple[bool, str]:
         """Save content with thread-safe operation"""
         with self.operation_lock:
             if url in self._url_map:
@@ -76,7 +79,8 @@ class _ContentHistoryManager:
             except Exception as e:
                 if filepath.exists():
                     filepath.unlink()
-                raise RuntimeError(f"Content save failed: {str(e)}") from e
+                logging.error(f"Content save failed: {str(e)}")
+                return False, str(filepath)
 
     def generate_filepath(self, title, content, category, suffix):
         """Generate human-readable file path"""
@@ -140,7 +144,7 @@ def has_url(url):
     return _get_instance().has_url(url)
 
 
-def save_content(url, content, title, category, suffix='.txt'):
+def save_content(url, content, title, category, suffix='.txt') -> Tuple[bool, str]:
     return _get_instance().save_content(url, content, title, category, suffix)
 
 

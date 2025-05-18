@@ -2,7 +2,7 @@
 All scraper MUST provide the same interface and the same result format.
 """
 from urllib.parse import quote, unquote
-from typing import Required, Optional, TypedDict, List
+from typing import Optional, TypedDict, List
 
 
 class ProxyConfig(TypedDict):
