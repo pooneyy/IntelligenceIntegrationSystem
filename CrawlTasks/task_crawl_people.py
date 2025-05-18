@@ -26,6 +26,6 @@ def start_task(stop_event):
                     partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy={}),
                     partial(fetch_content, timeout_ms=20 * 1000),
                     [
-                        partial(html_content_converter, selector='div.rm_txt_con'),
+                        partial(html_content_converter, selector='div.rm_txt, div.text_con_left'),
                         partial(sanitize_unicode_string, max_length=10240)
                     ])

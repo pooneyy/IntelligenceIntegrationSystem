@@ -55,6 +55,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
         try:
             print(f'Process feed: {feed_name} : {feed_url}')
             result = fetch_feed(feed_url)
+            print(f"|__Total {len(result['entries'])} articles")
 
             for article in result['entries']:
                 article_link = article['link']
@@ -77,7 +78,9 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                     text = scrubber(text)
                     if not text:
                         logging.error(f'  |__Got empty content when applying scrubber {str(scrubber)}.')
-                        continue
+                        break
+                if not text:
+                    continue
 
                 success, file_path = to_file_and_history(article_link, text, article['title'], feed_name, '.md')
                 if not success:
