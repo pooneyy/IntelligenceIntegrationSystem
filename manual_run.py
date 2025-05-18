@@ -14,8 +14,11 @@ def drive_module(module):
 
 
 def main():
-    from CrawlTasks import task_crawl_chinanews
-    drive_module(task_crawl_chinanews)
+    # from CrawlTasks import task_crawl_chinanews
+    # drive_module(task_crawl_chinanews)
+
+    from CrawlTasks import task_crawl_people
+    drive_module(task_crawl_people)
 
 
 if __name__ == "__main__":

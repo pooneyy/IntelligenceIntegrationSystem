@@ -1,12 +1,14 @@
-import logging
 import os
 import re
 import sqlite3
 import hashlib
+import logging
 import threading
+import tldextract
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, List
+
 
 # Singleton instance and initialization lock
 _instance = None
@@ -57,7 +59,7 @@ class _ContentHistoryManager:
             if url in self._url_map:
                 return False, self._url_map[url]
 
-            filepath = self.generate_filepath(title, content, category, suffix)
+            filepath = self.generate_filepath(title, content, url, category, suffix)
 
             try:
                 filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -82,8 +84,38 @@ class _ContentHistoryManager:
                 logging.error(f"Content save failed: {str(e)}")
                 return False, str(filepath)
 
-    def generate_filepath(self, title, content, category, suffix):
-        """Generate human-readable file path"""
+    # def generate_filepath(self, title, content, category, suffix):
+    #     """Generate human-readable file path"""
+    #     clean_category = re.sub(r'[\\/*?:"<>|]', '', category.strip())
+    #     clean_title = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5\-_]', '_', title.strip())[:50]
+    #     clean_title = re.sub(r'_+', '_', clean_title)
+    #
+    #     content_hash = hashlib.md5(content.encode()).hexdigest()[:6]
+    #     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    #     base_name = f"{clean_title}_{content_hash}_{timestamp}{suffix}"
+    #     base_path = self.base_dir / clean_category / base_name
+    #
+    #     if not base_path.exists():
+    #         return base_path
+    #
+    #     timestamp_ms = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    #     return self.base_dir / clean_category / f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
+
+    def generate_filepath(self, title, content, url, category, suffix):
+        """生成包含URL域名层级的文件路径"""
+        # 提取域名并处理多级结构
+        extracted = tldextract.extract(url)
+        domain_parts = []
+        if extracted.subdomain:  # 合并子域名和主域名
+            domain_parts.extend(extracted.subdomain.split('.'))
+        domain_parts.append(extracted.domain)
+        combined = '.'.join(domain_parts)
+
+        # 处理特殊前缀和多级结构
+        combined = re.sub(r'^www\d*\.', '', combined)  # 移除www前缀
+        category_part = re.sub(r'[\\/*?:"<>|]', '', combined.replace('.', '_'))  # 转换特殊字符
+
+        # 原逻辑增强
         clean_category = re.sub(r'[\\/*?:"<>|]', '', category.strip())
         clean_title = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5\-_]', '_', title.strip())[:50]
         clean_title = re.sub(r'_+', '_', clean_title)
@@ -91,13 +123,15 @@ class _ContentHistoryManager:
         content_hash = hashlib.md5(content.encode()).hexdigest()[:6]
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         base_name = f"{clean_title}_{content_hash}_{timestamp}{suffix}"
-        base_path = self.base_dir / clean_category / base_name
+
+        # 构建新路径结构
+        base_path = self.base_dir / category_part / clean_category / base_name  # 新增域名层级
 
         if not base_path.exists():
             return base_path
 
         timestamp_ms = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
-        return self.base_dir / clean_category / f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
+        return self.base_dir / category_part / clean_category / f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
 
     def get_filepath(self, url):
         """Get stored file path"""

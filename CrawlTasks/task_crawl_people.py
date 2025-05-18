@@ -1,0 +1,31 @@
+from functools import partial
+
+import Scraper.RequestsScraper
+from Tools.RSSFetcher import fetch_feed
+from Scraper.PlaywrightRenderedScraper import fetch_content
+from Scrubber.HTMLConvertor import html_content_converter
+from Scrubber.UnicodeSanitizer import sanitize_unicode_string
+from Workflow.CommonFeedsCrawFlow import feeds_craw_flow
+
+
+feed_list = {
+    "时政新闻": "http://www.people.com.cn/rss/politics.xml",
+    "国际新闻": "http://www.people.com.cn/rss/world.xml",
+    "台港澳新闻": "http://www.people.com.cn/rss/haixia.xml",
+    "军事新闻": "http://www.people.com.cn/rss/military.xml",
+    "全部新闻": "http://www.people.com.cn/rss/ywkx.xml"
+}
+
+
+def module_init(service_context):
+    pass
+
+
+def start_task(stop_event):
+    feeds_craw_flow('chinanews', feed_list, stop_event, 15 * 60,
+                    partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy={}),
+                    partial(fetch_content, timeout_ms=20 * 1000),
+                    [
+                        partial(html_content_converter, selector='div.rm_txt_con'),
+                        partial(sanitize_unicode_string, max_length=10240)
+                    ])

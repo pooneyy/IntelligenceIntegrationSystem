@@ -22,6 +22,7 @@ werkzeug
 html2text
 watchdog
 pytest-asyncio
+tldextract
 
 faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card
