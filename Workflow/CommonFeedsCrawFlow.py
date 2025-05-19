@@ -55,6 +55,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
 
         statistics = {
             'total': 0,
+            'index': 0,
             'current': 0,
             'success': 0,
             'skip': 0,
@@ -66,14 +67,16 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
             statistics['total'] = len(result['entries'])
 
             for article in result['entries']:
+                statistics['index'] += 1
                 article_link = article['link']
 
                 if has_url(article_link):
                     statistics['skip'] += 1
+                    # print(f"|__Skip  article ({statistics['index']}/{statistics['total']}): {article_link}")
                     continue
 
                 statistics['current'] += 1
-                print(f"|__Fetch article ({statistics['current']}/{statistics['total']}): {article_link}")
+                print(f"|__Fetch article ({statistics['index']}/{statistics['total']}): {article_link}")
 
                 content = fetch_content(article_link)
 
