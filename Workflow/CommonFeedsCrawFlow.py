@@ -4,8 +4,8 @@ import traceback
 import threading
 from typing import Callable, TypedDict, Dict, List
 
-from Streamer.ToFileAndHistory import to_file_and_history
 from Tools.ContentHistory import has_url
+from Streamer.ToFileAndHistory import to_file_and_history
 
 
 class FetchFeedEntries(TypedDict):
@@ -24,7 +24,7 @@ class FetchContentResult(TypedDict):
 
 def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading.Event, update_interval_s: int,
                     fetch_feed: Callable[[str], FetchFeedResult],
-                    fetch_content: Callable[[str, int], FetchContentResult],
+                    fetch_content: Callable[[str], FetchContentResult],
                     scrubbers: List[Callable[[str], str]]):
     """
     A common feeds and their articles craw workflow. This workflow works in this sequence:
@@ -36,7 +36,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                     'feed name': 'feed link'
                 }
     :param stop_event: The stop event to quit loop.
-    :param update_interval_s: The polling udpate interval in second.
+    :param update_interval_s: The polling update interval in second.
 
     :param fetch_feed: The function to fetch feed. Function declaration:
                         fetch_feed(feed_url: str) -> dict
@@ -52,18 +52,29 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
             break
+
+        statistics = {
+            'total': 0,
+            'current': 0,
+            'success': 0,
+            'skip': 0,
+        }
+
         try:
             print(f'Process feed: {feed_name} : {feed_url}')
             result = fetch_feed(feed_url)
-            print(f"|__Total {len(result['entries'])} articles")
+            statistics['total'] = len(result['entries'])
 
             for article in result['entries']:
                 article_link = article['link']
 
                 if has_url(article_link):
+                    statistics['skip'] += 1
                     continue
 
-                print(f'|__Fetch article: {article_link}')
+                statistics['current'] += 1
+                print(f"|__Fetch article ({statistics['current']}/{statistics['total']}): {article_link}")
+
                 content = fetch_content(article_link)
 
                 raw_html = content['content']
@@ -87,11 +98,19 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                     logging.error(f'  |__Save content {file_path} fail.')
                     continue
 
+                statistics['success'] += 1
+
         except Exception as e:
             print(f"Process feed fail: {feed_url} - {str(e)}")
             print(traceback.format_exc())
 
-    logging.info(f'[{flow_name}]: Finished one loop and rest for {update_interval_s} seconds ...')
+        logging.info(f"Feed: {feed_name} finished.\n"
+                     f"     Total: {statistics['total']}\n"
+                     f"     Success: {statistics['success']}\n"
+                     f"     Skip: {statistics['skip']}\n"
+                     f"     Fail: {statistics['total'] - statistics['success'] - statistics['skip']}\n")
+
+    logging.info(f"[{flow_name}]: Finished one loop and rest for {update_interval_s} seconds ...")
 
     # Wait for next loop and check event per 5s.
     # noinspection PyTypeChecker

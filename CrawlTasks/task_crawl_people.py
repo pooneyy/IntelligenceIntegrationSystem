@@ -1,6 +1,7 @@
 from functools import partial
 
 import Scraper.RequestsScraper
+from GlobalConfig import APPLIED_PROXY, APPLIED_INTERNAL_TIMEOUT_MS
 from Tools.RSSFetcher import fetch_feed
 from Scraper.PlaywrightRenderedScraper import fetch_content
 from Scrubber.HTMLConvertor import html_content_converter
@@ -23,8 +24,8 @@ def module_init(service_context):
 
 def start_task(stop_event):
     feeds_craw_flow('chinanews', feed_list, stop_event, 15 * 60,
-                    partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy={}),
-                    partial(fetch_content, timeout_ms=20 * 1000),
+                    partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy=APPLIED_PROXY),
+                    partial(fetch_content, timeout_ms=APPLIED_INTERNAL_TIMEOUT_MS, proxy=APPLIED_PROXY),
                     [
                         partial(html_content_converter, selector='div.rm_txt, div.text_con_left'),
                         partial(sanitize_unicode_string, max_length=10240)
