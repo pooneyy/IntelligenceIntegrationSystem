@@ -10,6 +10,7 @@ from Workflow.CommonFeedsCrawFlow import feeds_craw_flow
 
 
 # https://www.voanews.com/rssfeeds
+# Too much video content.
 
 feed_list = {
     "USA": "https://www.voanews.com/api/zqboml-vomx-tpeivmy",
