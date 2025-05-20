@@ -1,8 +1,8 @@
+import os
 import threading
 import traceback
 
 from service_engine import ServiceContext
-from Tools.ContentHistory import init
 
 
 def drive_module(module):
@@ -15,8 +15,6 @@ def drive_module(module):
 
 
 def main():
-    init()
-
     # from CrawlTasks import task_crawl_chinanews
     # drive_module(task_crawl_chinanews)
 

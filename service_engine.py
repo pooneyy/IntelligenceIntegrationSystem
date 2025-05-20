@@ -7,8 +7,6 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from plugin_manager import PluginManager, PluginWrapper, logger
-from Tools.ContentHistory import init
-
 
 project_root = os.path.abspath(__file__)
 
@@ -201,7 +199,6 @@ def main():
     #     }
     # )
 
-    init()
     crawl_task_path = 'CrawlTasks'
 
     task_manager = TaskManager(crawl_task_path)

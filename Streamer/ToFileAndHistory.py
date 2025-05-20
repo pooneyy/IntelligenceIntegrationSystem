@@ -1,6 +1,6 @@
 from typing import Tuple, Optional
 
-from Tools.ContentHistory import save_content, generate_filepath, ContentDB
+from Tools.ContentHistory import save_content, generate_filepath
 
 
 def to_file(title, content, category, suffix):
@@ -15,5 +15,5 @@ def to_file(title, content, category, suffix):
         raise RuntimeError(f"Content save failed: {str(e)}") from e
 
 
-def to_file_and_history(url, content, title, category, suffix='.txt', db: Optional[ContentDB]=None) -> Tuple[bool, str]:
-    return save_content(url, content, title, category, suffix, db)
+def to_file_and_history(url, content, title, category, suffix='.txt') -> Tuple[bool, str]:
+    return save_content(url, content, title, category, suffix)

@@ -4,8 +4,12 @@ import traceback
 import threading
 from typing import Callable, TypedDict, Dict, List
 
-from Tools.ContentHistory import ContentDB, has_url, get_base_dir
+from Tools.ContentHistory import has_url, get_base_dir
 from Streamer.ToFileAndHistory import to_file_and_history
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class FetchFeedEntries(TypedDict):
@@ -47,9 +51,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
 
     :return: None
     """
-    logging.info(f'[{flow_name}]: starts work.')
-
-    db = ContentDB(get_base_dir())
+    logger.info(f'[{flow_name}]: starts work.')
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
@@ -64,7 +66,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
         }
 
         try:
-            print(f'Process feed: {feed_name} : {feed_url}')
+            logger.info(f'[{flow_name}]: Process feed: {feed_name} : {feed_url}')
             result = fetch_feed(feed_url)
             statistics['total'] = len(result['entries'])
 
@@ -74,17 +76,17 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
 
                 if has_url(article_link):
                     statistics['skip'] += 1
-                    # print(f"|__Skip  article ({statistics['index']}/{statistics['total']}): {article_link}")
+                    # logger.info(f"[{flow_name}]: |__Skip  article ({statistics['index']}/{statistics['total']}): {article_link}")
                     continue
 
                 statistics['current'] += 1
-                print(f"|__Fetch article ({statistics['index']}/{statistics['total']}): {article_link}")
+                logger.info(f"[{flow_name}]: |__Fetch article ({statistics['index']}/{statistics['total']}): {article_link}")
 
                 content = fetch_content(article_link)
 
                 raw_html = content['content']
                 if not raw_html:
-                    logging.error('  |__Got empty HTML content.')
+                    logger.error(f'[{flow_name}]:   |__Got empty HTML content.')
                     continue
 
                 # TODO: If an article always convert fail. Need a special treatment.
@@ -93,31 +95,29 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                 for scrubber in scrubbers:
                     text = scrubber(text)
                     if not text:
-                        logging.error(f'  |__Got empty content when applying scrubber {str(scrubber)}.')
+                        logger.error(f'[{flow_name}]:   |__Got empty content when applying scrubber {str(scrubber)}.')
                         break
                 if not text:
                     continue
 
                 success, file_path = to_file_and_history(
-                    article_link, text, article['title'], feed_name, '.md', db)
+                    article_link, text, article['title'], feed_name, '.md')
                 if not success:
-                    logging.error(f'  |__Save content {file_path} fail.')
+                    logger.error(f'[{flow_name}]:   |__Save content {file_path} fail.')
                     continue
 
                 statistics['success'] += 1
 
         except Exception as e:
-            print(f"Process feed fail: {feed_url} - {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"[{flow_name}]: Process feed fail: {feed_url} - {str(e)}")
 
-        logging.info(f"Feed: {feed_name} finished.\n"
-                     f"     Total: {statistics['total']}\n"
-                     f"     Success: {statistics['success']}\n"
-                     f"     Skip: {statistics['skip']}\n"
-                     f"     Fail: {statistics['total'] - statistics['success'] - statistics['skip']}\n")
+        logger.info(f"[{flow_name}]: Feed: {feed_name} finished.\n"
+                    f"     Total: {statistics['total']}\n"
+                    f"     Success: {statistics['success']}\n"
+                    f"     Skip: {statistics['skip']}\n"
+                    f"     Fail: {statistics['total'] - statistics['success'] - statistics['skip']}\n")
 
-    logging.info(f"[{flow_name}]: Finished one loop and rest for {update_interval_s} seconds ...")
-    db.close()
+    logger.info(f"[{flow_name}]: Finished one loop and rest for {update_interval_s} seconds ...")
 
     # Wait for next loop and check event per 5s.
     # noinspection PyTypeChecker
