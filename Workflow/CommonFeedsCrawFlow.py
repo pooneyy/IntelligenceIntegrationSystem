@@ -4,7 +4,7 @@ import traceback
 import threading
 from typing import Callable, TypedDict, Dict, List
 
-from Tools.ContentHistory import has_url
+from Tools.ContentHistory import ContentDB, has_url, get_base_dir
 from Streamer.ToFileAndHistory import to_file_and_history
 
 
@@ -48,6 +48,8 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
     :return: None
     """
     logging.info(f'[{flow_name}]: starts work.')
+
+    db = ContentDB(get_base_dir())
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
@@ -96,7 +98,8 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                 if not text:
                     continue
 
-                success, file_path = to_file_and_history(article_link, text, article['title'], feed_name, '.md')
+                success, file_path = to_file_and_history(
+                    article_link, text, article['title'], feed_name, '.md', db)
                 if not success:
                     logging.error(f'  |__Save content {file_path} fail.')
                     continue
@@ -114,6 +117,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                      f"     Fail: {statistics['total'] - statistics['success'] - statistics['skip']}\n")
 
     logging.info(f"[{flow_name}]: Finished one loop and rest for {update_interval_s} seconds ...")
+    db.close()
 
     # Wait for next loop and check event per 5s.
     # noinspection PyTypeChecker

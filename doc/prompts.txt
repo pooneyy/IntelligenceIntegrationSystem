@@ -270,49 +270,159 @@ python有没有可能实现这样一种机制：
 
 
 
-name	rss source
-微软AI	https://blogs.microsoft.com/ai/feed/
-微软亚研	https://www.msra.cn/feed
-pytorch blog	https://pytorch.org/blog/
-meta AI blog	https://ai.facebook.com/blog/
-google ai blog	https://ai.googleblog.com/
-OpenAI blog	https://openai.com/blog/
-DeepMind blog	https://deepmind.com/blog
-美团技术团队	https://tech.meituan.com/feed/
-知乎每日精选	https://www.zhihu.com/rss
-码农场	https://www.hankcs.com/feed/
-Yong's Blog	https://yongyuan.name/blog/feed.xml
-Jay Alammar's Blog	http://jalammar.github.io/
-算法之道	https://www.deeplearn.me/
-Andrej Karpathy blog	https://karpathy.github.io/
-Sebastian Ruder	https://ruder.io/rss/index.rss
-Jason Brownlee	https://machinelearningmastery.com/blog/
-distill	https://distill.pub/
-BAIR Blog	https://bair.berkeley.edu/blog/
-colah's blog	http://colah.github.io/
-inFERENCe	https://www.inference.vc/
-Pete Warden	https://petewarden.com/
-Jeremy Jordan	https://www.jeremyjordan.me/
-Graduate Descent	http://timvieira.github.io/blog/
-Lil'Log	https://lilianweng.github.io/
-NVIDIA Blog	https://blogs.nvidia.com/
-Eric Jang	https://blog.evjang.com/feeds/posts/default
-Christabella Irwanto	https://bella.cc/blog/
-Jonty Sinai	https://jontysinai.github.io/
-Lei Mao	https://leimao.github.io/blog/
-Amit Chaudhary	https://amitness.com/
-Sander Dieleman	https://benanne.github.io/
-Guillaume Genthial	https://guillaumegenthial.github.io/
-Causal Analysis in Theory and Practice	http://causality.cs.ucla.edu/blog/
-Machine learning and learning theory research	https://hunch.net/
-ShusenWang	https://www.youtube.com/c/ShusenWang/videos
-offconvex	http://www.offconvex.org/
-pythonspeed	https://pythonspeed.com/
-huggingface	https://huggingface.co/blog
-wandb	https://wandb.ai/fully-connected
-Han Xiao	https://hanxiao.io/archives/
 
 
-https://www.federalreserve.gov/feeds/feeds.htm
+
+
+下面这段代码，由于一个sql连接无法在线程间共享，因此我希望将数据库部分从该类中提取出来。
+每个线程在使用该类时都要创建数据库的实例，不同实例包含独立的sql connect。在save_content时需要传入数据库访问类，如果为空，则不记录到数据库。
+注意线程安全问题。
+
+
+# Singleton instance and initialization lock
+_instance = None
+_init_lock = threading.Lock()
+
+
+class _ContentHistoryManager:
+    """Actual implementation class (private)"""
+
+    def __init__(self, base_dir='content_storage', db_name='content_history.db'):
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path = os.path.join(base_dir, db_name)
+        self.operation_lock = threading.RLock()
+        self.conn = sqlite3.connect(self.db_path, timeout=10)
+        self._create_table()
+        self._url_map = self._load_records()
+
+    def _create_table(self):
+        """Create database table schema"""
+        with self.operation_lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS content_history (
+                    url TEXT PRIMARY KEY,
+                    filepath TEXT NOT NULL,
+                    checksum TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            self.conn.commit()
+
+    def _load_records(self):
+        """Load existing records from database"""
+        with self.operation_lock:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT url, filepath FROM content_history')
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
+    def has_url(self, url):
+        """Check URL existence"""
+        with self.operation_lock:
+            return url in self._url_map
+
+    def save_content(self, url, content, title, category, suffix='.txt') -> Tuple[bool, str]:
+        """Save content with thread-safe operation"""
+        with self.operation_lock:
+            if url in self._url_map:
+                return False, self._url_map[url]
+
+            filepath = self.generate_filepath(title, content, url, category, suffix)
+
+            try:
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+                checksum = hashlib.md5(content.encode()).hexdigest()
+
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT INTO content_history (url, filepath, checksum)
+                    VALUES (?, ?, ?)
+                ''', (url, str(filepath), checksum))
+                self.conn.commit()
+
+                self._url_map[url] = str(filepath)
+                return True, str(filepath)
+
+            except Exception as e:
+                if filepath.exists():
+                    filepath.unlink()
+                logging.error(f"Content save failed: {str(e)}")
+                return False, str(filepath)
+
+    def generate_filepath(self, title, content, url, category, suffix):
+        """生成包含URL域名层级的文件路径"""
+        # 提取域名并处理多级结构
+        extracted = tldextract.extract(url)
+        domain_parts = []
+        if extracted.subdomain:  # 合并子域名和主域名
+            domain_parts.extend(extracted.subdomain.split('.'))
+        domain_parts.append(extracted.domain)
+        combined = '.'.join(domain_parts)
+
+        # 处理特殊前缀和多级结构
+        combined = re.sub(r'^www\d*\.', '', combined)  # 移除www前缀
+        category_part = re.sub(r'[\\/*?:"<>|]', '', combined.replace('.', '_'))  # 转换特殊字符
+
+        # 原逻辑增强
+        clean_category = re.sub(r'[\\/*?:"<>|]', '', category.strip())
+        clean_title = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5\-_]', '_', title.strip())[:50]
+        clean_title = re.sub(r'_+', '_', clean_title)
+
+        content_hash = hashlib.md5(content.encode()).hexdigest()[:6]
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        base_name = f"{clean_title}_{content_hash}_{timestamp}{suffix}"
+
+        # 构建新路径结构
+        base_path = self.base_dir / category_part / clean_category / base_name  # 新增域名层级
+
+        if not base_path.exists():
+            return base_path
+
+        timestamp_ms = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        return self.base_dir / category_part / clean_category / f"{clean_title}_{content_hash}_{timestamp_ms}{suffix}"
+
+    def get_filepath(self, url):
+        """Get stored file path"""
+        with self.operation_lock:
+            return self._url_map.get(url)
+
+    def export_mappings(self, export_path, format='csv'):
+        """Export URL-file mappings"""
+        with self.operation_lock:
+            items = list(self._url_map.items())
+
+            if format == 'csv':
+                import csv
+                with open(export_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['URL', 'Filepath'])
+                    writer.writerows(items)
+            elif format == 'json':
+                import json
+                with open(export_path, 'w', encoding='utf-8') as f:
+                    json.dump(dict(items), f, indent=2)
+            else:
+                raise ValueError("Unsupported format")
+
+    def close(self):
+        """Close database connection"""
+        with self.operation_lock:
+            self.conn.close()
+
+
+def _get_instance():
+    """Initialize singleton instance with double-checked locking"""
+    global _instance
+    if _instance is None:
+        with _init_lock:
+            if _instance is None:
+                _instance = _ContentHistoryManager()
+    return _instance
+
+
 
 
