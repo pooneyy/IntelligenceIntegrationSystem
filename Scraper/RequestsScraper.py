@@ -116,12 +116,12 @@ class RequestsScraper:
         return None
 
 
-def check_content_quality(html, target_keywords=None):
+def check_content_quality(html: str, format: str, target_keywords=None):
     """
     网页内容质量评估系统
     返回：tuple (is_valid, score, issues)
     """
-    soup = BeautifulSoup(html, 'lxml')
+    soup = BeautifulSoup(html, format)
     report = {'score': 100, 'issues': []}
 
     # 基础结构检测（网页6/7的完整性标准）
@@ -182,6 +182,7 @@ def fetch_content(
     url: str,
     timeout_ms: int,
     proxy: Optional[ProxyConfig] = None,
+    format: str = 'xml',
     **kwargs
 ) -> ScraperResult:
     """
@@ -189,13 +190,14 @@ def fetch_content(
     :param url: The same as base.
     :param timeout_ms: The same as base.
     :param proxy: Format: The same as base.
+    :param format: Specify format to check.
     :return: The same as base.
     """
 
     scraper = RequestsScraper(proxy)
     html_content = scraper.fetch(url, int(timeout_ms / 1000))
     if html_content:
-        is_valid, score, issues = check_content_quality(html_content)
+        is_valid, score, issues = check_content_quality(html_content, format)
         return {
             'content': html_content,
             'errors': issues,
@@ -217,7 +219,7 @@ def main():
         "https": "socks5://user:password@proxy_host:port"
     }
 
-    result = fetch_content('https://feeds.feedburner.com/zhihu-daily', 15000)
+    result = fetch_content('https://www.cbc.ca/news/world/israel-gaza-aid-military-1.7538495?cmp=rss', 30000)
 
     if result['content']:
         print(f'Content : {result["content"]}')

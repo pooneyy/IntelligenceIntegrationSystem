@@ -23,6 +23,7 @@ html2text
 watchdog
 pytest-asyncio
 tldextract
+crawl4ai
 
 faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card
