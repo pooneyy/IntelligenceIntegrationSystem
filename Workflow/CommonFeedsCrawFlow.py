@@ -51,7 +51,9 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
 
     :return: None
     """
-    logger.info(f'[{flow_name}]: starts work.')
+    prefix = f'[{flow_name}]:'
+    # prefix = f'[{flow_name}]:'.ljust(15)
+    logger.info(f'{prefix} starts work.')
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
@@ -66,7 +68,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
         }
 
         try:
-            logger.info(f'[{flow_name}]: Process feed: {feed_name} : {feed_url}')
+            logger.info(f'{prefix} Process feed: {feed_name} : {feed_url}')
             result = fetch_feed(feed_url)
             statistics['total'] = len(result['entries'])
 
@@ -76,17 +78,17 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
 
                 if has_url(article_link):
                     statistics['skip'] += 1
-                    # logger.info(f"[{flow_name}]: |__Skip  article ({statistics['index']}/{statistics['total']}): {article_link}")
+                    # logger.info(f"{prefix} |--Skip  article ({statistics['index']}/{statistics['total']}): {article_link}")
                     continue
 
                 statistics['current'] += 1
-                logger.info(f"[{flow_name}]: |__Fetch article ({statistics['index']}/{statistics['total']}): {article_link}")
+                logger.info(f"{prefix} |--Fetch article ({statistics['index']}/{statistics['total']}): {article_link}")
 
                 content = fetch_content(article_link)
 
                 raw_html = content['content']
                 if not raw_html:
-                    logger.error(f'[{flow_name}]:   |__Got empty HTML content.')
+                    logger.error(f'{prefix}   |--Got empty HTML content.')
                     continue
 
                 # TODO: If an article always convert fail. Need a special treatment.
@@ -95,7 +97,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                 for scrubber in scrubbers:
                     text = scrubber(text)
                     if not text:
-                        logger.error(f'[{flow_name}]:   |__Got empty content when applying scrubber {str(scrubber)}.')
+                        logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
                         break
                 if not text:
                     continue
@@ -103,21 +105,21 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                 success, file_path = to_file_and_history(
                     article_link, text, article['title'], feed_name, '.md')
                 if not success:
-                    logger.error(f'[{flow_name}]:   |__Save content {file_path} fail.')
+                    logger.error(f'{prefix}   |--Save content {file_path} fail.')
                     continue
 
                 statistics['success'] += 1
 
         except Exception as e:
-            logger.error(f"[{flow_name}]: Process feed fail: {feed_url} - {str(e)}")
+            logger.error(f"{prefix} Process feed fail: {feed_url} - {str(e)}")
 
-        logger.info(f"[{flow_name}]: Feed: {feed_name} finished.\n"
+        logger.info(f"{prefix} Feed: {feed_name} finished.\n"
                     f"     Total: {statistics['total']}\n"
                     f"     Success: {statistics['success']}\n"
                     f"     Skip: {statistics['skip']}\n"
                     f"     Fail: {statistics['total'] - statistics['success'] - statistics['skip']}\n")
 
-    logger.info(f"[{flow_name}]: Finished one loop and rest for {update_interval_s} seconds ...")
+    logger.info(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
 
     # Wait for next loop and check event per 5s.
     # noinspection PyTypeChecker

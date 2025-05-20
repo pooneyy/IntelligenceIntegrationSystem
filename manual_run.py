@@ -21,8 +21,11 @@ def main():
     # from CrawlTasks import task_crawl_people
     # drive_module(task_crawl_people)
 
-    from CrawlTasks import task_crawl_voanews
-    drive_module(task_crawl_voanews)
+    # from CrawlTasks import task_crawl_voanews
+    # drive_module(task_crawl_voanews)
+
+    from CrawlTasks import task_crawl_cbc
+    drive_module(task_crawl_cbc)
 
 
 if __name__ == "__main__":
