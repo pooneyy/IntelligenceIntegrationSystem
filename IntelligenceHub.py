@@ -6,16 +6,16 @@ import queue
 import logging
 import datetime
 import traceback
+from typing import List, Tuple
 
 import pymongo
 import requests
 import threading
 from flask import Flask, request, jsonify
-from pymongo.errors import ConnectionFailure
 from werkzeug.serving import make_server
+from pymongo.errors import ConnectionFailure
+from pydantic import BaseModel, ValidationError
 from requests.exceptions import RequestException
-from concurrent.futures import ThreadPoolExecutor
-import os
 
 from faiss import IndexFlatL2
 import numpy as np
@@ -23,6 +23,10 @@ import numpy as np
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from prompts import DEFAULT_ANALYSIS_PROMPT
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class VectorIndex:
@@ -36,136 +40,115 @@ class VectorIndex:
         self.index.add(np.array([vector], dtype='float32'))
 
 
+class CollectedData(BaseModel):
+    UUID: str                           # [MUST]: The UUID to identify a message.
+    token: str                          # [MUST]: The token to identify the legal end point.
+    source: str | None = None           # (Optional): Message source. If it requires reply.
+    target: str | None = None           # (Optional): Message source. If it requires reply.
+    prompt: str | None = None           # (Optional): The prompt to ask LLM to process this message.
 
-logging.basicConfig(level=logging.INFO)
-
-
-def validate_fields(key_attrs, checked_dict):
-    must_missing = 0
-    optional_exist = 0
-    attribute_keys = set(key_attrs.keys())
-    checked_keys = set(checked_dict.keys())
-
-    # 统计MUST/Optional字段
-    for key, flag in key_attrs.items():
-        if flag == 'M' and key not in checked_keys:
-            must_missing += 1
-        elif flag == 'O' and key in checked_keys:
-            optional_exist += 1
-
-    # 修正后的额外字段计算：排除属性表中已定义的字段
-    defined_fields = attribute_keys & checked_keys  # 已定义的合法字段
-    extra_fields = len(checked_keys - defined_fields)
-
-    return must_missing, optional_exist, extra_fields
+    title: str | None = None            # [MUST]: The content to be processed.
+    authors: List[str] | None = []      # (Optional): Article authors.
+    content: str                        # [MUST]: The content to be processed.
+    pub_time: str | None = None         # (Optional): Content publish time.
+    informant: str | None = None        # (Optional): The source of message.
 
 
-COLLECTOR_DATA_FIELDS = {
-    'UUID': 'M',        # [MUST]: The UUID to identify a message.
-
-    'token': 'M',       # [MUST]: The token to identify the legal end point.
-    'source': 'O',      # (Optional): Message source. If it requires reply.
-    'target': 'O',      # (Optional): Use for message routing to special module.
-    'prompt': 'O',      # (Optional): The prompt to ask LLM to process this message.
-
-    'title': 'O',       # [MUST]: The content to be processed.
-    'authors': 'O',      # (Optional): Article author.
-    'content': 'M',     # [MUST]: The content to be processed.
-    'pub_time': 'O',       # [MUST]: The content to be processed.
-    'informant': 'O',   # (Optional): The source of message.
-}
+class ProcessedData(BaseModel):
+    UUID: str
+    TIME: str | None
+    LOCATION: str | None
+    PEOPLE: str | None
+    ORGANIZATION: str | None
+    EVENT_BRIEF: str | None
+    EVENT_TEXT: str | None
+    RATE: str | None
+    IMPACT: str | None
 
 
-POST_PROCESS_DATA_FIELDS = {
-    'UUID': 'M',
-    'PROMPT': 'M',
-    'TEXT': 'M',
-}
-
-
-PROCESSED_DATA_FIELDS = {
-    'UUID': 'M',        # [MUST]: The UUID to identify a message.
-    'TIME': 'M',
-    'LOCATION': 'M',
-    'PEOPLE': 'M',
-    'ORGANIZATION': 'M',
-    'EVENT_BRIEF': 'M',
-    'EVENT_TEXT': 'M',
-    'RATE': 'M',
-    'IMPACT': 'O'
-}
-
-
-def post_collected_intelligence(url: str, data: dict, timeout=10):
+def check_sanitize_dict(data: dict, verifier: BaseModel) -> Tuple[dict, str]:
     try:
-        if 'UUID' not in data:
-            data['UUID'] = str(uuid.uuid4())
-            logging.info(f"Generated new UUID: {data['UUID']}")
+        validated_data = verifier.model_validate(data).model_dump(exclude_unset=True, exclude_none=True)
+        return validated_data, ''
+    except ValidationError as e:
+        logger.error(f'Collected data field missing: {str(e)}')
+        return {}, str(e)
+    except Exception as e:
+        logger.error(f'Validate Collected data fail: {str(e)}')
+        return {}, str(e)
 
-        must_missing, optional_exist, extra_fields = validate_fields(COLLECTOR_DATA_FIELDS, data)
-        if must_missing:
-            print(f'Post data error - '
-                  f'MUST fields missing: {must_missing}, '
-                  f'Optional/Extra: {optional_exist}/{extra_fields}')
 
+def common_post(url: str, data: dict, timeout: int) -> dict:
+    try:
         response = requests.post(
-            f'{url}/collect',
+            url,
             json=data,
             headers={'X-Request-Source': 'IntelligenceHub'},
             timeout=timeout
         )
 
         response.raise_for_status()
-        logging.info(f"成功发送数据 UUID={data['UUID']}")
+        logger.info(f"Sent request to {url} successful UUID={data['UUID']}")
         return response.json()
 
     except RequestException as e:
-        logging.error(f"请求失败: {str(e)}")
+        logger.error(f"Sent request to {url} fail: {str(e)}")
         return {"status": "error", "uuid": data.get('UUID'), "reason": str(e)}
 
     except Exception as e:
-        logging.error(f"请求失败: {str(e)}")
+        logger.error(f"Sent request to {url} fail: {str(e)}")
         return {"status": "error", "uuid": '', "reason": str(e)}
 
 
-def post_processed_intelligence(url: str, data: dict, timeout=10):
-    """发送处理结果到反馈端点"""
-    try:
-        if 'UUID' not in data:
-            error_msg = "Missing UUID in processed data"
-            logging.error(error_msg)
-            return {"status": "error", "reason": error_msg}
-
-        response = requests.post(
-            f'{url}/feedback',
-            json=data,
-            headers={'X-Request-Source': 'IntelligenceHub'},
-            timeout=timeout
-        )
-
-        response.raise_for_status()
-        logging.info(f"成功反馈处理结果 UUID={data['UUID']}")
-        return response.json()
-
-    except RequestException as e:
-        logging.error(f"反馈失败: {str(e)}")
-        return {"status": "error", "uuid": data['UUID'], "reason": str(e)}
-
-    except Exception as e:
-        logging.error(f"反馈失败: {str(e)}")
-        return {"status": "error", "uuid": '', "reason": str(e)}
+# POST_PROCESS_DATA_FIELDS = {
+#     'UUID': 'M',
+#     'PROMPT': 'M',
+#     'TEXT': 'M',
+# }
+#
+#
+# PROCESSED_DATA_FIELDS = {
+#     'UUID': 'M',        # [MUST]: The UUID to identify a message.
+#     'TIME': 'M',
+#     'LOCATION': 'M',
+#     'PEOPLE': 'M',
+#     'ORGANIZATION': 'M',
+#     'EVENT_BRIEF': 'M',
+#     'EVENT_TEXT': 'M',
+#     'RATE': 'M',
+#     'IMPACT': 'O'
+# }
 
 
-def post_to_ai_processor(url: str, data: dict, timeout=10):
-    json_data = json.dumps(data, ensure_ascii=False)
-    headers = {"Content-Type": "application/json; charset=UTF-8"}
-    response = requests.post(
-        url,
-        data=json_data.encode("utf-8"),
-        headers=headers,
-        timeout=timeout
-    )
-    return response
+def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> dict:
+    """
+    Post collected intelligence to IntelligenceHub (/collect).
+    :param url: IntelligenceHub url (without '/collect' path).
+    :param data: Collector data.
+    :param timeout: Timeout in second
+    :return: Requests response or {'status': 'error', 'reason': 'error description'}
+    """
+    if 'UUID' not in data:
+        data['UUID'] = str(uuid.uuid4())
+        logger.info(f"Generated new UUID: {data['UUID']}")
+    validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
+    if error_text:
+        return {'status': 'error', 'reason': error_text}
+    return common_post(f'{url}/collect', validated_data, timeout)
+
+
+def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> dict:
+    """
+    Post processed data to IntelligenceHub (/feedback).
+    :param url: IntelligenceHub url (without '/feedback' path).
+    :param data: Processed data.
+    :param timeout: Timeout in second
+    :return: Requests response or {'status': 'error', 'reason': 'error description'}
+    """
+    validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
+    if error_text:
+        return {'status': 'error', 'reason': error_text}
+    return common_post(f'{url}/feedback', validated_data, timeout)
 
 
 APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
@@ -316,23 +299,23 @@ class IntelligenceHub:
                     if (existing["key"] == index_model.document['key'] and
                             existing.get("partialFilterExpression") == spec.get("options", {}).get(
                                 "partialFilterExpression")):
-                        logging.info(f"索引 {index_name} 已存在，跳过创建")
+                        logger.info(f"索引 {index_name} 已存在，跳过创建")
                         continue
 
                     # 删除不一致的旧索引
-                    logging.warning(f"检测到不一致索引 {index_name}，重新创建...")
+                    logger.warning(f"检测到不一致索引 {index_name}，重新创建...")
                     self.archive_col.drop_index(index_name)
 
                 # 创建新索引
-                logging.info(f"创建索引 {index_name}：{spec['description']}")
+                logger.info(f"创建索引 {index_name}：{spec['description']}")
                 self.archive_col.create_indexes([index_model])
 
             return True
         except pymongo.errors.OperationFailure as e:
-            logging.critical(f"MongoDB索引操作失败: {str(e)}")
+            logger.critical(f"MongoDB索引操作失败: {str(e)}")
             return False
         except Exception as e:
-            logging.critical(f"MongoDB连接失败: {str(e)}")
+            logger.critical(f"MongoDB连接失败: {str(e)}")
             return False
 
     def _setup_apis(self):
@@ -340,29 +323,29 @@ class IntelligenceHub:
         def collect_api():
             try:
                 data = request.json
+                validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
+                if error_text:
+                    return jsonify({'status': 'error', 'reason': error_text})
 
-                for field, require in COLLECTOR_DATA_FIELDS.items():
-                    if field not in data and require == 'M':
-                        return jsonify({"status": "error", "msg": "Require data missing."}), 400
+                validated_data[APPENDIX_TIME_GOT] = time.time()
+                self.input_queue.put(validated_data)
 
-                data[APPENDIX_TIME_GOT] = time.time()
-
-                self.input_queue.put(data)
-
-                return jsonify({"status": "queued", "uuid": data["UUID"]})
+                return jsonify({"status": "queued", "uuid": validated_data["UUID"]})
             except Exception as e:
-                logging.error(f"Collection API fail: {str(e)}")
+                logger.error(f"Collection API fail: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
 
         @self.app.route('/feedback', methods=['POST'])
         def feedback_api():
             try:
-                processed_data = request.json
-                if 'UUID' not in processed_data:
-                    return jsonify({"status": "error"}), 400
+                data = request.json
 
-                uuid_str = processed_data["UUID"]
-                processed_data[APPENDIX_TIME_DONE] = time.time()
+                validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
+                if error_text:
+                    return jsonify({'status': 'error', 'reason': error_text})
+
+                uuid_str = validated_data["UUID"]
+                validated_data[APPENDIX_TIME_DONE] = time.time()
 
                 with self.lock:
                     if uuid_str in self.processing_map:
@@ -370,11 +353,11 @@ class IntelligenceHub:
                         # combined_data = {**original_data, **processed_data}  # 合并数据
 
                         del self.processing_map[uuid_str]
-                        self.output_queue.put(processed_data)
+                        self.output_queue.put(validated_data)
 
                 return jsonify({"status": "acknowledged", "uuid": uuid_str})
             except Exception as e:
-                logging.error(f"Feedback API error: {str(e)}")
+                logger.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
 
     # ------------------------------------------------ Public Functions ------------------------------------------------
@@ -391,7 +374,7 @@ class IntelligenceHub:
 
     def shutdown(self, timeout=10):
         """优雅关闭系统"""
-        logging.info("启动关闭流程...")
+        logger.info("启动关闭流程...")
 
         # 1. 设置关闭标志
         self.shutdown_flag.set()
@@ -411,11 +394,11 @@ class IntelligenceHub:
 
         # 5.关闭线程池
         # self.processor_executor.shutdown(wait=True)
-        # logging.info("线程池已安全关闭")
+        # logger.info("线程池已安全关闭")
 
         # 6. 清理资源
         self._cleanup_resources()
-        logging.info("服务已安全停止")
+        logger.info("服务已安全停止")
 
     @property
     def statistics(self):
@@ -439,7 +422,6 @@ class IntelligenceHub:
         # self._save_to_file(unprocessed, 'pending_tasks.json')
 
     def _cleanup_resources(self):
-        """资源清理"""
         # 关闭数据库连接
         self.mongo_client.close()
 
@@ -453,20 +435,24 @@ class IntelligenceHub:
         while not self.shutdown_flag.is_set():
             try:
                 data = self.input_queue.get(block=True)
+                self.input_queue.task_done()
 
-                # Shutdown will put None to make thread un-blocking
                 if not data:
-                    self.input_queue.task_done()
                     continue
 
-                result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, structured_data)
+                result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, data)
 
+                uuid_str = result["UUID"]
+                result[APPENDIX_TIME_DONE] = time.time()
+
+                with self.lock:
+                    if uuid_str in self.processing_map:
+                        del self.processing_map[uuid_str]
+                        self.output_queue.put(result)
             except queue.Empty:
                 continue
             except Exception as e:
-                logging.error(f"_processing_loop error: {str(e)}")
-            finally:
-                self.input_queue.task_done()
+                logger.error(f"_processing_loop error: {str(e)}")
 
     # def _processing_loop(self):
     #     while not self.shutdown_flag.is_set():
@@ -482,7 +468,7 @@ class IntelligenceHub:
     #         except queue.Empty:
     #             continue
     #         except Exception as e:
-    #             logging.error(f"_processing_loop error: {str(e)}")
+    #             logger.error(f"_processing_loop error: {str(e)}")
     #         finally:
     #             self.input_queue.task_done()
     #
@@ -509,7 +495,7 @@ class IntelligenceHub:
     #         # TODO: If the request is actively rejected. Just drop this data.
     #
     #     except Exception as e:
-    #         logging.error(f"_process_data got error: {str(e)}")
+    #         logger.error(f"_process_data got error: {str(e)}")
 
     def _check_timeout_worker(self):
         while not self.shutdown_flag.is_set():
@@ -522,7 +508,7 @@ class IntelligenceHub:
                     if APPENDIX_TIME_POST not in data:
                         del self.processing_map[_uuid]
                         self.drop_counter += 1
-                        logging.error(f'{data["uuid"]} has no must have fields - drop.')
+                        logger.error(f'{data["uuid"]} has no must have fields - drop.')
                         continue
 
                     if APPENDIX_RETRY_COUNT not in data:
@@ -531,7 +517,7 @@ class IntelligenceHub:
                         if data[APPENDIX_RETRY_COUNT] <= 0:
                             del self.processing_map[_uuid]
                             self.drop_counter += 1
-                            logging.error(f'{data["UUID"]} has no retry times - drop.')
+                            logger.error(f'{data["UUID"]} has no retry times - drop.')
                             continue
 
                     if current_time - data[APPENDIX_TIME_POST] > self.intelligence_process_timeout:
@@ -546,17 +532,20 @@ class IntelligenceHub:
                 data = self.output_queue.get(timeout=1)
 
                 try:
-                    doc = self._create_document(data)
-                    doc_id = self.archive_col.insert_one(doc).inserted_id
+                    if not self.insert_data_into_mongo(data):
+                        raise ValueError
 
-                    if 'embedding' in data:
-                        self.vector_index.add_vector(doc_id, data['embedding'])
+                    # doc = self._create_document(data)
+                    # doc_id = self.archive_col.insert_one(doc).inserted_id
+                    #
+                    # if 'embedding' in data:
+                    #     self.vector_index.add_vector(doc_id, data['embedding'])
 
                     self.processed_counter += 1
 
                     # TODO: Call post processor plugins
                 except Exception as e:
-                    logging.error(f"归档失败: {str(e)}")
+                    logger.error(f"归档失败: {str(e)}")
                     self.output_queue.put(data)  # 重新放回队列
                 finally:
                     self.output_queue.task_done()
@@ -624,10 +613,38 @@ class IntelligenceHub:
 
             return doc
         except Exception as e:
-            logging.error(f"文档创建失败: {str(e)}")
+            logger.error(f"文档创建失败: {str(e)}")
             # 保存原始数据用于调试
             self._save_error_data(raw_data)
             return None
+
+    def insert_data_into_mongo(self, data: dict) -> bool:
+        """
+        将数据插入 MongoDB 的 processed_data 集合中
+        :param data: dict类型的数据
+        :return: bool 是否插入成功
+        """
+        try:
+            if not isinstance(data, dict):
+                logger.error("插入失败: 数据类型必须为 dict")
+                return False
+
+            # 插入数据
+            result = self.archive_col.insert_one(data)
+
+            # 确认插入成功
+            if result.inserted_id:
+                logger.info(f"数据已成功插入，ObjectId: {result.inserted_id}")
+                return True
+            else:
+                logger.error("数据插入失败，未返回 ObjectId")
+                return False
+        except pymongo.errors.PyMongoError as e:
+            logger.critical(f"插入 MongoDB 数据时发生错误: {str(e)}")
+            return False
+        except Exception as e:
+            logger.critical(f"未知错误: {str(e)}")
+            return False
 
     def _save_error_data(self, data: dict):
         """保存格式错误的数据"""
@@ -639,7 +656,7 @@ class IntelligenceHub:
                 "error_reason": traceback.format_exc()
             })
         except Exception as e:
-            logging.critical(f"连错误数据都无法保存: {str(e)}")
+            logger.critical(f"连错误数据都无法保存: {str(e)}")
 
     def _sanitize_data(self, doc: dict):
         """数据清洗和标准化"""
@@ -657,7 +674,7 @@ class IntelligenceHub:
         for field in sensitive_fields:
             if field in doc['raw_data']:
                 del doc['raw_data'][field]
-                logging.warning(f"已过滤敏感字段 {field}")
+                logger.warning(f"已过滤敏感字段 {field}")
 
         # 字段长度限制（防止文档过大）
         max_length = 1000

@@ -4,6 +4,7 @@ import traceback
 import threading
 from typing import Callable, TypedDict, Dict, List
 
+from IntelligenceHub import post_collected_intelligence
 from Tools.ContentHistory import has_url, get_base_dir
 from Streamer.ToFileAndHistory import to_file_and_history
 
@@ -107,6 +108,24 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                 if not success:
                     logger.error(f'{prefix}   |--Save content {file_path} fail.')
                     continue
+
+                # Post to IHub
+
+                collected_data = {
+                    # 'UUID': '',
+                    'token': 'SleepySoft',
+                    # 'source': '',
+                    # 'target': '',
+                    # 'prompt': '',
+
+                    'title': article['title'],
+                    'authors': article['authors'],
+                    'content': text,
+                    'pub_time': 'published',
+                    'informant': article['link'],
+                }
+
+                post_collected_intelligence('http://127.0.0.1', collected_data)
 
                 statistics['success'] += 1
 

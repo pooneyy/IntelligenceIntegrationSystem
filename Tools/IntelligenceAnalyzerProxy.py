@@ -1,12 +1,16 @@
 import json
 import time
 import uuid
+import logging
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, ValidationError
 
-from Workflow.CommonFeedsCrawFlow import logger
 from prompts import DEFAULT_ANALYSIS_PROMPT
 from Tools.OpenAIClient import OpenAICompatibleAPI
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class AIMessage(BaseModel):
@@ -122,10 +126,11 @@ def main():
 
     api_client = OpenAICompatibleAPI(
         api_base_url=API_BASE_URL,
-        token='',
+        token='sk-ahmmtlfwzurwkxsuntnarlojpsnmnncukxlisabuagoafejv',
         default_model='Qwen/Qwen3-235B-A22B')
 
     structured_data = {
+        "UUID": str(uuid.uuid4()),
         "title": "Big streamers argue at CRTC hearing they shouldn't",
         "content": NEWS_TEXT
     }

@@ -341,7 +341,130 @@ token可以在构造时从外界传入，如果没有，则去环境变量中获
 
 
 
-使用python实现以下机制，
+
+
+
+程序中已通过以下代码初始化好了mongodb client：
+
+"""
+def _setup_mongo_db(self) -> bool:
+    """初始化MongoDB连接并创建必要索引"""
+    try:
+        # 连接配置
+        self.mongo_client = pymongo.MongoClient(
+            self.mongo_db_uri,
+            maxPoolSize=100,
+            serverSelectionTimeoutMS=5000
+        )
+
+        # 验证连接
+        self.mongo_client.admin.command('ping')
+        self.db = self.mongo_client["intelligence_db"]
+        self.archive_col = self.db["processed_data"]
+
+        # 定义索引规范（名称、字段、选项）
+        index_specs = [
+            {
+                "name": "created_at_idx",
+                "keys": [("metadata.created_at", pymongo.ASCENDING)],
+                "description": "基于创建时间的时间范围查询加速"
+            },
+            {
+                "name": "vector_dim_idx",
+                "keys": [("vector.dim", pymongo.ASCENDING)],
+                "options": {
+                    "partialFilterExpression": {"vector": {"$exists": True}},
+                    "background": True  # 后台创建避免阻塞
+                },
+                "description": "向量维度查询优化（仅当存在vector字段时建立）"
+            },
+            {
+                "name": "content_text_idx",
+                "keys": [("raw_data.value", "text")],
+                "options": {
+                    "weights": {"raw_data.value": 5},
+                    "default_language": "english",
+                    "language_override": "language"
+                },
+                "description": "全文检索索引（字段权重优化）"
+            }
+        ]
+
+        # 检查并创建索引
+        existing_indexes = {idx["name"]: idx for idx in self.archive_col.list_indexes()}
+
+        for spec in index_specs:
+            index_name = spec["name"]
+            index_model = pymongo.IndexModel(spec["keys"], **spec.get("options", {}))
+
+            # 索引存在性检查
+            if index_name in existing_indexes:
+                existing = existing_indexes[index_name]
+                # 检查索引定义是否一致
+                if (existing["key"] == index_model.document['key'] and
+                        existing.get("partialFilterExpression") == spec.get("options", {}).get(
+                            "partialFilterExpression")):
+                    logger.info(f"索引 {index_name} 已存在，跳过创建")
+                    continue
+
+                # 删除不一致的旧索引
+                logger.warning(f"检测到不一致索引 {index_name}，重新创建...")
+                self.archive_col.drop_index(index_name)
+
+            # 创建新索引
+            logger.info(f"创建索引 {index_name}：{spec['description']}")
+            self.archive_col.create_indexes([index_model])
+
+        return True
+    except pymongo.errors.OperationFailure as e:
+        logger.critical(f"MongoDB索引操作失败: {str(e)}")
+        return False
+    except Exception as e:
+        logger.critical(f"MongoDB连接失败: {str(e)}")
+        return False
+"""
+
+
+请写一个函数将dict写入该数据库。dict示例如下（省略部分数据）：
+
+"""
+C:\D\Code\git\IntelligenceIntegrationSystem\.venv\Scripts\python.exe -X pycache_prefix=C:\Users\yq1061170\AppData\Local\JetBrains\PyCharmCE2024.2\cpython-cache "C:/Program Files/JetBrains/PyCharm Community Edition 2024.2.3/plugins/python-ce/helpers/pydev/pydevd.py" --multiprocess --qt-support=auto --client 127.0.0.1 --port 50471 --file C:\D\Code\git\IntelligenceIntegrationSystem\Tools\IntelligenceAnalyzerProxy.py
+Connected to pydev debugger (build 242.23339.19)
+AI response spends 94.8275637626648 s
+{
+  "UUID": "55eebb04-1400-4b33-9800-7fdb43ad4689",
+  "TIME": "2024-07-19",
+  "LOCATION": "",
+  "PEOPLE": [],
+  "ORGANIZATION": [
+    "Netflix",
+    "Paramount",
+    "Disney",
+    "Amazon",
+    "Corus",
+    "Global TV",
+    "",
+    "Motion Picture Association-Canada"
+  ],
+  "EVENT_BRIEF": "",
+  "EVENT_TEXT": ",
+  "RATE": {
+    "战略相关性": 6,
+    "国际关联度": 4,
+    "金融影响力": 6,
+    "政策关联度": 8,
+    "科技前瞻性": 2,
+    "投资价值": 6,
+    "内容准确率": 8
+  },
+  "IMPACT": "",
+  "TIPS": "流媒体与传统媒体就加拿大内容资金义务产生政策博弈"
+}
+
+Process finished with exit code 0
+
+"""
+
 
 
 
