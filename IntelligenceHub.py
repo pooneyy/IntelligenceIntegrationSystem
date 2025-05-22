@@ -20,6 +20,8 @@ import os
 from faiss import IndexFlatL2
 import numpy as np
 
+from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
+from Tools.OpenAIClient import OpenAICompatibleAPI
 from prompts import DEFAULT_ANALYSIS_PROMPT
 
 
@@ -183,6 +185,8 @@ DEFAULT_IHUB_PORT = 5000
 DEFAULT_MONGO_DB_URL = "mongodb://localhost:27017/"
 DEFAULT_PROCESSOR_URL = "http://localhost:5001/process"
 
+OPEN_AI_API_BASE_URL = "https://api.siliconflow.cn"
+
 
 class IntelligenceHub:
     def __init__(self, serve_port: int = DEFAULT_IHUB_PORT,
@@ -219,11 +223,18 @@ class IntelligenceHub:
 
         self.vector_index = VectorIndex()
 
-        # ---------------- Web Service----------------
+        # ---------------- Web Service ----------------
 
         self.app = Flask(__name__)
         self._setup_apis()
         self.server = make_server('0.0.0.0', self.serve_port, self.app)
+
+        # ---------------- AI Proxy ----------------
+
+        self.api_client = OpenAICompatibleAPI(
+            api_base_url=OPEN_AI_API_BASE_URL,
+            token='',
+            default_model='Qwen/Qwen3-235B-A22B')
 
         # ----------------- Threads -----------------
 
@@ -231,14 +242,15 @@ class IntelligenceHub:
         self.shutdown_flag = threading.Event()
 
         self.server_thread = threading.Thread(target=self.server.serve_forever)
+        self.ai_analysis_thread = threading.Thread(target=self._ai_analysis_thread, daemon=True)
         self.archive_thread = threading.Thread(target=self._archive_worker, daemon=True)
         self.timeout_checker_thread = threading.Thread(target=self._check_timeout_worker, daemon=True)
 
-        worker_count = max(1, os.cpu_count() // 2)
-        self.processor_executor = ThreadPoolExecutor(
-            max_workers=worker_count,
-            thread_name_prefix="ProcessorWorker"
-        )
+        # worker_count = max(1, os.cpu_count() // 2)
+        # self.processor_executor = ThreadPoolExecutor(
+        #     max_workers=worker_count,
+        #     thread_name_prefix="ProcessorWorker"
+        # )
 
         # self.server_thread.start()
         # self.archive_thread.start()
@@ -370,8 +382,8 @@ class IntelligenceHub:
     def startup(self):
         self._setup_mongo_db()
 
-        for _ in range(self.processor_executor._max_workers):
-            self.processor_executor.submit(self._processing_loop)
+        # for _ in range(self.processor_executor._max_workers):
+        #     self.processor_executor.submit(self._processing_loop)
 
         self.server_thread.start()
         self.archive_thread.start()
@@ -389,8 +401,8 @@ class IntelligenceHub:
 
         # 3. Clear and persists unprocessed data. Put None to un-block all threads.
         self._clear_queues()
-        for _ in range(self.processor_executor._max_workers * 2):
-            self.input_queue.put(None)
+        # for _ in range(self.processor_executor._max_workers * 2):
+        #     self.input_queue.put(None)
 
         # 4. 等待工作线程结束
         self.server_thread.join(timeout=timeout)
@@ -398,8 +410,8 @@ class IntelligenceHub:
         self.timeout_checker_thread.join(timeout=timeout)
 
         # 5.关闭线程池
-        self.processor_executor.shutdown(wait=True)
-        logging.info("线程池已安全关闭")
+        # self.processor_executor.shutdown(wait=True)
+        # logging.info("线程池已安全关闭")
 
         # 6. 清理资源
         self._cleanup_resources()
@@ -437,7 +449,7 @@ class IntelligenceHub:
 
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
-    def _processing_loop(self):
+    def _ai_analysis_thread(self):
         while not self.shutdown_flag.is_set():
             try:
                 data = self.input_queue.get(block=True)
@@ -447,7 +459,8 @@ class IntelligenceHub:
                     self.input_queue.task_done()
                     continue
 
-                self._process_data(data)
+                result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, structured_data)
+
             except queue.Empty:
                 continue
             except Exception as e:
@@ -455,30 +468,48 @@ class IntelligenceHub:
             finally:
                 self.input_queue.task_done()
 
-    def _process_data(self, data: dict):
-        try:
-            if 'prompt' not in data:
-                data['prompt'] = DEFAULT_ANALYSIS_PROMPT
-
-            data['PROMPT'] = data.pop('prompt')
-            data['TEXT'] = self._format_message_text(data)
-
-            uuid_str = data['UUID']
-            data[APPENDIX_TIME_POST] = time.time()
-
-            # Record data first avoiding request gets exception which makes data lost.
-            self.processing_map[uuid_str] = data
-
-            response = post_to_ai_processor(
-                self.intelligence_processor_uri,
-                self._data_without_appendix(data)
-            )
-            response.raise_for_status()
-
-            # TODO: If the request is actively rejected. Just drop this data.
-
-        except Exception as e:
-            logging.error(f"_process_data got error: {str(e)}")
+    # def _processing_loop(self):
+    #     while not self.shutdown_flag.is_set():
+    #         try:
+    #             data = self.input_queue.get(block=True)
+    #
+    #             # Shutdown will put None to make thread un-blocking
+    #             if not data:
+    #                 self.input_queue.task_done()
+    #                 continue
+    #
+    #             self._process_data(data)
+    #         except queue.Empty:
+    #             continue
+    #         except Exception as e:
+    #             logging.error(f"_processing_loop error: {str(e)}")
+    #         finally:
+    #             self.input_queue.task_done()
+    #
+    # def _process_data(self, data: dict):
+    #     try:
+    #         if 'prompt' not in data:
+    #             data['prompt'] = DEFAULT_ANALYSIS_PROMPT
+    #
+    #         data['PROMPT'] = data.pop('prompt')
+    #         data['TEXT'] = self._format_message_text(data)
+    #
+    #         uuid_str = data['UUID']
+    #         data[APPENDIX_TIME_POST] = time.time()
+    #
+    #         # Record data first avoiding request gets exception which makes data lost.
+    #         self.processing_map[uuid_str] = data
+    #
+    #         response = post_to_ai_processor(
+    #             self.intelligence_processor_uri,
+    #             self._data_without_appendix(data)
+    #         )
+    #         response.raise_for_status()
+    #
+    #         # TODO: If the request is actively rejected. Just drop this data.
+    #
+    #     except Exception as e:
+    #         logging.error(f"_process_data got error: {str(e)}")
 
     def _check_timeout_worker(self):
         while not self.shutdown_flag.is_set():

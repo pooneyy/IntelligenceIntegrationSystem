@@ -2,9 +2,20 @@ import json
 import time
 import uuid
 from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, ValidationError, field_validator
 
-from Tools.OpenAIClient import OpenAICompatibleAPI
+from Workflow.CommonFeedsCrawFlow import logger
 from prompts import DEFAULT_ANALYSIS_PROMPT
+from Tools.OpenAIClient import OpenAICompatibleAPI
+
+
+class AIMessage(BaseModel):
+    UUID: str
+    content: str
+    title: str | None = None
+    authors: List[str] = []
+    pub_time: str | None = None
+    informant: str | None = None
 
 
 def analyze_with_ai(
@@ -14,43 +25,35 @@ def analyze_with_ai(
         context: Optional[List[Dict[str, str]]] = None
 ) -> Dict[str, Any]:
     """
-    使用 OpenAI API 对输入的 prompt 和结构化数据进行分析，并返回格式化的 JSON 结果。
+    Use the OpenAI API to analyze the input prompt and structured data, and return a formatted JSON result.
 
     Args:
-        api_client (OpenAICompatibleAPI): 提供 OpenAI 兼容 API 的客户端实例。
-        prompt (str): 主 prompt，用于指定分析的角色和规则。
-        structured_data (Dict[str, Any]): 结构化数据，需包含主要内容的 'content' 字段。
-        context (Optional[List[Dict[str, str]]]): 对话上下文，可选。
+    api_client (OpenAICompatibleAPI): Provides a client instance of the OpenAI compatible API.
+    prompt (str): The main prompt, used to specify the role and rules for analysis.
+    structured_data (Dict[str, Any]): Structured data, which must contain the 'content' field of the main content.
+    context (Optional[List[Dict[str, str]]]): Dialogue context, optional.
 
     Returns:
-        Dict[str, Any]: AI 处理后的 JSON 对象，转为 Python 字典。
+    Dict[str, Any]: JSON object processed by AI, converted to a Python dictionary.
     """
-    # 校验输入的结构化数据是否包含 'content'
-    if "content" not in structured_data:
-        raise ValueError("结构化数据必须包含 'content' 字段")
+    try:
+        sanitized_data = AIMessage.model_validate(structured_data).model_dump(exclude_unset=True, exclude_none=True)
+    except ValidationError as e:
+        logger.error(f'AI require data field missing: {str(e)}')
+        return {'error': str(e)}
+    except Exception as e:
+        logger.error(f'Validate AI data fail: {str(e)}')
+        return {'error': str(e)}
 
-    # 生成唯一的 UUID，便于追踪分析
-    analysis_uuid = str(uuid.uuid4())
+    metadata_items = [f"- {k}: {v}" for k, v in sanitized_data.items() if k != "content"]
+    content_block = f"\n\n## 正文内容\n{sanitized_data['content']}"
+    user_message = "\n".join(metadata_items) + content_block
 
-    # 构造输入的对话消息
-    messages = []
-
-    # 如果有上下文，添加到消息中
-    if context:
-        messages.extend(context)
-
-    # 添加系统角色设定
+    messages = context if context else []
     messages.append({"role": "system", "content": prompt})
-
-    # 添加用户输入的内容
-    user_message = f"""
-UUID: {analysis_uuid}
-Title: {structured_data.get('title', '无标题')}
-Content: {structured_data['content']}
-"""
     messages.append({"role": "user", "content": user_message})
 
-    start = time.perf_counter()
+    start = time.time()
 
     # 调用 OpenAI API 的聊天接口
     response = api_client.create_chat_completion_sync(
@@ -59,22 +62,18 @@ Content: {structured_data['content']}
         max_tokens=3000     # 最大 token 数，根据需要调整
     )
 
-    elapsed = time.perf_counter() - start
-    print(f"AI response spends {elapsed:.6f}s")
+    elapsed = time.time() - start
+    print(f"AI response spends {elapsed} s")
 
-    # 检查响应是否成功
     if isinstance(response, Dict) and "choices" in response:
-        # 假设返回结果在 `choices[0].message.content` 中
         ai_output = response["choices"][0]["message"]["content"]
-
-        # 尝试将结果解析为 JSON 字典
         try:
             parsed_output = json.loads(ai_output)
             return parsed_output
         except json.JSONDecodeError:
-            raise ValueError("AI 返回的结果无法解析为 JSON")
+            return {'error': "Cannot parse AI response to JSON."}
     else:
-        raise RuntimeError("AI 响应无效或请求失败")
+        return {'error': "Invalid AI response."}
 
 
 NEWS_TEXT = """An industry group representing companies including Netflix argued on Friday that streamers should not have rules around Canadian content imposed on them. Netflix was also scheduled to appear at a hearing this week, but then cancelled its appearance. (Richard Drew/The Associated Press)
@@ -121,10 +120,10 @@ MPA-Canada said that "adding just a few positions to a more than 40-year-old lis
 def main():
     API_BASE_URL = "https://api.siliconflow.cn"
 
-    api_client = (OpenAICompatibleAPI(
+    api_client = OpenAICompatibleAPI(
         api_base_url=API_BASE_URL,
         token='',
-        default_model='Qwen/Qwen3-235B-A22B'))
+        default_model='Qwen/Qwen3-235B-A22B')
 
     structured_data = {
         "title": "Big streamers argue at CRTC hearing they shouldn't",
