@@ -1,25 +1,50 @@
-from pymongo import MongoClient, ASCENDING
-from pymongo.errors import PyMongoError
-from typing import Dict, Optional, List, Any
+import logging
 import threading
+from typing import Dict, Optional, List, Any, Sequence, Union
+from pymongo.database import Database
+from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
+from pymongo import MongoClient, ASCENDING
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+IndexSpec = Sequence[tuple[str, Union[int, str]]]
+
+
+class MongoDBError(Exception):
+    """Base exception for MongoDB operations"""
+
+class MongoDBConnectionError(MongoDBError):
+    """Error establishing database connection"""
+
+class MongoDBOperationError(MongoDBError):
+    """Error executing database operation"""
 
 
 class MongoDBStorage:
     """
-    A thread-safe MongoDB storage handler for generic dictionary data with configurable connection settings.
+    Thread-safe MongoDB storage handler implementing best practices.
 
-    Features:
-    - Automatic connection pooling management
-    - Index optimization
-    - Safe concurrent access
-    - Flexible query interface
-    - Comprehensive configuration options
+    Implements PyMongo's recommended thread-safe pattern:
+    - Client instance is thread-safe when properly configured
+    - Connection pooling managed by PyMongo driver
+    - Server selection timeout built-in
 
-    Attributes:
-        client (MongoClient): Thread-safe MongoDB client instance
-        collection: MongoDB collection reference
-        lock (threading.Lock): Resource lock for thread safety
+    Typical usage:
+        >> storage = MongoDBStorage()
+        >> storage.insert({"data": "value"})
+
+    Note: Client instance should be long-lived. Avoid frequent create/close.
+
+    Raises:
+        MongoDBConnectionError: On initial connection failure
+        MongoDBOperationError: On subsequent operation failures
     """
+
+    # Rest of implementation...
 
     def __init__(self,
                  host: str = 'localhost',
@@ -30,13 +55,13 @@ class MongoDBStorage:
                  password: Optional[str] = None,
                  auth_source: str = 'admin',
                  max_pool_size: int = 100,
-                 indexes: Optional[List[tuple]] = None,
+                 indexes: Optional[List[IndexSpec]] = None,
                  **kwargs):
         """
         Initialize MongoDB connection with configurable parameters.
 
         Args:
-            host (str): MongoDB server address [5,9](@ref)
+            host (str): MongoDB server hostname or IP
             port (int): MongoDB server port
             db_name (str): Target database name
             collection_name (str): Target collection name
@@ -44,36 +69,41 @@ class MongoDBStorage:
             password (Optional[str]): Authentication password
             auth_source (str): Authentication database [9](@ref)
             max_pool_size (int): Maximum connection pool size [6,8](@ref)
-            indexes
+            indexes: List of tuples specifying indexes, e.g. [("created_at", pymongo.ASCENDING)]
             **kwargs: Additional MongoDB client parameters
         """
-        self.lock = threading.Lock()
-        connection_uri = f"mongodb://{host}:{port}/"
+        self.connection_uri = f"mongodb://{username}:{password}@{host}:{port}/?authSource={auth_source}" \
+            if username and password else f"mongodb://{host}:{port}/"
 
-        # Configure authentication if provided [9](@ref)
-        if username and password:
-            connection_uri = f"mongodb://{username}:{password}@{host}:{port}/?authSource={auth_source}"
-
-        # Initialize thread-safe client with connection pooling [6,8](@ref)
         self.client = MongoClient(
-            connection_uri,
+            self.connection_uri,
             maxPoolSize=max_pool_size,
             connectTimeoutMS=3000,
             serverSelectionTimeoutMS=5000,
             **kwargs
         )
 
-        self.db = self.client[db_name]
-        self.collection = self.db[collection_name]
-        self._create_indexes()
+        self.db: Database = self.client[db_name]
+        self.collection: Collection = self.db[collection_name]
+
+        try:
+            self.client.server_info()  # Force connection attempt
+        except PyMongoError as e:
+            logger.critical("Connection verification failed")
+            self.client.close()
+            raise MongoDBConnectionError(f"Connection failed: {e}") from e
+
+        self.indexes = indexes
+        if self.indexes:
+            self._create_indexes()
 
     def _create_indexes(self) -> None:
         """
         Create optimized indexes for common query patterns.
-        Creates ascending index on '_id' by default for faster lookups [5](@ref).
         """
-        with self.lock:
-            self.collection.create_index([("_id", ASCENDING)], background=True)
+        if self.indexes:
+            for index in self.indexes:
+                self.collection.create_index(index, background=True)
 
     def insert(self, data: Dict[str, Any], **kwargs) -> str:
         """
@@ -89,12 +119,11 @@ class MongoDBStorage:
         Raises:
             PyMongoError: On insertion failure
         """
-        with self.lock:
-            try:
-                result = self.collection.insert_one(data, **kwargs)
-                return str(result.inserted_id)
-            except PyMongoError as e:
-                self._handle_error(e)
+        try:
+            result = self.collection.insert_one(data, **kwargs)
+            return str(result.inserted_id)
+        except PyMongoError as e:
+            self._handle_error(e)
 
     def bulk_insert(self, data_list: List[Dict[str, Any]], **kwargs) -> List[str]:
         """
@@ -110,16 +139,15 @@ class MongoDBStorage:
         Raises:
             PyMongoError: On bulk insertion failure
         """
-        with self.lock:
-            try:
-                result = self.collection.insert_many(
-                    data_list,
-                    ordered=False,  # Enable parallel document insertion [5](@ref)
-                    **kwargs
-                )
-                return [str(id) for id in result.inserted_ids]
-            except PyMongoError as e:
-                self._handle_error(e)
+        try:
+            result = self.collection.insert_many(
+                data_list,
+                ordered=False,
+                **kwargs
+            )
+            return [str(id) for id in result.inserted_ids]
+        except PyMongoError as e:
+            self._handle_error(e)
 
     def find(self, query: Dict[str, Any], **kwargs) -> List[Dict]:
         """
@@ -135,11 +163,10 @@ class MongoDBStorage:
         Raises:
             PyMongoError: On query failure
         """
-        with self.lock:
-            try:
-                return list(self.collection.find(query, **kwargs))
-            except PyMongoError as e:
-                self._handle_error(e)
+        try:
+            return list(self.collection.find(query, **kwargs))
+        except PyMongoError as e:
+            self._handle_error(e)
 
     def find_one(self, query: Dict[str, Any], **kwargs) -> Optional[Dict]:
         """
@@ -155,21 +182,19 @@ class MongoDBStorage:
         Raises:
             PyMongoError: On query failure
         """
-        with self.lock:
-            try:
-                return self.collection.find_one(query, **kwargs)
-            except PyMongoError as e:
-                self._handle_error(e)
+        try:
+            return self.collection.find_one(query, **kwargs)
+        except PyMongoError as e:
+            self._handle_error(e)
 
     def _handle_error(self, error: PyMongoError) -> None:
         """Centralized error handling with resource cleanup."""
-        # Implement custom error handling/logging here
-        raise error
+        logger.error(f"MongoDB operation failed: {error}")
+        raise MongoDBOperationError from error
 
     def close(self) -> None:
-        """Properly close all MongoDB connections."""
-        with self.lock:
-            self.client.close()
+        """Close all network connections and terminate background tasks."""
+        self.client.close()
 
 
 # Example usage
@@ -180,17 +205,17 @@ if __name__ == "__main__":
         port=27017,
         db_name="my_app_db",
         collection_name="user_data",
-        username="",
-        password="",
-        auth_source="admin",
         max_pool_size=50
     )
 
+    from bson import ObjectId
+
     # Insert sample data
     doc_id = storage.insert({"key": "value", "nested": {"data": 123}})
+    print(f"Inserted ID type: {type(doc_id)}")  # 验证类型
 
     # Query data
-    result = storage.find_one({"_id": doc_id})
+    result = storage.find_one({"_id": ObjectId(doc_id)})
     print(f"Found document: {result}")
 
     # Close connections
