@@ -6,6 +6,7 @@ import traceback
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+from Tools.MongoDBAccess import init_global_db_access
 from plugin_manager import PluginManager, PluginWrapper, logger
 
 project_root = os.path.abspath(__file__)
@@ -200,6 +201,8 @@ def main():
     # )
 
     crawl_task_path = 'CrawlTasks'
+
+    init_global_db_access()
 
     task_manager = TaskManager(crawl_task_path)
     event_handler = FileHandler(task_manager)

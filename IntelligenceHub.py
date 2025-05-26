@@ -6,7 +6,7 @@ import queue
 import logging
 import datetime
 import traceback
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import pymongo
 import requests
@@ -21,6 +21,7 @@ from faiss import IndexFlatL2
 import numpy as np
 
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
+from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from prompts import DEFAULT_ANALYSIS_PROMPT
 
@@ -173,7 +174,7 @@ OPEN_AI_API_BASE_URL = "https://api.siliconflow.cn"
 
 class IntelligenceHub:
     def __init__(self, serve_port: int = DEFAULT_IHUB_PORT,
-                 mongo_db_uri=DEFAULT_MONGO_DB_URL,
+                 mongo_db: Optional[MongoDBStorage] = None,
                  intelligence_processor_uri=DEFAULT_PROCESSOR_URL,
                  intelligence_process_timeout: int = 5 * 60,
                  intelligence_process_max_retries=3,
@@ -181,8 +182,8 @@ class IntelligenceHub:
 
         # ---------------- Parameters ----------------
 
+        self.mongo_db = mongo_db
         self.serve_port = serve_port
-        self.mongo_db_uri = mongo_db_uri
         self.intelligence_processor_uri = intelligence_processor_uri
         self.intelligence_process_timeout = intelligence_process_timeout
         self.intelligence_process_max_retries = intelligence_process_max_retries
@@ -195,12 +196,6 @@ class IntelligenceHub:
         self.output_queue = queue.Queue()           # 完成处理队列
         self.drop_counter = 0
         self.processed_counter = 0
-
-        # ----------------- Mongo DB -----------------
-
-        self.db = None
-        self.archive_col = None
-        self.mongo_client = None
 
         # --------------------------------------------
 
@@ -321,6 +316,9 @@ class IntelligenceHub:
         # 6. 清理资源
         self._cleanup_resources()
         logger.info("服务已安全停止")
+
+        if self.mongo_db:
+            self.mongo_db.close()
 
     @property
     def statistics(self):
@@ -454,8 +452,11 @@ class IntelligenceHub:
                 data = self.output_queue.get(timeout=1)
 
                 try:
-                    if not self.insert_data_into_mongo(data):
-                        raise ValueError
+                    if self.mongo_db:
+                        self.mongo_db.insert(data)
+
+                    # if not self.insert_data_into_mongo(data):
+                    #     raise ValueError
 
                     # doc = self._create_document(data)
                     # doc_id = self.archive_col.insert_one(doc).inserted_id
@@ -474,22 +475,22 @@ class IntelligenceHub:
             except queue.Empty:
                 continue
 
-    # ---------------------------------------------------- Helpers -----------------------------------------------------
-
-    def _format_message_text(self, data: dict) -> str:
-        appendix = []
-        if 'title' in data:
-            appendix.append(f"Title: {data['title']}")
-        if 'authors' in data:
-            appendix.append(f"Author: {data['authors']}")
-        if 'pub_time' in data:
-            appendix.append(f"Publish Time: {data['pub_time']}")
-        if 'informant' in data:
-            appendix.append(f"Informant: {data['informant']}")
-        return '\n'.join(appendix) + data['content']
-
-    def _data_without_appendix(self, data: dict) -> dict:
-        return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
+    # # ---------------------------------------------------- Helpers -----------------------------------------------------
+    #
+    # def _format_message_text(self, data: dict) -> str:
+    #     appendix = []
+    #     if 'title' in data:
+    #         appendix.append(f"Title: {data['title']}")
+    #     if 'authors' in data:
+    #         appendix.append(f"Author: {data['authors']}")
+    #     if 'pub_time' in data:
+    #         appendix.append(f"Publish Time: {data['pub_time']}")
+    #     if 'informant' in data:
+    #         appendix.append(f"Informant: {data['informant']}")
+    #     return '\n'.join(appendix) + data['content']
+    #
+    # def _data_without_appendix(self, data: dict) -> dict:
+    #     return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
 
 
 def main():

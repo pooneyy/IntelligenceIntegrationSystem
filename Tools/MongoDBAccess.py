@@ -197,6 +197,47 @@ class MongoDBStorage:
         self.client.close()
 
 
+_global_db_access: Optional[MongoDBStorage] = None
+
+
+def init_global_db_access(  host: str = 'localhost',
+                            port: int = 27017,
+                            db_name: str = 'generic_db',
+                            collection_name: str = 'data',
+                            username: Optional[str] = None,
+                            password: Optional[str] = None,
+                            auth_source: str = 'admin',
+                            max_pool_size: int = 100,
+                            indexes: Optional[List[IndexSpec]] = None,
+                            **kwargs):
+
+    try:
+        global _global_db_access
+        if not _global_db_access:
+            _global_db_access = MongoDBStorage(
+                host,
+                port,
+                db_name,
+                collection_name,
+                username,
+                password,
+                auth_source,
+                max_pool_size,
+                indexes,
+                **kwargs
+            )
+        return True
+    except Exception as e:
+        logger.error(f'Init default db fail - {str(e)}', stack_info=True)
+        return False
+
+
+def insert_default_db(data: Dict[str, Any], **kwargs):
+    global _global_db_access
+    return _global_db_access.insert(data, **kwargs) if _global_db_access else None
+
+
+
 # Example usage
 if __name__ == "__main__":
     # Initialize with custom configuration [9](@ref)

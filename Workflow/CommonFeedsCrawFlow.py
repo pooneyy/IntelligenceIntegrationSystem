@@ -7,7 +7,7 @@ from typing import Callable, TypedDict, Dict, List
 from IntelligenceHub import post_collected_intelligence
 from Tools.ContentHistory import has_url, get_base_dir
 from Streamer.ToFileAndHistory import to_file_and_history
-
+from Tools.MongoDBAccess import insert_default_db
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -125,7 +125,8 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                     'informant': article['link'],
                 }
 
-                post_collected_intelligence('http://127.0.0.1', collected_data)
+                # post_collected_intelligence('http://127.0.0.1', collected_data)
+                insert_default_db(collected_data)
 
                 statistics['success'] += 1
 
