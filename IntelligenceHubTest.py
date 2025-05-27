@@ -174,7 +174,7 @@ def test_retry_mechanism(hub):
     time.sleep(3)
     with hub.lock:
         assert data['UUID'] not in hub.processing_map
-        assert hub.input_queue.qsize() >= 1
+        assert hub.original_queue.qsize() >= 1
 
 
 def test_error_handling(hub, processor):
@@ -192,7 +192,7 @@ def test_error_handling(hub, processor):
 
     # 验证是否丢弃
     with hub.lock:
-        assert hub.input_queue.qsize() == 0
+        assert hub.original_queue.qsize() == 0
         assert data['UUID'] not in hub.processing_map
 
     # 验证未进入归档

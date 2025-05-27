@@ -165,6 +165,10 @@ APPENDIX_FIELDS = [
 ]
 
 
+def data_without_appendix(data: dict) -> dict:
+    return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
+
+
 DEFAULT_IHUB_PORT = 5000
 DEFAULT_MONGO_DB_URL = "mongodb://localhost:27017/"
 DEFAULT_PROCESSOR_URL = "http://localhost:5001/process"
@@ -191,9 +195,9 @@ class IntelligenceHub:
 
         # -------------- Queues Related --------------
 
-        self.input_queue = queue.Queue()            # 待处理队列
-        self.processing_map = {}                    # 正在处理的任务映射 {uuid: data}
-        self.output_queue = queue.Queue()           # 完成处理队列
+        self.original_queue = queue.Queue()             # Original intelligence queue
+        self.processed_queue = queue.Queue()            # Processed intelligence queue
+        # self.processing_map = {}                        # 正在处理的任务映射 {uuid: data}
         self.drop_counter = 0
         self.processed_counter = 0
 
@@ -220,9 +224,9 @@ class IntelligenceHub:
         self.shutdown_flag = threading.Event()
 
         self.server_thread = threading.Thread(target=self.server.serve_forever)
-        self.ai_analysis_thread = threading.Thread(target=self._ai_analysis_thread, daemon=True)
-        self.archive_thread = threading.Thread(target=self._archive_worker, daemon=True)
-        self.timeout_checker_thread = threading.Thread(target=self._check_timeout_worker, daemon=True)
+        self.analysis_thread = threading.Thread(target=self._ai_analysis_thread, daemon=True)
+        self.post_process_thread = threading.Thread(target=self._post_process_worker, daemon=True)
+        # self.timeout_checker_thread = threading.Thread(target=self._check_timeout_worker, daemon=True)
 
         # worker_count = max(1, os.cpu_count() // 2)
         # self.processor_executor = ThreadPoolExecutor(
@@ -247,7 +251,7 @@ class IntelligenceHub:
                     return jsonify({'status': 'error', 'reason': error_text})
 
                 validated_data[APPENDIX_TIME_GOT] = time.time()
-                self.input_queue.put(validated_data)
+                self.original_queue.put(validated_data)
 
                 return jsonify({"status": "queued", "uuid": validated_data["UUID"]})
             except Exception as e:
@@ -266,13 +270,13 @@ class IntelligenceHub:
                 uuid_str = validated_data["UUID"]
                 validated_data[APPENDIX_TIME_DONE] = time.time()
 
-                with self.lock:
-                    if uuid_str in self.processing_map:
+                # with self.lock:
+                #     if uuid_str in self.processing_map:
                         # original_retry_count, original_data = self.processing_map.pop(uuid_str)
                         # combined_data = {**original_data, **processed_data}  # 合并数据
 
-                        del self.processing_map[uuid_str]
-                        self.output_queue.put(validated_data)
+                        # del self.processing_map[uuid_str]
+                        # self.processed_queue.put(validated_data)
 
                 return jsonify({"status": "acknowledged", "uuid": uuid_str})
             except Exception as e:
@@ -286,8 +290,9 @@ class IntelligenceHub:
         #     self.processor_executor.submit(self._processing_loop)
 
         self.server_thread.start()
-        self.archive_thread.start()
-        self.timeout_checker_thread.start()
+        self.analysis_thread.start()
+        self.post_process_thread.start()
+        # self.timeout_checker_thread.start()
 
     def shutdown(self, timeout=10):
         """优雅关闭系统"""
@@ -306,7 +311,7 @@ class IntelligenceHub:
 
         # 4. 等待工作线程结束
         self.server_thread.join(timeout=timeout)
-        self.archive_thread.join(timeout=timeout)
+        self.post_process_thread.join(timeout=timeout)
         self.timeout_checker_thread.join(timeout=timeout)
 
         # 5.关闭线程池
@@ -323,9 +328,9 @@ class IntelligenceHub:
     @property
     def statistics(self):
         return {
-            'input': self.input_queue.qsize(),
-            'processing': len(self.processing_map),
-            'output': self.output_queue.qsize(),
+            'input': self.original_queue.qsize(),
+            # 'processing': len(self.processing_map),
+            'output': self.processed_queue.qsize(),
             'dropped': self.drop_counter
         }
 
@@ -334,16 +339,16 @@ class IntelligenceHub:
     def _clear_queues(self):
         unprocessed = []
         with self.lock:
-            while not self.input_queue.empty():
-                item = self.input_queue.get()
+            while not self.original_queue.empty():
+                item = self.original_queue.get()
                 unprocessed.append(item)
-                self.input_queue.task_done()
+                self.original_queue.task_done()
         # 保存到文件或数据库
         # self._save_to_file(unprocessed, 'pending_tasks.json')
 
     def _cleanup_resources(self):
         # 关闭数据库连接
-        self.mongo_client.close()
+        # self.mongo_client.close()
 
         # 保存索引等持久化操作
         if self.vector_index:
@@ -354,21 +359,19 @@ class IntelligenceHub:
     def _ai_analysis_thread(self):
         while not self.shutdown_flag.is_set():
             try:
-                data = self.input_queue.get(block=True)
-                self.input_queue.task_done()
-
+                data = self.original_queue.get(block=True)
                 if not data:
                     continue
-
                 result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, data)
+                self.original_queue.task_done()
 
-                uuid_str = result["UUID"]
                 result[APPENDIX_TIME_DONE] = time.time()
+                self.processed_queue.put(result)
 
-                with self.lock:
-                    if uuid_str in self.processing_map:
-                        del self.processing_map[uuid_str]
-                        self.output_queue.put(result)
+                # with self.lock:
+                #     uuid_str = result["UUID"]
+                #     if uuid_str in self.processing_map:
+                #         del self.processing_map[uuid_str]
             except queue.Empty:
                 continue
             except Exception as e:
@@ -408,7 +411,7 @@ class IntelligenceHub:
     #
     #         response = post_to_ai_processor(
     #             self.intelligence_processor_uri,
-    #             self._data_without_appendix(data)
+    #             self.data_without_appendix(data)
     #         )
     #         response.raise_for_status()
     #
@@ -417,43 +420,45 @@ class IntelligenceHub:
     #     except Exception as e:
     #         logger.error(f"_process_data got error: {str(e)}")
 
-    def _check_timeout_worker(self):
-        while not self.shutdown_flag.is_set():
-            current_time = time.time()
+    # def _check_timeout_worker(self):
+    #     while not self.shutdown_flag.is_set():
+    #         current_time = time.time()
+    #
+    #         with self.lock:
+    #             uuids = list(self.processing_map.keys())
+    #             for _uuid in uuids:
+    #                 data = self.processing_map[_uuid]
+    #                 if APPENDIX_TIME_POST not in data:
+    #                     del self.processing_map[_uuid]
+    #                     self.drop_counter += 1
+    #                     logger.error(f'{data["uuid"]} has no must have fields - drop.')
+    #                     continue
+    #
+    #                 if APPENDIX_RETRY_COUNT not in data:
+    #                     data[APPENDIX_RETRY_COUNT] = self.intelligence_process_max_retries
+    #                 else:
+    #                     if data[APPENDIX_RETRY_COUNT] <= 0:
+    #                         del self.processing_map[_uuid]
+    #                         self.drop_counter += 1
+    #                         logger.error(f'{data["UUID"]} has no retry times - drop.')
+    #                         continue
+    #
+    #                 if current_time - data[APPENDIX_TIME_POST] > self.intelligence_process_timeout:
+    #                     data[APPENDIX_RETRY_COUNT] -= 1
+    #                     self.original_queue.put(data)
+    #
+    #         time.sleep(self.intelligence_process_timeout / 2)
 
-            with self.lock:
-                uuids = list(self.processing_map.keys())
-                for _uuid in uuids:
-                    data = self.processing_map[_uuid]
-                    if APPENDIX_TIME_POST not in data:
-                        del self.processing_map[_uuid]
-                        self.drop_counter += 1
-                        logger.error(f'{data["uuid"]} has no must have fields - drop.')
-                        continue
-
-                    if APPENDIX_RETRY_COUNT not in data:
-                        data[APPENDIX_RETRY_COUNT] = self.intelligence_process_max_retries
-                    else:
-                        if data[APPENDIX_RETRY_COUNT] <= 0:
-                            del self.processing_map[_uuid]
-                            self.drop_counter += 1
-                            logger.error(f'{data["UUID"]} has no retry times - drop.')
-                            continue
-
-                    if current_time - data[APPENDIX_TIME_POST] > self.intelligence_process_timeout:
-                        data[APPENDIX_RETRY_COUNT] -= 1
-                        self.input_queue.put(data)
-
-            time.sleep(self.intelligence_process_timeout / 2)
-
-    def _archive_worker(self):
+    def _post_process_worker(self):
         while not self.shutdown_flag.is_set():
             try:
-                data = self.output_queue.get(timeout=1)
+                data = self.processed_queue.get(timeout=1)
 
                 try:
                     if self.mongo_db:
-                        self.mongo_db.insert(data)
+                        self.mongo_db.insert(data_without_appendix(data))
+
+                        logger.info(f"Message {data['UUID']} archived. ")
 
                     # if not self.insert_data_into_mongo(data):
                     #     raise ValueError
@@ -469,9 +474,9 @@ class IntelligenceHub:
                     # TODO: Call post processor plugins
                 except Exception as e:
                     logger.error(f"归档失败: {str(e)}")
-                    self.output_queue.put(data)  # 重新放回队列
+                    self.processed_queue.put(data)
                 finally:
-                    self.output_queue.task_done()
+                    self.processed_queue.task_done()
             except queue.Empty:
                 continue
 
@@ -488,9 +493,6 @@ class IntelligenceHub:
     #     if 'informant' in data:
     #         appendix.append(f"Informant: {data['informant']}")
     #     return '\n'.join(appendix) + data['content']
-    #
-    # def _data_without_appendix(self, data: dict) -> dict:
-    #     return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
 
 
 def main():
