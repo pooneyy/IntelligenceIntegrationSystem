@@ -2,33 +2,37 @@ lxml
 chardet
 fastapi
 uvicorn
-urllib3~=1.26.9
 cryptography
 bs4~=0.0.1
 Flask>=2.0.3
 PyQt5>=5.15.6
-pandas~=1.4.2
 tenacity>=8.2.3
-playwright==1.48.0            # Then run: playwright install chromium
 feedparser==6.0.10
 markdownify~=1.1.0
-beautifulsoup4~=4.9.3
 brotli
 requests[socks]>=2.26.0
 pymongo
 pytest
-numpy
 werkzeug
 html2text
 watchdog
 pytest-asyncio
 tldextract
-crawl4ai
 
-faiss-cpu           # Windows
+urllib3>=1.26.9,<1.27
+beautifulsoup4>=4.12
+playwright>=1.49.0					            # Then run: playwright install chromium
+crawl4ai==0.6.3
+
+numpy
+pandas
+transformers==4.36.0
+sentence-transformers
+
+hnswlib
+
+# faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card
 typing_extensions
 
-sentence-transformers
-hnswlib
 
