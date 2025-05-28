@@ -453,6 +453,7 @@ class IntelligenceHub:
 def main():
     hub = IntelligenceHub(
         intelligence_processor_uri='http://192.168.50.220:5678/webhook-test/intelligence_process',
+        db_vector=VectorDatabase('IntelligenceIndex'),
         db_cache=MongoDBStorage(collection_name='intelligence_cached'),
         db_archive=MongoDBStorage(collection_name='intelligence_archived'))
     hub.startup()

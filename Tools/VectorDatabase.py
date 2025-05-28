@@ -1,12 +1,20 @@
+import json
 import os
 import faiss
 import pickle
+import logging
+import threading
 import traceback
+
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from Workflow.CommonFeedsCrawFlow import logger
 
-"""
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+VECTOR_DB_README = """
 # 文本嵌入模型选择指南 (2025 Q3)
 +----------------------------+--------+----------+----------+---------------------+------------------------------------------+
 |          Model             | Dims   | Mem(GB)  | MTEB ↑   | Best For            | EN Evaluation Notes                      |
@@ -39,47 +47,134 @@ from Workflow.CommonFeedsCrawFlow import logger
 """
 
 class VectorDatabase:
-    def __init__(self, db_name="vectordb", save_path="./", embedding_model: str = 'all-MiniLM-L6-v2'):
+    def __init__(self, db_name="vectordb", save_path="./",
+                 embedding_model: str = 'all-MiniLM-L6-v2',
+                 n_probe: int = 10, nlist=100):
         self.save_path = os.path.join(save_path, db_name)
         os.makedirs(self.save_path, exist_ok=True)
 
+        self.lock = threading.RLock()
+        faiss.omp_set_num_threads(4)
+        self.n_probe = n_probe
+        self.nlist = nlist
+
         # 使用轻量级句子嵌入模型（约90MB）
         self.encoder = SentenceTransformer(embedding_model)
-        self.dimension = 384  # 模型输出维度
+        self.dimension = self.encoder.get_sentence_embedding_dimension()
 
         # 初始化Faiss索引
-        self.index = faiss.IndexFlatL2(self.dimension)
+        self.index = None
+
+        self._require_training = True
         self.id_map = {}  # 维护ID到索引位置的映射
         self.current_idx = 0
 
         # 加载已有数据
         self.load()
 
+    def _init_index(self):
+        quantizer = faiss.IndexFlatL2(self.dimension)
+        self.index = faiss.IndexIVFFlat(quantizer, self.dimension, self.nlist)
+
+    def _train_index(self, vectors):
+        if self._require_training:
+            if len(vectors) < self.nlist:
+                synthetic_data = np.random.randn(1000, self.dimension).astype('float32')
+                vectors = np.vstack([vectors, synthetic_data])
+            self.index.train(vectors)
+            self.index.nprobe = self.n_probe
+            self._require_training = False
+
+    # def _default_vector(self):
+    #     vector = self.encoder.encode([VECTOR_DB_README], convert_to_numpy=True)
+    #     vector = vector.astype('float32')
+    #     return vector
+
     def add_text(self, doc_id: str, text: str) -> bool:
         """添加文本并生成向量"""
-        if not isinstance(doc_id, str):
+        try:
+            if not isinstance(doc_id, str) or not doc_id.strip() or \
+                    not isinstance(text, str) or not text.strip():
+                return False
+
+            with self.lock:
+                if self.index is None:
+                    self._init_index()
+
+                vector = self.encoder.encode([text], convert_to_numpy=True)
+                vector = vector.astype('float32')
+
+                if self._require_training:
+                    self._train_index(vector)
+
+                self.index.add(vector)
+                self.id_map[self.current_idx] = doc_id
+                self.current_idx += 1
+                return True
+        except Exception as e:
+            logger.error(f"Add text error: {str(e)}")
             return False
-        vector = self.encoder.encode([text], convert_to_numpy=True)
-        self.index.add(vector.astype('float32'))
-        self.id_map[self.current_idx] = doc_id
-        self.current_idx += 1
-        return True
+
+    def add_batch(self, doc_ids: list, texts: list):
+        try:
+            with self.lock:
+                if self.index is None:
+                    self._init_index()
+
+                vectors = self.encoder.encode(texts, convert_to_numpy=True)
+                vectors = vectors.astype('float32')
+
+                if self._require_training:
+                    self._train_index(vectors)
+
+                start_idx = self.current_idx
+                self.index.add(vectors)
+
+                self.id_map.update({
+                    start_idx + i: doc_ids[i]
+                    for i in range(len(texts))
+                })
+                self.current_idx += len(texts)
+
+                return True
+        except Exception as e:
+            logger.error(f"Add batch error: {str(e)}")
+            return False
 
     def search(self, query_text: str, top_n=5):
         """相似文本搜索"""
-        if top_n <= 0:
-            return []
-        query_vec = self.encoder.encode([query_text], convert_to_numpy=True)
-        distances, indices = self.index.search(query_vec.astype('float32'), top_n)
+        try:
+            if top_n <= 0 or not query_text.strip():
+                return []
 
-        return [self.id_map[idx] for idx in indices[0] if idx in self.id_map]
+            with self.lock:
+                if self.index is None:
+                    self._init_index()
+
+                query_vec = self.encoder.encode([query_text], convert_to_numpy=True)
+                query_vec = query_vec.astype('float32')
+
+                distances, indices = self.index.search(query_vec.astype('float32'), top_n)
+
+                return [self.id_map[idx] for idx in indices[0] if idx in self.id_map if idx >= 0]
+        except Exception as e:
+            logger.error(f"Search error: {str(e)}")
+            return []
 
     def save(self) -> bool:
         """保存数据库"""
         try:
-            faiss.write_index(self.index, os.path.join(self.save_path, "index.faiss"))
-            with open(os.path.join(self.save_path, "id_map.pkl"), 'wb') as f:
-                pickle.dump(self.id_map, f)
+            with self.lock:
+                db_path = os.path.join(self.save_path, "index.faiss")
+                id_map_path = os.path.join(self.save_path, "id_map.json")
+
+                faiss.write_index(self.index, db_path)
+                with open(id_map_path, 'w') as f:
+                    json.dump(
+                        {str(k): v for k, v in self.id_map.items()},  # 键转为字符串
+                        f,
+                        ensure_ascii=False
+                    )
             return True
         except Exception as e:
             logger.error(f'Save vector db error: {str(e)}')
@@ -88,14 +183,27 @@ class VectorDatabase:
     def load(self) -> bool:
         """加载已有数据库"""
         try:
-            index_path = os.path.join(self.save_path, "index.faiss")
-            map_path = os.path.join(self.save_path, "id_map.pkl")
+            db_path = os.path.join(self.save_path, "index.faiss")
+            id_map_path = os.path.join(self.save_path, "id_map.json")
 
-            if os.path.exists(index_path):
-                self.index = faiss.read_index(index_path)
-                with open(map_path, 'rb') as f:
-                    self.id_map = pickle.load(f)
-                self.current_idx = max(self.id_map.keys()) + 1
+            with self.lock:
+                if os.path.exists(db_path):
+                    loaded_index = faiss.read_index(db_path)
+
+                    if isinstance(loaded_index, faiss.IndexIVFFlat):
+                        self.index = loaded_index
+                        self.index.nprobe = self.n_probe  # 重置查询参数
+                    else:
+                        logger.warning("Index type mismatch, reinitializing...")
+                        self._init_index()
+
+                    # 加载ID映射
+                    if os.path.exists(id_map_path):
+                        with open(id_map_path, 'r') as f:
+                            self.id_map = {
+                                int(k): v for k, v in json.load(f).items()  # 键转回整型
+                            }
+                        self.current_idx = max(self.id_map.keys(), default=0) + 1
             return True
         except Exception as e:
             logger.error(f'Load vector db error: {str(e)}')
@@ -190,6 +298,13 @@ def test_vector_db():
     for name, status, data in test_results:
         print(f"\n[{status}] {name}")
         print(f"Details: {str(data)[:200]}...")  # 截断长输出
+
+
+def stress_test(db):
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(8) as executor:
+        futures = [executor.submit(db.add_text, f"doc_{i}", "text") for i in range(1000)]
+        concurrent.futures.wait(futures)
 
 
 def main():
