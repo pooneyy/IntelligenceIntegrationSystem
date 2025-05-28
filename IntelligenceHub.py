@@ -6,7 +6,7 @@ import queue
 import logging
 import datetime
 import traceback
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 
 import pymongo
 import requests
@@ -23,22 +23,12 @@ import numpy as np
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
+from Tools.VectorDatabase import VectorDatabase
 from prompts import DEFAULT_ANALYSIS_PROMPT
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-class VectorIndex:
-    def __init__(self, dim=512):
-        self.index = IndexFlatL2(dim)
-        self.id_map = {}
-
-    def add_vector(self, doc_id, vector):
-        idx = len(self.id_map)
-        self.id_map[idx] = doc_id
-        self.index.add(np.array([vector], dtype='float32'))
 
 
 class CollectedData(BaseModel):
@@ -62,7 +52,7 @@ class ProcessedData(BaseModel):
     PEOPLE: str | None
     ORGANIZATION: str | None
     EVENT_BRIEF: str | None
-    EVENT_TEXT: str | None
+    EVENT_TEXT: str
     RATE: str | None
     IMPACT: str | None
 
@@ -180,6 +170,7 @@ OPEN_AI_API_BASE_URL = "https://api.siliconflow.cn"
 
 class IntelligenceHub:
     def __init__(self, serve_port: int = DEFAULT_IHUB_PORT,
+                 db_vector: Optional[VectorDatabase] = None,
                  db_cache: Optional[MongoDBStorage] = None,
                  db_archive: Optional[MongoDBStorage] = None,
                  intelligence_processor_uri=DEFAULT_PROCESSOR_URL,
@@ -190,6 +181,7 @@ class IntelligenceHub:
         # ---------------- Parameters ----------------
 
         self.serve_port = serve_port
+        self.vector_db_idx = db_vector
         self.mongo_db_cache = db_cache
         self.mongo_db_archive = db_archive
 
@@ -210,8 +202,8 @@ class IntelligenceHub:
 
         # --------------------------------------------
 
+        self._load_vector_db()
         self._load_unarchived_data()
-        self.vector_index = VectorIndex()
 
         # ---------------- Web Service ----------------
 
@@ -234,6 +226,8 @@ class IntelligenceHub:
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.analysis_thread = threading.Thread(target=self._ai_analysis_thread, daemon=True)
         self.post_process_thread = threading.Thread(target=self._post_process_worker, daemon=True)
+
+        logger.info('***** IntelligenceHub init complete *****')
 
     # ----------------------------------------------------- Setups -----------------------------------------------------
 
@@ -272,6 +266,9 @@ class IntelligenceHub:
             except Exception as e:
                 logger.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
+
+    def _load_vector_db(self):
+        self.vector_db_idx.load()
 
     def _load_unarchived_data(self):
         """Load unarchived data into a queue."""
@@ -333,12 +330,6 @@ class IntelligenceHub:
         self._cleanup_resources()
         logger.info("Service has stopped.")
 
-        if self.mongo_db_cache:
-            self.mongo_db_cache.close()
-
-        if self.mongo_db_archive:
-            self.mongo_db_archive.close()
-
     @property
     def statistics(self):
         return {
@@ -362,12 +353,14 @@ class IntelligenceHub:
         # self._save_to_file(unprocessed, 'pending_tasks.json')
 
     def _cleanup_resources(self):
-        # 关闭数据库连接
-        # self.mongo_client.close()
+        if self.vector_db_idx:
+            self.vector_db_idx.save()
 
-        # 保存索引等持久化操作
-        if self.vector_index:
-            self.vector_index.save('vector_index.ann')
+        if self.mongo_db_cache:
+            self.mongo_db_cache.close()
+
+        if self.mongo_db_archive:
+            self.mongo_db_archive.close()
 
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
@@ -399,10 +392,11 @@ class IntelligenceHub:
 
                 try:
                     self._archive_processed_data(data)
+                    self._index_archived_data(data)
                     self._mark_cache_data_archived(data['UUID'])
-                    logger.info(f"Message {data['UUID']} archived. ")
-
                     self.processed_counter += 1
+
+                    logger.info(f"Message {data['UUID']} archived. ")
 
                     # TODO: Call post processor plugins
                 except Exception as e:
@@ -430,6 +424,9 @@ class IntelligenceHub:
                 logger.warning(f'No processing data {uuid_str}, maybe data processing notification missing.')
             else:
                 del self.processing_table[uuid_str]
+
+    def _index_archived_data(self, data: dict):
+        self.vector_db_idx.add_text(data['UUID'], data['EVENT_TEXT'])
 
     def _cache_original_data(self, data: dict):
         try:

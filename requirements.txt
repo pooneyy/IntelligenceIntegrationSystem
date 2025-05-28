@@ -26,13 +26,16 @@ crawl4ai==0.6.3
 
 numpy
 pandas
-transformers==4.36.0
-sentence-transformers
 
-hnswlib
+# transformers==4.36.0
+# sentence-transformers
+# hnswlib
 
-# faiss-cpu           # Windows
+faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card
+huggingface_hub[hf_xet]
+
+
 typing_extensions
 
 
