@@ -156,6 +156,7 @@ APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from coll
 APPENDIX_TIME_POST      = '__TIME_POST__'           # Timestamp of post to processor
 APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from processor
 APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
+APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
 
 APPENDIX_FIELDS = [
     APPENDIX_TIME_GOT,
@@ -241,6 +242,8 @@ class IntelligenceHub:
                 validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
                 if error_text:
                     return jsonify({'status': 'error', 'reason': error_text})
+
+                self._cache_original_data(validated_data)
 
                 validated_data[APPENDIX_TIME_GOT] = time.time()
                 self.original_queue.put(validated_data)
@@ -355,16 +358,15 @@ class IntelligenceHub:
                 data = self.processed_queue.get(timeout=1)
 
                 try:
-                    if self.mongo_db:
-                        self.mongo_db.insert(data_without_appendix(data))
-
-                        logger.info(f"Message {data['UUID']} archived. ")
+                    self._archive_processed_data(data)
+                    self._mark_cache_data_archived(data['UUID'])
+                    logger.info(f"Message {data['UUID']} archived. ")
 
                     self.processed_counter += 1
 
                     # TODO: Call post processor plugins
                 except Exception as e:
-                    logger.error(f"归档失败: {str(e)}")
+                    logger.error(f"Archived fail: {str(e)}")
                     self.processed_queue.put(data)
                 finally:
                     self.processed_queue.task_done()
@@ -390,7 +392,7 @@ class IntelligenceHub:
     def _mark_cache_data_archived(self, _uuid: str):
         try:
             if self.mongo_db_cache:
-                self.mongo_db_cache.
+                self.mongo_db_cache.update({'UUID': _uuid}, {APPENDIX_ARCHIVED_FLAG: True})
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
@@ -398,7 +400,8 @@ class IntelligenceHub:
 def main():
     hub = IntelligenceHub(
         intelligence_processor_uri='http://192.168.50.220:5678/webhook-test/intelligence_process',
-        mongo_db=MongoDBStorage(collection_name='intelligence_archived'))
+        db_cache=MongoDBStorage(collection_name='intelligence_cached'),
+        db_archive=MongoDBStorage(collection_name='intelligence_archived'))
     hub.startup()
     while True:
         print(f'Hub queue size: {hub.statistics}')
