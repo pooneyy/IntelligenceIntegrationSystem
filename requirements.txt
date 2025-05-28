@@ -28,3 +28,7 @@ crawl4ai
 faiss-cpu           # Windows
 # faiss-gpu           # Linux/Mac with NVIDIA card
 typing_extensions
+
+sentence-transformers
+hnswlib
+

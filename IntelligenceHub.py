@@ -461,7 +461,7 @@ def main():
     hub.startup()
     while True:
         print(f'Hub queue size: {hub.statistics}')
-        time.sleep(1)
+        time.sleep(2)
 
 
 if __name__ == '__main__':
