@@ -162,7 +162,8 @@ APPENDIX_FIELDS = [
     APPENDIX_TIME_GOT,
     APPENDIX_TIME_POST,
     APPENDIX_TIME_DONE,
-    APPENDIX_RETRY_COUNT
+    APPENDIX_RETRY_COUNT,
+    APPENDIX_ARCHIVED_FLAG
 ]
 
 
@@ -202,12 +203,14 @@ class IntelligenceHub:
 
         self.original_queue = queue.Queue()             # Original intelligence queue
         self.processed_queue = queue.Queue()            # Processed intelligence queue
+        self.processing_table = {}
         self.archived_counter = 0
         self.drop_counter = 0
         self.processed_counter = 0
 
         # --------------------------------------------
 
+        self._load_unarchived_data()
         self.vector_index = VectorIndex()
 
         # ---------------- Web Service ----------------
@@ -270,6 +273,38 @@ class IntelligenceHub:
                 logger.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
 
+    def _load_unarchived_data(self):
+        """Load unarchived data into a queue."""
+        if not self.mongo_db_cache:
+            return
+
+        try:
+            # 1. Build query
+            query = {
+                "$or": [
+                    {APPENDIX_ARCHIVED_FLAG: False},
+                    {APPENDIX_ARCHIVED_FLAG: {"$exists": False}}
+                ]
+            }
+
+            # 2. Stream processing
+            cursor = self.mongo_db_cache.collection.find(query)
+            for doc in cursor:
+                # Convert ObjectId to string
+                doc['_id'] = str(doc['_id'])
+
+                # 3. Handle queue with timeout
+                try:
+                    self.original_queue.put(doc, block=True, timeout=5)
+                except queue.Full:
+                    logger.error("Queue full, failed to add document")
+                    break
+
+            logger.info(f'Previous unprocessed data loaded, item count: {self.original_queue.qsize()}')
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Database operation failed: {str(e)}")
+
     # ------------------------------------------------ Public Functions ------------------------------------------------
 
     def startup(self):
@@ -296,7 +331,7 @@ class IntelligenceHub:
 
         # 6. 清理资源
         self._cleanup_resources()
-        logger.info("服务已安全停止")
+        logger.info("Service has stopped.")
 
         if self.mongo_db_cache:
             self.mongo_db_cache.close()
@@ -308,6 +343,7 @@ class IntelligenceHub:
     def statistics(self):
         return {
             'original': self.original_queue.qsize(),
+            'processing': len(self.processing_table),
             'processed': self.processed_queue.qsize(),
             'archived': self.archived_counter,
             'dropped': self.drop_counter
@@ -340,17 +376,21 @@ class IntelligenceHub:
             try:
                 data = self.original_queue.get(block=True)
                 if not data:
+                    self.original_queue.task_done()
                     continue
+            except queue.Empty:
+                continue
+            try:
+                self._notice_data_in_processing(data)
                 result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, data)
                 self.original_queue.task_done()
 
                 result[APPENDIX_TIME_DONE] = time.time()
                 self.processed_queue.put(result)
-
-            except queue.Empty:
-                continue
             except Exception as e:
                 logger.error(f"_processing_loop error: {str(e)}")
+            finally:
+                self._notice_data_quit_processing(data)
 
     def _post_process_worker(self):
         while not self.shutdown_flag.is_set():
@@ -374,6 +414,22 @@ class IntelligenceHub:
                 continue
 
     # ------------------------------------------------ Helpers ------------------------------------------------
+
+    def _notice_data_in_processing(self, data: dict):
+        with self.lock:
+            uuid_str = data['UUID']
+            if uuid_str in self.processing_table:
+                logger.warning(f'Found existing processing data {uuid_str}, maybe data has duplicated processing.')
+            else:
+                self.processing_table[uuid_str] = data
+
+    def _notice_data_quit_processing(self, data: dict):
+        with self.lock:
+            uuid_str = data['UUID']
+            if uuid_str not in self.processing_table:
+                logger.warning(f'No processing data {uuid_str}, maybe data processing notification missing.')
+            else:
+                del self.processing_table[uuid_str]
 
     def _cache_original_data(self, data: dict):
         try:
