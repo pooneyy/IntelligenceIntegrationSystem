@@ -1,12 +1,8 @@
-import copy
-import json
 import uuid
 import time
 import queue
 import logging
-import datetime
-import traceback
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional
 
 import pymongo
 import requests
@@ -16,9 +12,6 @@ from werkzeug.serving import make_server
 from pymongo.errors import ConnectionFailure
 from pydantic import BaseModel, ValidationError
 from requests.exceptions import RequestException
-
-from faiss import IndexFlatL2
-import numpy as np
 
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
@@ -52,8 +45,8 @@ class ProcessedData(BaseModel):
     PEOPLE: str | None
     ORGANIZATION: str | None
     EVENT_BRIEF: str | None
-    EVENT_TEXT: str
-    RATE: str | None
+    EVENT_TEXT: str | None
+    RATE: dict | None
     IMPACT: str | None
 
 
@@ -136,7 +129,7 @@ def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> di
     :param timeout: Timeout in second
     :return: Requests response or {'status': 'error', 'reason': 'error description'}
     """
-    validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
+    validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
     if error_text:
         return {'status': 'error', 'reason': error_text}
     return common_post(f'{url}/feedback', validated_data, timeout)
@@ -277,12 +270,7 @@ class IntelligenceHub:
 
         try:
             # 1. Build query
-            query = {
-                "$or": [
-                    {APPENDIX_ARCHIVED_FLAG: False},
-                    {APPENDIX_ARCHIVED_FLAG: {"$exists": False}}
-                ]
-            }
+            query = {APPENDIX_ARCHIVED_FLAG: {"$exists": False}}
 
             # 2. Stream processing
             cursor = self.mongo_db_cache.collection.find(query)
@@ -378,8 +366,11 @@ class IntelligenceHub:
                 result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, data)
                 self.original_queue.task_done()
 
-                result[APPENDIX_TIME_DONE] = time.time()
-                self.processed_queue.put(result)
+                validated_data = self._validate_sanitize_processed_data(result)
+
+                if validated_data:
+                    validated_data[APPENDIX_TIME_DONE] = time.time()
+                    self.processed_queue.put(validated_data)
             except Exception as e:
                 logger.error(f"_processing_loop error: {str(e)}")
             finally:
@@ -389,19 +380,29 @@ class IntelligenceHub:
         while not self.shutdown_flag.is_set():
             try:
                 data = self.processed_queue.get(timeout=1)
+                validated_data = self._validate_sanitize_processed_data(data)
+
+                if not validated_data:
+                    self.processed_queue.task_done()
+                    continue
 
                 try:
-                    self._archive_processed_data(data)
-                    self._index_archived_data(data)
-                    self._mark_cache_data_archived(data['UUID'])
-                    self.processed_counter += 1
+                    # According to the prompt (DEFAULT_ANALYSIS_PROMPT),
+                    #   if the article does not have any value, just "UUID" is returned.
+                    archived_flag = 'EVENT_TEXT' in validated_data
 
-                    logger.info(f"Message {data['UUID']} archived. ")
+                    if archived_flag:
+                        self._archive_processed_data(validated_data)
+                        self._index_archived_data(validated_data)
+
+                    self._mark_cache_data_archived_flag(validated_data['UUID'], archived_flag)
+                    logger.info(f"Message {validated_data['UUID']} archived: {archived_flag}")
+                    self.processed_counter += 1
 
                     # TODO: Call post processor plugins
                 except Exception as e:
                     logger.error(f"Archived fail: {str(e)}")
-                    self.processed_queue.put(data)
+                    self.processed_queue.put(validated_data)
                 finally:
                     self.processed_queue.task_done()
             except queue.Empty:
@@ -427,6 +428,8 @@ class IntelligenceHub:
 
     def _index_archived_data(self, data: dict):
         self.vector_db_idx.add_text(data['UUID'], data['EVENT_TEXT'])
+        # TODO: Decrease save frequency.
+        self.vector_db_idx.save()
 
     def _cache_original_data(self, data: dict):
         try:
@@ -442,12 +445,30 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
 
-    def _mark_cache_data_archived(self, _uuid: str):
+    def _mark_cache_data_archived_flag(self, _uuid: str, archived: bool):
         try:
             if self.mongo_db_cache:
-                self.mongo_db_cache.update({'UUID': _uuid}, {APPENDIX_ARCHIVED_FLAG: True})
+                self.mongo_db_cache.update({'UUID': _uuid}, {APPENDIX_ARCHIVED_FLAG: archived})
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
+
+    def _validate_sanitize_processed_data(self, data: dict) -> dict or None:
+        try:
+            validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
+            if error_text:
+                print('Processed data check fail - Drop.')
+                print('-------------------------------')
+                print(str(data))
+                print('-------------------------------')
+                with self.lock:
+                    self.drop_counter += 1
+                return None
+            return validated_data
+        except Exception as e:
+            logger.error(f"Check processed data got exception: {str(e)}")
+            with self.lock:
+                self.drop_counter += 1
+            return None
 
 
 def main():
