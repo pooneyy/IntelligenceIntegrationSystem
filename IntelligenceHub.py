@@ -40,14 +40,15 @@ class CollectedData(BaseModel):
 
 class ProcessedData(BaseModel):
     UUID: str
-    TIME: str | None
-    LOCATION: str | None
-    PEOPLE: str | None
-    ORGANIZATION: str | None
-    EVENT_BRIEF: str | None
-    EVENT_TEXT: str | None
-    RATE: dict | None
-    IMPACT: str | None
+    TIME: str | None = None
+    LOCATION: list | None = None
+    PEOPLE: list | None = None
+    ORGANIZATION: list | None = None
+    EVENT_BRIEF: str | None = None
+    EVENT_TEXT: str | None = None
+    RATE: dict | None = {}
+    IMPACT: str | None = None
+    TIPS: str | None = None
 
 
 def check_sanitize_dict(data: dict, verifier: BaseModel) -> Tuple[dict, str]:
@@ -191,7 +192,7 @@ class IntelligenceHub:
         self.processing_table = {}
         self.archived_counter = 0
         self.drop_counter = 0
-        self.processed_counter = 0
+        self.error_counter = 0
 
         # --------------------------------------------
 
@@ -325,7 +326,8 @@ class IntelligenceHub:
             'processing': len(self.processing_table),
             'processed': self.processed_queue.qsize(),
             'archived': self.archived_counter,
-            'dropped': self.drop_counter
+            'dropped': self.drop_counter,
+            'error': self.error_counter,
         }
 
     # --------------------------------------------------- Shutdowns ----------------------------------------------------
@@ -380,29 +382,43 @@ class IntelligenceHub:
         while not self.shutdown_flag.is_set():
             try:
                 data = self.processed_queue.get(timeout=1)
+
+                if 'UUID' not in data:
+                    # There's no reason to reach this path.
+                    logger.error('NO UUID field. This data is not even error.')
+                    self.error_counter += 1
+                    self.processed_queue.task_done()
+                    continue
+
+                # According to the prompt (DEFAULT_ANALYSIS_PROMPT),
+                #   if the article does not have any value, just "UUID" is returned.
+                if 'EVENT_TEXT' not in data:
+                    logger.info(f"Message {data['UUID']} not archived.")
+                    self._mark_cache_data_archived_flag(data['UUID'], 'F')
+                    self.drop_counter += 1
+                    self.processed_queue.task_done()
+                    continue
+
                 validated_data = self._validate_sanitize_processed_data(data)
 
                 if not validated_data:
+                    self._mark_cache_data_archived_flag(validated_data['UUID'], 'E')
+                    self.error_counter += 1
                     self.processed_queue.task_done()
                     continue
 
                 try:
-                    # According to the prompt (DEFAULT_ANALYSIS_PROMPT),
-                    #   if the article does not have any value, just "UUID" is returned.
-                    archived_flag = 'EVENT_TEXT' in validated_data
+                    self._archive_processed_data(validated_data)
+                    self._index_archived_data(validated_data)
+                    self._mark_cache_data_archived_flag(validated_data['UUID'], 'T')
+                    self.archived_counter += 1
 
-                    if archived_flag:
-                        self._archive_processed_data(validated_data)
-                        self._index_archived_data(validated_data)
-
-                    self._mark_cache_data_archived_flag(validated_data['UUID'], archived_flag)
-                    logger.info(f"Message {validated_data['UUID']} archived: {archived_flag}")
-                    self.processed_counter += 1
+                    logger.info(f"Message {validated_data['UUID']} archived.")
 
                     # TODO: Call post processor plugins
                 except Exception as e:
-                    logger.error(f"Archived fail: {str(e)}")
-                    self.processed_queue.put(validated_data)
+                    logger.error(f"Archived fail with exception: {str(e)}")
+                    self._mark_cache_data_archived_flag(validated_data['UUID'], 'E')
                 finally:
                     self.processed_queue.task_done()
             except queue.Empty:
@@ -445,8 +461,19 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
 
-    def _mark_cache_data_archived_flag(self, _uuid: str, archived: bool):
+    def _mark_cache_data_archived_flag(self, _uuid: str, archived: bool or str):
+        """
+        20250530: Extend the archived parameter as str. It can be the following values:
+            'T' - True. Archived
+            'F' - False. Low value data so not archived
+            'E' - Error. We should go back and check the error, then analysis again.
+        :param _uuid:
+        :param archived:
+        :return:
+        """
         try:
+            if isinstance(archived, bool):
+                archived = 'T' if archived else 'F'
             if self.mongo_db_cache:
                 self.mongo_db_cache.update({'UUID': _uuid}, {APPENDIX_ARCHIVED_FLAG: archived})
         except Exception as e:
