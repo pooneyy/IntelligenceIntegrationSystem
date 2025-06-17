@@ -520,10 +520,13 @@ Process finished with exit code 0
 
 
 
+现在（2025年）python接入微信聊天（非小程序）的方案有哪些？分别有什么限制和特点？
 
 
-
-
+有什么开源或开放的IM软件，满足以下需求：
+1. 包含Android客户端和PC客户端
+2. 支持python接入
+3. 国内易于访问
 
 
 

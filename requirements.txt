@@ -37,5 +37,6 @@ huggingface_hub[hf_xet]
 
 
 typing_extensions
+tortoise-orm
 
 
