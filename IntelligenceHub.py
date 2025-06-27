@@ -17,6 +17,7 @@ from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
+from Tools.RSSPublisher import RSSPublisher
 from Tools.VectorDatabase import VectorDatabase
 from prompts import DEFAULT_ANALYSIS_PROMPT
 
@@ -175,7 +176,7 @@ class IntelligenceHub:
         self.drop_counter = 0
         self.error_counter = 0
 
-        # --------------------------------------------
+        # ----------------- Database -----------------
 
         self._load_vector_db()
         self._load_unarchived_data()
@@ -193,6 +194,10 @@ class IntelligenceHub:
             token='',
             default_model='Qwen/Qwen3-235B-A22B')
 
+        # --------------- Components ----------------
+
+        self.rss_publisher = RSSPublisher()
+
         # ----------------- Threads -----------------
 
         self.lock = threading.Lock()
@@ -205,6 +210,38 @@ class IntelligenceHub:
         logger.info('***** IntelligenceHub init complete *****')
 
     # ----------------------------------------------------- Setups -----------------------------------------------------
+
+    def _load_vector_db(self):
+        self.vector_db_idx.load()
+
+    def _load_unarchived_data(self):
+        """Load unarchived data into a queue."""
+        if not self.mongo_db_cache:
+            return
+
+        try:
+            # 1. Build query
+            query = {APPENDIX_ARCHIVED_FLAG: {"$exists": False}}
+
+            # 2. Stream processing
+            cursor = self.mongo_db_cache.collection.find(query)
+            for doc in cursor:
+                # Convert ObjectId to string
+                doc['_id'] = str(doc['_id'])
+
+                # 3. Handle queue with timeout
+                try:
+                    self.original_queue.put(doc, block=True, timeout=5)
+                except queue.Full:
+                    logger.error("Queue full, failed to add document")
+                    break
+
+            logger.info(f'Previous unprocessed data loaded, item count: {self.original_queue.qsize()}')
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Database operation failed: {str(e)}")
+
+    # ---------------------------------------------------- Web API -----------------------------------------------------
 
     def _setup_apis(self):
         @self.app.route('/collect', methods=['POST'])
@@ -241,36 +278,6 @@ class IntelligenceHub:
             except Exception as e:
                 logger.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
-
-    def _load_vector_db(self):
-        self.vector_db_idx.load()
-
-    def _load_unarchived_data(self):
-        """Load unarchived data into a queue."""
-        if not self.mongo_db_cache:
-            return
-
-        try:
-            # 1. Build query
-            query = {APPENDIX_ARCHIVED_FLAG: {"$exists": False}}
-
-            # 2. Stream processing
-            cursor = self.mongo_db_cache.collection.find(query)
-            for doc in cursor:
-                # Convert ObjectId to string
-                doc['_id'] = str(doc['_id'])
-
-                # 3. Handle queue with timeout
-                try:
-                    self.original_queue.put(doc, block=True, timeout=5)
-                except queue.Full:
-                    logger.error("Queue full, failed to add document")
-                    break
-
-            logger.info(f'Previous unprocessed data loaded, item count: {self.original_queue.qsize()}')
-
-        except pymongo.errors.PyMongoError as e:
-            logger.error(f"Database operation failed: {str(e)}")
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
