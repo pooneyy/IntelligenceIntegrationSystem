@@ -6,19 +6,20 @@ import pymongo
 import datetime
 import requests
 import threading
+from pydantic import BaseModel
 from typing import List, Tuple, Optional
-from flask import Flask, request, jsonify
 from werkzeug.serving import make_server
+from flask import Flask, request, jsonify
 from pymongo.errors import ConnectionFailure
-from pydantic import BaseModel, ValidationError
 from requests.exceptions import RequestException
 
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
-from Tools.RSSPublisher import RSSPublisher
+from Tools.RSSPublisher import RSSPublisher, RssItem
 from Tools.VectorDatabase import VectorDatabase
+from Tools.Validation import check_sanitize_dict
 from prompts import DEFAULT_ANALYSIS_PROMPT
 
 
@@ -51,18 +52,6 @@ class ProcessedData(BaseModel):
     RATE: dict | None = {}
     IMPACT: str | None = None
     TIPS: str | None = None
-
-
-def check_sanitize_dict(data: dict, verifier: BaseModel) -> Tuple[dict, str]:
-    try:
-        validated_data = verifier.model_validate(data).model_dump(exclude_unset=True, exclude_none=True)
-        return validated_data, ''
-    except ValidationError as e:
-        logger.error(f'Collected data field missing: {str(e)}')
-        return {}, str(e)
-    except Exception as e:
-        logger.error(f'Validate Collected data fail: {str(e)}')
-        return {}, str(e)
 
 
 def common_post(url: str, data: dict, timeout: int) -> dict:
@@ -176,10 +165,15 @@ class IntelligenceHub:
         self.drop_counter = 0
         self.error_counter = 0
 
+        # --------------- Components ----------------
+
+        self.rss_publisher = RSSPublisher()
+
         # ----------------- Database -----------------
 
         self._load_vector_db()
         self._load_unarchived_data()
+        self._load_rss_publish_data()
 
         # ---------------- Web Service ----------------
 
@@ -189,14 +183,11 @@ class IntelligenceHub:
 
         # ---------------- AI Proxy ----------------
 
-        self.api_client = OpenAICompatibleAPI(
-            api_base_url=OPEN_AI_API_BASE_URL,
-            token='',
-            default_model='Qwen/Qwen3-235B-A22B')
-
-        # --------------- Components ----------------
-
-        self.rss_publisher = RSSPublisher()
+        # self.api_client = OpenAICompatibleAPI(
+        #     api_base_url=OPEN_AI_API_BASE_URL,
+        #     token='',
+        #     default_model='Qwen/Qwen3-235B-A22B')
+        self.api_client = None
 
         # ----------------- Threads -----------------
 
@@ -242,7 +233,24 @@ class IntelligenceHub:
             logger.error(f"Database operation failed: {str(e)}")
 
     def _load_rss_publish_data(self):
-        pass
+        try:
+            cursor = self.mongo_db_archive.collection.find().limit(50)
+            rss_items = []
+
+            for doc in cursor:
+                if 'EVENT_BRIEF' in doc and 'UUID' in doc:
+                    rss_item = RssItem(
+                        title=doc['EVENT_BRIEF'],
+                        link=f"/intelligence/{doc['UUID']}",
+                        description=doc['EVENT_BRIEF'],
+                        pub_date=datetime.datetime.now())
+                    rss_items.append(rss_item)
+                else:
+                    logger.warning(f'Warning: archived data field missing.')
+
+            self.rss_publisher.add_items(rss_items)
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Database operation failed: {str(e)}")
 
     # ---------------------------------------------------- Web API -----------------------------------------------------
 
@@ -282,16 +290,21 @@ class IntelligenceHub:
                 logger.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
 
-        @self.app.route('/rssfeed', methods=['GET'])
+        @self.app.route('/rssfeed.xml', methods=['GET'])
         def rssfeed_api():
             try:
                 feed_xml = self.rss_publisher.generate_feed(
-                    'IIS', 'http://sleepysoft.org', 'IIS Processed Intelligence')
+                    'IIS',
+                    f'http://sleepysoft.org/intelligence',
+                    'IIS Processed Intelligence')
                 return feed_xml
             except Exception as e:
-                logger.error(f"Rss Feed API error: {str(e)}")
+                logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
                 return jsonify({"status": "error", "uuid": ""})
 
+        @self.app.route('/intelligence', methods=['GET'])
+        def intelligence_viewer_api():
+            pass
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
@@ -381,6 +394,10 @@ class IntelligenceHub:
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
     def _ai_analysis_thread(self):
+        if not self.api_client:
+            logger.info('**** NO AI API client - Thread QUIT ****')
+            return
+
         while not self.shutdown_flag.is_set():
             try:
                 data = self.original_queue.get(block=True)
@@ -516,6 +533,7 @@ class IntelligenceHub:
                 with self.lock:
                     self.drop_counter += 1
                 return None
+            validated_data['ARCHIVE_TIME'] = datetime.datetime.now(datetime.timezone.utc)
             return validated_data
         except Exception as e:
             logger.error(f"Check processed data got exception: {str(e)}")

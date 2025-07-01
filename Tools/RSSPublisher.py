@@ -3,7 +3,17 @@ import threading
 
 import PyRSS2Gen
 from collections import deque
+from pydantic import BaseModel
 from typing import List, Dict, Optional
+
+from Tools.Validation import check_sanitize_dict
+
+
+class RssItem(BaseModel):
+    title: str
+    link: str
+    description: str | None = None
+    pub_date: datetime.datetime | None = None
 
 
 class RSSPublisher:
@@ -14,7 +24,7 @@ class RSSPublisher:
         Args:
             max_items: Maximum items to maintain in feed
             initial_items: Initial feed items in format:
-                [{"title": "X", "link": "url", "description": "...", "pubDate": datetime}, ...]
+                [{"title": "X", "link": "url", "description": "...", "pub_date": datetime}, ...]
         """
         self.lock = threading.Lock()
         self.max_items = max_items
@@ -29,7 +39,18 @@ class RSSPublisher:
             for item in initial_items:
                 self.add_item(**item)
 
-    def add_item(self, title: str, link: str, description: str, pub_data: Optional[datetime.datetime] = None) -> None:
+    def add_items(self, items: List[RssItem]):
+        with self.lock:
+            append_count = 0
+            for item in items:
+                validated_data, error_text = check_sanitize_dict(dict(item), RssItem)
+                if validated_data:
+                    self.feed_items.append(validated_data)
+                    append_count += 1
+            if append_count:
+                self.feeds_revision += 1
+
+    def add_item(self, title: str, link: str, description: str, pub_date: Optional[datetime.datetime] = None) -> None:
         """
         Add new item to RSS feed
 
@@ -37,17 +58,20 @@ class RSSPublisher:
             title: Item title
             link: Item URL
             description: Item content summary
-            pub_data: Publication datetime (default: current time)
+            pub_date: Publication datetime (default: current time)
         """
-        if not pub_data:
-            pub_data = datetime.datetime.now()
+        if not pub_date:
+            pub_date = datetime.datetime.now()
+
+        if not description:
+            description = title
 
         # Create and add new item
         new_item = {
             "title": title,
             "link": link,
             "description": description,
-            "pubDate": pub_data
+            "pub_date": pub_date
         }
 
         with self.lock:
@@ -75,7 +99,7 @@ class RSSPublisher:
                     title=item["title"],
                     link=item["link"],
                     description=item["description"],
-                    pubDate=item["pubDate"]
+                    pubDate=item["pub_date"]
                 ) for item in self.feed_items
             ]
 
@@ -111,7 +135,7 @@ def main():
             "title": "Initial Post",
             "link": "https://example.com/initial",
             "description": "Initial feed item",
-            "pubDate": datetime.datetime(2023, 1, 1)
+            "pub_date": datetime.datetime(2023, 1, 1)
         }
     ]
     publisher = RSSPublisher(max_items=50, initial_items=INITIAL_ITEMS)
