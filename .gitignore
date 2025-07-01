@@ -172,3 +172,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+.idea
+IntelligenceIndex
+content_storage
+output
+doc/.$IIS_Diagram.drawio.bkp
+requirements.txt.bak
+
