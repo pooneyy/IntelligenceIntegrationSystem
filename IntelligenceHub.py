@@ -6,6 +6,8 @@ import pymongo
 import datetime
 import requests
 import threading
+
+from PyQt5.QtNfc import title
 from pydantic import BaseModel
 from typing import List, Tuple, Optional
 from werkzeug.serving import make_server
@@ -465,6 +467,7 @@ class IntelligenceHub:
                     self._archive_processed_data(validated_data)
                     self._index_archived_data(validated_data)
                     self._mark_cache_data_archived_flag(validated_data['UUID'], 'T')
+                    self._publish_article_to_rss(validated_data)
                     self.archived_counter += 1
 
                     logger.info(f"Message {validated_data['UUID']} archived.")
@@ -514,6 +517,12 @@ class IntelligenceHub:
                 self.mongo_db_archive.insert(data)
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
+
+    def _publish_article_to_rss(self, data: dict):
+        self.rss_publisher.add_item(title=data.get('EVENT_TITLE', '') or data.get('EVENT_BRIEF', ''),
+                                    link=f"{self.base_url}:{self.serve_port}/intelligence/{data['UUID']}",
+                                    description=data.get('EVENT_BRIEF', ''),
+                                    pub_date=datetime.datetime.now())
 
     def _mark_cache_data_archived_flag(self, _uuid: str, archived: bool or str):
         """
