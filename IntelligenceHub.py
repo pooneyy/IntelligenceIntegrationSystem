@@ -14,6 +14,7 @@ from pymongo.errors import ConnectionFailure
 from requests.exceptions import RequestException
 
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
+from Tools.ArticleRender import default_article_render
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
@@ -38,15 +39,17 @@ class CollectedData(BaseModel):
     authors: List[str] | None = []      # (Optional): Article authors.
     content: str                        # [MUST]: The content to be processed.
     pub_time: str | None = None         # (Optional): Content publish time.
-    informant: str | None = None        # (Optional): The source of message.
+    informant: str | None = None        # (Optional): The source of message (like URL).
 
 
 class ProcessedData(BaseModel):
     UUID: str
+    INFORMANT: str | None = None
     TIME: str | None = None
     LOCATION: list | None = None
     PEOPLE: list | None = None
     ORGANIZATION: list | None = None
+    EVENT_TITLE: str | None = None
     EVENT_BRIEF: str | None = None
     EVENT_TEXT: str | None = None
     RATE: dict | None = {}
@@ -134,7 +137,9 @@ OPEN_AI_API_BASE_URL = "https://api.siliconflow.cn"
 
 
 class IntelligenceHub:
-    def __init__(self, serve_port: int = DEFAULT_IHUB_PORT,
+    def __init__(self,
+                 base_url: str = 'http://localhost',
+                 serve_port: int = DEFAULT_IHUB_PORT,
                  db_vector: Optional[VectorDatabase] = None,
                  db_cache: Optional[MongoDBStorage] = None,
                  db_archive: Optional[MongoDBStorage] = None,
@@ -145,6 +150,7 @@ class IntelligenceHub:
 
         # ---------------- Parameters ----------------
 
+        self.base_url = base_url
         self.serve_port = serve_port
         self.vector_db_idx = db_vector
         self.mongo_db_cache = db_cache
@@ -241,7 +247,7 @@ class IntelligenceHub:
                 if 'EVENT_BRIEF' in doc and 'UUID' in doc:
                     rss_item = RssItem(
                         title=doc['EVENT_BRIEF'],
-                        link=f"/intelligence/{doc['UUID']}",
+                        link=f"{self.base_url}:{self.serve_port}/intelligence/{doc['UUID']}",
                         description=doc['EVENT_BRIEF'],
                         pub_date=datetime.datetime.now())
                     rss_items.append(rss_item)
@@ -302,9 +308,14 @@ class IntelligenceHub:
                 logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
                 return jsonify({"status": "error", "uuid": ""})
 
-        @self.app.route('/intelligence', methods=['GET'])
-        def intelligence_viewer_api():
-            pass
+        @self.app.route('/intelligence/<intelligence_uuid>', methods=['GET'])
+        def intelligence_viewer_api(intelligence_uuid: str):
+            intelligence = self.get_intelligence(intelligence_uuid)
+            try:
+                return default_article_render(intelligence)
+            except Exception as e:
+                logger.error(str(e))
+                return 'Error'
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
