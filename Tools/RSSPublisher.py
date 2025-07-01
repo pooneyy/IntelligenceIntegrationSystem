@@ -1,4 +1,6 @@
 import datetime
+import threading
+
 import PyRSS2Gen
 from collections import deque
 from typing import List, Dict, Optional
@@ -14,15 +16,20 @@ class RSSPublisher:
             initial_items: Initial feed items in format:
                 [{"title": "X", "link": "url", "description": "...", "pubDate": datetime}, ...]
         """
+        self.lock = threading.Lock()
         self.max_items = max_items
         self.feed_items = deque(maxlen=max_items)
+
+        self.rss_cache = ''
+        self.rss_revision = 0           # The revision of rss xml
+        self.feeds_revision = 0         # The revision of feeds data
 
         # Load initial items if provided
         if initial_items:
             for item in initial_items:
                 self.add_item(**item)
 
-    def add_item(self, title: str, link: str, description: str, pubDate: Optional[datetime.datetime] = None) -> None:
+    def add_item(self, title: str, link: str, description: str, pub_data: Optional[datetime.datetime] = None) -> None:
         """
         Add new item to RSS feed
 
@@ -30,54 +37,64 @@ class RSSPublisher:
             title: Item title
             link: Item URL
             description: Item content summary
-            pubDate: Publication datetime (default: current time)
+            pub_data: Publication datetime (default: current time)
         """
-        if not pubDate:
-            pubDate = datetime.datetime.now()
+        if not pub_data:
+            pub_data = datetime.datetime.now()
 
         # Create and add new item
         new_item = {
             "title": title,
             "link": link,
             "description": description,
-            "pubDate": pubDate
+            "pubDate": pub_data
         }
-        self.feed_items.append(new_item)
 
-    def generate_feed(self, feed_title: str, feed_link: str, feed_description: str) -> str:
+        with self.lock:
+            self.feed_items.append(new_item)
+            self.feeds_revision += 1
+
+    def generate_feed(self, channel_title: str, channel_link: str, channel_description: str) -> str:
         """
         Generate RSS XML content
 
         Args:
-            feed_title: Channel title
-            feed_link: Channel URL
-            feed_description: Channel description
+            channel_title: Channel title
+            channel_link: Channel URL
+            channel_description: Channel description
 
         Returns:
             RSS XML string
         """
-        rss_items = [
-            PyRSS2Gen.RSSItem(
-                title=item["title"],
-                link=item["link"],
-                description=item["description"],
-                pubDate=item["pubDate"]
-            ) for item in self.feed_items
-        ]
+        with self.lock:
+            if self.rss_revision == self.feeds_revision:
+                return self.rss_cache
 
-        rss = PyRSS2Gen.RSS2(
-            title=feed_title,
-            link=feed_link,
-            description=feed_description,
-            lastBuildDate=datetime.datetime.now(),
-            items=rss_items
-        )
+            rss_items = [
+                PyRSS2Gen.RSSItem(
+                    title=item["title"],
+                    link=item["link"],
+                    description=item["description"],
+                    pubDate=item["pubDate"]
+                ) for item in self.feed_items
+            ]
 
-        return rss.to_xml(encoding="utf-8")
+            rss = PyRSS2Gen.RSS2(
+                title=channel_title,
+                link=channel_link,
+                description=channel_description,
+                lastBuildDate=datetime.datetime.now(),
+                items=rss_items
+            )
+
+            self.rss_cache = rss.to_xml(encoding="utf-8")
+
+            return self.rss_cache
 
     def clear_feed(self) -> None:
         """Clear all feed items"""
-        self.feed_items.clear()
+        with self.lock:
+            self.feed_items.clear()
 
 
 # ----------------------------------------------------------------------------------------------------------------------

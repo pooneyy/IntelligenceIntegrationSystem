@@ -241,6 +241,9 @@ class IntelligenceHub:
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Database operation failed: {str(e)}")
 
+    def _load_rss_publish_data(self):
+        pass
+
     # ---------------------------------------------------- Web API -----------------------------------------------------
 
     def _setup_apis(self):
@@ -278,6 +281,17 @@ class IntelligenceHub:
             except Exception as e:
                 logger.error(f"Feedback API error: {str(e)}")
                 return jsonify({"status": "error", "uuid": ""})
+
+        @self.app.route('/rssfeed', methods=['GET'])
+        def rssfeed_api():
+            try:
+                feed_xml = self.rss_publisher.generate_feed(
+                    'IIS', 'http://sleepysoft.org', 'IIS Processed Intelligence')
+                return feed_xml
+            except Exception as e:
+                logger.error(f"Rss Feed API error: {str(e)}")
+                return jsonify({"status": "error", "uuid": ""})
+
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
