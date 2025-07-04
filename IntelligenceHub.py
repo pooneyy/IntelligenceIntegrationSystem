@@ -7,7 +7,6 @@ import datetime
 import requests
 import threading
 
-from PyQt5.QtNfc import title
 from pydantic import BaseModel
 from typing import List, Tuple, Optional
 from werkzeug.serving import make_server
@@ -24,6 +23,7 @@ from Tools.RSSPublisher import RSSPublisher, RssItem
 from Tools.VectorDatabase import VectorDatabase
 from Tools.Validation import check_sanitize_dict
 from prompts import DEFAULT_ANALYSIS_PROMPT
+from GlobalConfig import *
 
 
 logger = logging.getLogger(__name__)
@@ -131,23 +131,13 @@ def data_without_appendix(data: dict) -> dict:
     return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
 
 
-DEFAULT_IHUB_PORT = 5000
-DEFAULT_MONGO_DB_URL = "mongodb://localhost:27017/"
-DEFAULT_PROCESSOR_URL = "http://localhost:5001/process"
-
-OPEN_AI_API_BASE_URL = "https://api.siliconflow.cn"
-
-
 class IntelligenceHub:
-    def __init__(self,
+    def __init__(self, *,
                  base_url: str = 'http://localhost',
                  serve_port: int = DEFAULT_IHUB_PORT,
                  db_vector: Optional[VectorDatabase] = None,
                  db_cache: Optional[MongoDBStorage] = None,
                  db_archive: Optional[MongoDBStorage] = None,
-                 intelligence_processor_uri=DEFAULT_PROCESSOR_URL,
-                 intelligence_process_timeout: int = 5 * 60,
-                 intelligence_process_max_retries=3,
                  request_timeout: int = 2):
 
         # ---------------- Parameters ----------------
@@ -157,11 +147,6 @@ class IntelligenceHub:
         self.vector_db_idx = db_vector
         self.mongo_db_cache = db_cache
         self.mongo_db_archive = db_archive
-
-        self.intelligence_processor_uri = intelligence_processor_uri
-        self.intelligence_process_timeout = intelligence_process_timeout
-        self.intelligence_process_max_retries = intelligence_process_max_retries
-
         self.request_timeout = request_timeout
 
         # -------------- Queues Related --------------
@@ -191,11 +176,10 @@ class IntelligenceHub:
 
         # ---------------- AI Proxy ----------------
 
-        # self.api_client = OpenAICompatibleAPI(
-        #     api_base_url=OPEN_AI_API_BASE_URL,
-        #     token='',
-        #     default_model='Qwen/Qwen3-235B-A22B')
-        self.api_client = None
+        self.api_client = OpenAICompatibleAPI(
+            api_base_url=OPEN_AI_API_BASE_URL_SELECT,
+            token='Sleepy',
+            default_model=MODEL_SELECT)
 
         # ----------------- Threads -----------------
 
@@ -564,17 +548,16 @@ class IntelligenceHub:
 
 def main():
     hub = IntelligenceHub(
-        intelligence_processor_uri='http://192.168.50.220:5678/webhook-test/intelligence_process',
         db_vector=VectorDatabase('IntelligenceIndex'),
         db_cache=MongoDBStorage(collection_name='intelligence_cached'),
         db_archive=MongoDBStorage(collection_name='intelligence_archived'))
     hub.startup()
 
-    result = hub.get_intelligence('a6a485dd-d843-4acd-b58a-4d516bfb0fa8')
-    print(result)
-
-    result = hub.query_intelligence(locations=['美国'])
-    print(result)
+    # result = hub.get_intelligence('a6a485dd-d843-4acd-b58a-4d516bfb0fa8')
+    # print(result)
+    #
+    # result = hub.query_intelligence(locations=['美国'])
+    # print(result)
 
     while True:
         print(f'Hub queue size: {hub.statistics}')

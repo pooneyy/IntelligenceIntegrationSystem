@@ -256,17 +256,21 @@ class OpenAICompatibleAPI:
 
 def main():
     # Set your API base URL
-    API_BASE_URL = "https://api.siliconflow.cn"
+    # API_BASE_URL = "https://api.siliconflow.cn"
+    API_BASE_URL = "http://localhost:11434"
+
+    # MODEL = 'Qwen/Qwen3-235B-A22B'
+    MODEL = 'qwen3:14b'
 
     # Initialize the client - token can be passed directly or will be fetched from environment
     client = (OpenAICompatibleAPI
               (api_base_url=API_BASE_URL,
-               token='',
-               default_model='Qwen/Qwen3-235B-A22B'))
+               token='x',
+               default_model=MODEL))
 
     model_list = client.get_model_list()
     print(f'Model list of {API_BASE_URL}')
-    print('\n'.join(model_list))
+    print(model_list)
 
     # Example synchronous chat completion
     messages = [

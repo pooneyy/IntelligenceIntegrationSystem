@@ -1,3 +1,4 @@
+import re
 import json
 import time
 import uuid
@@ -20,6 +21,15 @@ class AIMessage(BaseModel):
     authors: List[str] = []
     pub_time: str | None = None
     informant: str | None = None
+
+
+def extract_pure_response(text):
+    while '<think>' in text and '</think>' in text:
+        start_idx = text.find('<think>')
+        end_idx = text.find('</think>', start_idx) + len('</think>')
+        text = text[:start_idx] + text[end_idx:]
+    text = text.replace('<answer>', '').replace('</answer>', '')
+    return text.strip()
 
 
 def analyze_with_ai(
@@ -71,8 +81,9 @@ def analyze_with_ai(
 
     if isinstance(response, Dict) and "choices" in response:
         ai_output = response["choices"][0]["message"]["content"]
+        ai_answer = extract_pure_response(ai_output)
         try:
-            parsed_output = json.loads(ai_output)
+            parsed_output = json.loads(ai_answer)
             return parsed_output
         except json.JSONDecodeError:
             return {'error': "Cannot parse AI response to JSON."}
@@ -121,13 +132,19 @@ The CRTC is considering expanding that system to allow more creative positions t
 MPA-Canada said that "adding just a few positions to a more than 40-year-old list ignores today's modern production landscape."""
 
 
+API_BASE_URL = ["http://localhost:11434",
+                "https://api.siliconflow.cn"]
+
+MODEL = ['qwen3:14b',
+         'Qwen/Qwen3-235B-A22B']
+
 def main():
-    API_BASE_URL = "https://api.siliconflow.cn"
+    select_index = 0
 
     api_client = OpenAICompatibleAPI(
-        api_base_url=API_BASE_URL,
-        token='sk-ahmmtlfwzurwkxsuntnarlojpsnmnncukxlisabuagoafejv',
-        default_model='Qwen/Qwen3-235B-A22B')
+        api_base_url=API_BASE_URL[select_index],
+        token='SleepySoft',
+        default_model=MODEL[select_index])
 
     structured_data = {
         "UUID": str(uuid.uuid4()),
