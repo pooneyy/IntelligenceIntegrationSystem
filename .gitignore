@@ -180,3 +180,7 @@ output
 doc/.$IIS_Diagram.drawio.bkp
 requirements.txt.bak
 
+# Sub modules
+MyPythonUtility
+
+

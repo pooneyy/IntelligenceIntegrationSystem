@@ -1,0 +1,4 @@
+[submodule "MyPythonUtility"]
+	path = MyPythonUtility
+	url = https://github.com/SleepySoft/MyPythonUtility.git
+	branch = main
