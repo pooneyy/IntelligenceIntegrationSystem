@@ -7,7 +7,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from Tools.MongoDBAccess import init_global_db_access
-from Tools.plugin_manager import PluginManager, PluginWrapper, logger
+from MyPythonUtility.plugin_manager import PluginManager, PluginWrapper, logger
 
 project_root = os.path.abspath(__file__)
 
