@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify
 from IntelligenceHub import IntelligenceHub
 from IntelligenceHubWebService import post_collected_intelligence
 from recycled.TestContent import CONTENT_TRUMP_GOT_FUCKED
-from prompts import DEFAULT_ANALYSIS_PROMPT
+from prompts import ANALYSIS_PROMPT
 from Tools.DictPrinter import DictPrinter
 
 
@@ -210,7 +210,7 @@ def main():
             'Token': 'SleepySoft',
             'source': 'IntelligenceHubTest',
             'target': '',
-            'prompt': DEFAULT_ANALYSIS_PROMPT,
+            'prompt': ANALYSIS_PROMPT,
             'content': CONTENT_TRUMP_GOT_FUCKED,
         }
         try:

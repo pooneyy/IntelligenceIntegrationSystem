@@ -19,7 +19,7 @@ from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.RSSPublisher import RSSPublisher, RssItem
 from Tools.VectorDatabase import VectorDatabase
 from Tools.Validation import check_sanitize_dict
-from prompts import DEFAULT_ANALYSIS_PROMPT
+from prompts import ANALYSIS_PROMPT
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
 
@@ -331,7 +331,7 @@ class IntelligenceHub:
                 continue
             try:
                 self._notice_data_in_processing(data)
-                result = analyze_with_ai(self.open_ai_client, DEFAULT_ANALYSIS_PROMPT, data)
+                result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, data)
                 self.original_queue.task_done()
 
                 validated_data = self._validate_sanitize_processed_data(result)
@@ -356,7 +356,7 @@ class IntelligenceHub:
                     self.processed_queue.task_done()
                     continue
 
-                # According to the prompt (DEFAULT_ANALYSIS_PROMPT),
+                # According to the prompt (ANALYSIS_PROMPT),
                 #   if the article does not have any value, just "UUID" is returned.
                 if 'EVENT_TEXT' not in data:
                     logger.info(f"Message {data['UUID']} not archived.")

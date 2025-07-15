@@ -65,7 +65,7 @@ self.timeout_checker_thread.join(timeout=timeout)
 # def _process_data(self, data: dict):
 #     try:
 #         if 'prompt' not in data:
-#             data['prompt'] = DEFAULT_ANALYSIS_PROMPT
+#             data['prompt'] = ANALYSIS_PROMPT
 #
 #         data['PROMPT'] = data.pop('prompt')
 #         data['TEXT'] = self._format_message_text(data)

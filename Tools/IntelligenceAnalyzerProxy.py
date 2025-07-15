@@ -6,7 +6,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, ValidationError
 
-from prompts import DEFAULT_ANALYSIS_PROMPT
+from prompts import ANALYSIS_PROMPT
 from Tools.OpenAIClient import OpenAICompatibleAPI
 
 
@@ -158,7 +158,7 @@ def main():
     }
 
     # 调用函数
-    result = analyze_with_ai(api_client, DEFAULT_ANALYSIS_PROMPT, structured_data)
+    result = analyze_with_ai(api_client, ANALYSIS_PROMPT, structured_data)
 
     # 打印结果
     print(json.dumps(result, ensure_ascii=False, indent=2))
