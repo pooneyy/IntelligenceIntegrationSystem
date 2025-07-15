@@ -430,7 +430,7 @@ class IntelligenceHub:
 
     def _publish_article_to_rss(self, data: dict):
         self.rss_publisher.add_item(title=data.get('EVENT_TITLE', '') or data.get('EVENT_BRIEF', ''),
-                                    link=f"{self.base_url}:{self.serve_port}/intelligence/{data['UUID']}",
+                                    link=f"{self.reference_url}/intelligence/{data['UUID']}",
                                     description=data.get('EVENT_BRIEF', ''),
                                     pub_date=datetime.datetime.now())
 

@@ -17,6 +17,7 @@ DEFAULT_ANALYSIS_PROMPT = """# 角色设定
 3. 按评分标准进行维度评分
 4. 输出严格符合JSON格式
 5. 无论原文章是什么语言，处理后的结果必须是中文
+6. 输出严格匹配下面的输出要求
 
 # 输出要求
 {
@@ -249,4 +250,4 @@ https://news.cn
 """
 
 
-ANALYSIS_PROMPT = AI_OPTIMISED_ANALYSIS_PROMPT
+ANALYSIS_PROMPT = DEFAULT_ANALYSIS_PROMPT

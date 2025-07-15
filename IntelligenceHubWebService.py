@@ -7,6 +7,7 @@ from werkzeug.serving import make_server
 from flask import Flask, request, jsonify
 
 from GlobalConfig import *
+from MyPythonUtility.ArbitraryRPC import RPCService
 from Tools.Validation import check_sanitize_dict
 from Tools.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
@@ -86,6 +87,14 @@ class IntelligenceHubWebService:
         self._setup_apis()
         self.server = make_server(serve_ip, self.serve_port, self.app)
 
+        # ---------------- RPC Service ----------------
+
+        rpc_service = RPCService(
+            rpc_stub=self.intelligence_hub,
+            token_checker=self.check_token,
+            error_handler=self.handle_error
+        )
+
         # ----------------- Threads -----------------
 
         self.server_thread = threading.Thread(target=self.server.serve_forever)
@@ -93,6 +102,20 @@ class IntelligenceHubWebService:
     # ---------------------------------------------------- Web API -----------------------------------------------------
 
     def _setup_apis(self):
+
+        @self.app.route('/api', methods=['POST'])
+        def collect_api():
+            try:
+                data = dict(request.json)
+                result = self.intelligence_hub.submit_collected_data(data)
+                return jsonify(
+                    {
+                        'status': 'queued' if result else 'error',
+                        'uuid': data.get('UUID', '')
+                    })
+            except Exception as e:
+                logger.error(f"collect_api() fail: {str(e)}")
+                return jsonify({"status": "error", "uuid": ""})
 
         @self.app.route('/collect', methods=['POST'])
         def collect_api():
@@ -148,3 +171,11 @@ class IntelligenceHubWebService:
     def shutdown(self, timeout=10):
         self.server.shutdown()
         self.server_thread.join(timeout=timeout)
+
+    # ----------------------------------------------------------------
+
+    def check_token(self, token: str) -> bool:
+        return False
+
+    def handle_error(self, error: str):
+        print(f'Handle error in ServiceProvider: {error}')
