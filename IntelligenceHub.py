@@ -7,15 +7,12 @@ import datetime
 import requests
 import threading
 
+from attr import dataclass
 from pydantic import BaseModel
 from typing import List, Tuple, Optional
-from werkzeug.serving import make_server
-from flask import Flask, request, jsonify
 from pymongo.errors import ConnectionFailure
 from requests.exceptions import RequestException
 
-from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
-from Tools.ArticleRender import default_article_render
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
@@ -23,7 +20,7 @@ from Tools.RSSPublisher import RSSPublisher, RssItem
 from Tools.VectorDatabase import VectorDatabase
 from Tools.Validation import check_sanitize_dict
 from prompts import DEFAULT_ANALYSIS_PROMPT
-from GlobalConfig import *
+from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
 
 logger = logging.getLogger(__name__)
@@ -59,59 +56,6 @@ class ProcessedData(BaseModel):
     TIPS: str | None = None
 
 
-def common_post(url: str, data: dict, timeout: int) -> dict:
-    try:
-        response = requests.post(
-            url,
-            json=data,
-            headers={'X-Request-Source': 'IntelligenceHub'},
-            timeout=timeout
-        )
-
-        response.raise_for_status()
-        logger.info(f"Sent request to {url} successful UUID={data['UUID']}")
-        return response.json()
-
-    except RequestException as e:
-        logger.error(f"Sent request to {url} fail: {str(e)}")
-        return {"status": "error", "uuid": data.get('UUID'), "reason": str(e)}
-
-    except Exception as e:
-        logger.error(f"Sent request to {url} fail: {str(e)}")
-        return {"status": "error", "uuid": '', "reason": str(e)}
-
-
-def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> dict:
-    """
-    Post collected intelligence to IntelligenceHub (/collect).
-    :param url: IntelligenceHub url (without '/collect' path).
-    :param data: Collector data.
-    :param timeout: Timeout in second
-    :return: Requests response or {'status': 'error', 'reason': 'error description'}
-    """
-    if 'UUID' not in data:
-        data['UUID'] = str(uuid.uuid4())
-        logger.info(f"Generated new UUID: {data['UUID']}")
-    validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
-    if error_text:
-        return {'status': 'error', 'reason': error_text}
-    return common_post(f'{url}/collect', validated_data, timeout)
-
-
-def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> dict:
-    """
-    Post processed data to IntelligenceHub (/feedback).
-    :param url: IntelligenceHub url (without '/feedback' path).
-    :param data: Processed data.
-    :param timeout: Timeout in second
-    :return: Requests response or {'status': 'error', 'reason': 'error description'}
-    """
-    validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
-    if error_text:
-        return {'status': 'error', 'reason': error_text}
-    return common_post(f'{url}/feedback', validated_data, timeout)
-
-
 APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
 APPENDIX_TIME_POST      = '__TIME_POST__'           # Timestamp of post to processor
 APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from processor
@@ -132,22 +76,38 @@ def data_without_appendix(data: dict) -> dict:
 
 
 class IntelligenceHub:
+    @dataclass
+    class Error:
+        success: bool
+        exception: Exception = None
+        error_list: List[str] = []
+        warning_list: List[str] = []
+
+        def __bool__(self):
+            return self.success
+
     def __init__(self, *,
-                 base_url: str = 'http://localhost',
-                 serve_port: int = DEFAULT_IHUB_PORT,
+                 ref_url: str = 'http://locohost:8080',
                  db_vector: Optional[VectorDatabase] = None,
                  db_cache: Optional[MongoDBStorage] = None,
                  db_archive: Optional[MongoDBStorage] = None,
-                 request_timeout: int = 2):
+                 ai_client: OpenAICompatibleAPI):
+        """
+        Init IntelligenceHub.
+        :param ref_url: The reference url for sub-resource url generation.
+        :param db_vector: Vector DB for text RAG indexing.
+        :param db_cache: The mongodb for caching collected data.
+        :param db_archive: The mongodb for archiving processed data.
+        :param ai_client: The openai-like client for data processing.
+        """
 
         # ---------------- Parameters ----------------
 
-        self.base_url = base_url
-        self.serve_port = serve_port
+        self.reference_url = ref_url
         self.vector_db_idx = db_vector
         self.mongo_db_cache = db_cache
         self.mongo_db_archive = db_archive
-        self.request_timeout = request_timeout
+        self.open_ai_client = ai_client
 
         # -------------- Queues Related --------------
 
@@ -168,25 +128,11 @@ class IntelligenceHub:
         self._load_unarchived_data()
         self._load_rss_publish_data()
 
-        # ---------------- Web Service ----------------
-
-        self.app = Flask(__name__)
-        self._setup_apis()
-        self.server = make_server('0.0.0.0', self.serve_port, self.app)
-
-        # ---------------- AI Proxy ----------------
-
-        self.api_client = OpenAICompatibleAPI(
-            api_base_url=OPEN_AI_API_BASE_URL_SELECT,
-            token='Sleepy',
-            default_model=MODEL_SELECT)
-
         # ----------------- Threads -----------------
 
         self.lock = threading.Lock()
         self.shutdown_flag = threading.Event()
 
-        self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.analysis_thread = threading.Thread(target=self._ai_analysis_thread, daemon=True)
         self.post_process_thread = threading.Thread(target=self._post_process_worker, daemon=True)
 
@@ -233,7 +179,7 @@ class IntelligenceHub:
                 if 'EVENT_BRIEF' in doc and 'UUID' in doc:
                     rss_item = RssItem(
                         title=doc['EVENT_BRIEF'],
-                        link=f"{self.base_url}:{self.serve_port}/intelligence/{doc['UUID']}",
+                        link=f"{self.reference_url}/intelligence/{doc['UUID']}",
                         description=doc['EVENT_BRIEF'],
                         pub_date=datetime.datetime.now())
                     rss_items.append(rss_item)
@@ -244,69 +190,9 @@ class IntelligenceHub:
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Database operation failed: {str(e)}")
 
-    # ---------------------------------------------------- Web API -----------------------------------------------------
-
-    def _setup_apis(self):
-        @self.app.route('/collect', methods=['POST'])
-        def collect_api():
-            try:
-                data = request.json
-                validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
-                if error_text:
-                    return jsonify({'status': 'error', 'reason': error_text})
-
-                self._cache_original_data(validated_data)
-
-                validated_data[APPENDIX_TIME_GOT] = time.time()
-                self.original_queue.put(validated_data)
-
-                return jsonify({"status": "queued", "uuid": validated_data["UUID"]})
-            except Exception as e:
-                logger.error(f"Collection API fail: {str(e)}")
-                return jsonify({"status": "error", "uuid": ""})
-
-        @self.app.route('/feedback', methods=['POST'])
-        def feedback_api():
-            try:
-                data = request.json
-
-                validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
-                if error_text:
-                    return jsonify({'status': 'error', 'reason': error_text})
-
-                uuid_str = validated_data["UUID"]
-                validated_data[APPENDIX_TIME_DONE] = time.time()
-
-                return jsonify({"status": "acknowledged", "uuid": uuid_str})
-            except Exception as e:
-                logger.error(f"Feedback API error: {str(e)}")
-                return jsonify({"status": "error", "uuid": ""})
-
-        @self.app.route('/rssfeed.xml', methods=['GET'])
-        def rssfeed_api():
-            try:
-                feed_xml = self.rss_publisher.generate_feed(
-                    'IIS',
-                    f'http://sleepysoft.org/intelligence',
-                    'IIS Processed Intelligence')
-                return feed_xml
-            except Exception as e:
-                logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
-                return jsonify({"status": "error", "uuid": ""})
-
-        @self.app.route('/intelligence/<intelligence_uuid>', methods=['GET'])
-        def intelligence_viewer_api(intelligence_uuid: str):
-            intelligence = self.get_intelligence(intelligence_uuid)
-            try:
-                return default_article_render(intelligence)
-            except Exception as e:
-                logger.error(str(e))
-                return 'Error'
-
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
     def startup(self):
-        self.server_thread.start()
         self.analysis_thread.start()
         self.post_process_thread.start()
 
@@ -314,59 +200,21 @@ class IntelligenceHub:
         """优雅关闭系统"""
         logger.info("启动关闭流程...")
 
-        # 1. 设置关闭标志
+        # 设置关闭标志
         self.shutdown_flag.set()
 
-        # 2. 停止WEB服务器
-        self.server.shutdown()
-
-        # 3. Clear and persists unprocessed data. Put None to un-block all threads.
+        # Clear and persists unprocessed data. Put None to un-block all threads.
         self._clear_queues()
 
-        # 4. 等待工作线程结束
-        self.server_thread.join(timeout=timeout)
+        # 等待工作线程结束
+        self.analysis_thread.join(timeout=timeout)
         self.post_process_thread.join(timeout=timeout)
 
-        # 6. 清理资源
+        # 清理资源
         self._cleanup_resources()
         logger.info("Service has stopped.")
 
-    # ---------------------------------------------- Statistics and Debug ----------------------------------------------
-
-    @property
-    def statistics(self):
-        return {
-            'original': self.original_queue.qsize(),
-            'processing': len(self.processing_table),
-            'processed': self.processed_queue.qsize(),
-            'archived': self.archived_counter,
-            'dropped': self.drop_counter,
-            'error': self.error_counter,
-        }
-
-    # ------------------------------------------------ Public Functions ------------------------------------------------
-
-    def get_intelligence(self, _uuid: str):
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        return query_engine.get_intelligence(_uuid)
-
-    def query_intelligence(self,
-                           *,
-                           db: str = 'cache',
-                           period:      Optional[Tuple[datetime.date, datetime.date]] = None,
-                           locations:   Optional[List[str]] = None,
-                           peoples:     Optional[List[str]] = None,
-                           organizations: Optional[List[str]] = None,
-                           keywords: Optional[str] = None
-                           ):
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        result = query_engine.query_intelligence(
-            period = period, locations = locations, peoples = peoples,
-            organizations = organizations, keywords = keywords)
-        return result
-
-
-    # --------------------------------------------------- Shutdowns ----------------------------------------------------
+    # --------------------------------------- Shutdowns ---------------------------------------
 
     def _clear_queues(self):
         unprocessed = []
@@ -388,10 +236,88 @@ class IntelligenceHub:
         if self.mongo_db_archive:
             self.mongo_db_archive.close()
 
+    # ---------------------------------------------- Statistics and Debug ----------------------------------------------
+
+    @property
+    def statistics(self):
+        return {
+            'original': self.original_queue.qsize(),
+            'processing': len(self.processing_table),
+            'processed': self.processed_queue.qsize(),
+            'archived': self.archived_counter,
+            'dropped': self.drop_counter,
+            'error': self.error_counter,
+        }
+
+    # ------------------------------------------------ Public Functions ------------------------------------------------
+
+    # ---------------------------------------- Web API ----------------------------------------
+
+    def submit_collected_data(self, data: dict) -> True or Error:
+        try:
+            validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
+            if error_text:
+                return IntelligenceHub.Error(False, error_list=[error_text])
+
+            self._cache_original_data(validated_data)
+
+            validated_data[APPENDIX_TIME_GOT] = time.time()
+            self.original_queue.put(validated_data)
+
+            return True
+        except Exception as e:
+            logger.error(f"Collection API fail: {str(e)}")
+            return IntelligenceHub.Error(False, e, [str(e)])
+
+    def submit_processed_data(self, data: dict) -> True or Error:
+        try:
+            validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
+            if error_text:
+                return IntelligenceHub.Error(False, error_list=[error_text])
+            validated_data[APPENDIX_TIME_DONE] = time.time()
+
+            return True
+        except Exception as e:
+            logger.error(f"Feedback API error: {str(e)}")
+            return IntelligenceHub.Error(False, e, [str(e)])
+
+    def submit_archived_data(self, data: dict) -> True or Error:
+        pass
+
+    def get_rssfeed(self) -> str or Error:
+        try:
+            feed_xml = self.rss_publisher.generate_feed(
+                'IIS',
+                f'http://sleepysoft.org/intelligence',
+                'IIS Processed Intelligence')
+            return feed_xml
+        except Exception as e:
+            logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
+            return IntelligenceHub.Error(False, e, [str(e)])
+
+    def get_intelligence(self, _uuid: str) -> dict:
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        return query_engine.get_intelligence(_uuid)
+
+    def query_intelligence(self,
+                           *,
+                           db: str = 'cache',
+                           period:      Optional[Tuple[datetime.date, datetime.date]] = None,
+                           locations:   Optional[List[str]] = None,
+                           peoples:     Optional[List[str]] = None,
+                           organizations: Optional[List[str]] = None,
+                           keywords: Optional[str] = None
+                           ) -> List[dict]:
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        result = query_engine.query_intelligence(
+            period = period, locations = locations, peoples = peoples,
+            organizations = organizations, keywords = keywords)
+        return result
+
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
     def _ai_analysis_thread(self):
-        if not self.api_client:
+        if not self.open_ai_client:
             logger.info('**** NO AI API client - Thread QUIT ****')
             return
 
@@ -405,7 +331,7 @@ class IntelligenceHub:
                 continue
             try:
                 self._notice_data_in_processing(data)
-                result = analyze_with_ai(self.api_client, DEFAULT_ANALYSIS_PROMPT, data)
+                result = analyze_with_ai(self.open_ai_client, DEFAULT_ANALYSIS_PROMPT, data)
                 self.original_queue.task_done()
 
                 validated_data = self._validate_sanitize_processed_data(result)
@@ -544,25 +470,3 @@ class IntelligenceHub:
             with self.lock:
                 self.drop_counter += 1
             return None
-
-
-def main():
-    hub = IntelligenceHub(
-        db_vector=VectorDatabase('IntelligenceIndex'),
-        db_cache=MongoDBStorage(collection_name='intelligence_cached'),
-        db_archive=MongoDBStorage(collection_name='intelligence_archived'))
-    hub.startup()
-
-    # result = hub.get_intelligence('a6a485dd-d843-4acd-b58a-4d516bfb0fa8')
-    # print(result)
-    #
-    # result = hub.query_intelligence(locations=['美国'])
-    # print(result)
-
-    while True:
-        print(f'Hub queue size: {hub.statistics}')
-        time.sleep(2)
-
-
-if __name__ == '__main__':
-    main()

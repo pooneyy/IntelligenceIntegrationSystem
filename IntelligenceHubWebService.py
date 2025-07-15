@@ -1,0 +1,150 @@
+import uuid
+import logging
+import requests
+import threading
+from requests import RequestException
+from werkzeug.serving import make_server
+from flask import Flask, request, jsonify
+
+from GlobalConfig import *
+from Tools.Validation import check_sanitize_dict
+from Tools.ArticleRender import default_article_render
+from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+
+def common_post(url: str, data: dict, timeout: int) -> dict:
+    try:
+        response = requests.post(
+            url,
+            json=data,
+            headers={'X-Request-Source': 'IntelligenceHub'},
+            timeout=timeout
+        )
+
+        response.raise_for_status()
+        logger.info(f"Sent request to {url} successful UUID={data['UUID']}")
+        return response.json()
+
+    except RequestException as e:
+        logger.error(f"Sent request to {url} fail: {str(e)}")
+        return {"status": "error", "uuid": data.get('UUID'), "reason": str(e)}
+
+    except Exception as e:
+        logger.error(f"Sent request to {url} fail: {str(e)}")
+        return {"status": "error", "uuid": '', "reason": str(e)}
+
+
+def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> dict:
+    """
+    Post collected intelligence to IntelligenceHub (/collect).
+    :param url: IntelligenceHub url (without '/collect' path).
+    :param data: Collector data.
+    :param timeout: Timeout in second
+    :return: Requests response or {'status': 'error', 'reason': 'error description'}
+    """
+    if 'UUID' not in data:
+        data['UUID'] = str(uuid.uuid4())
+        logger.info(f"Generated new UUID: {data['UUID']}")
+    validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
+    if error_text:
+        return {'status': 'error', 'reason': error_text}
+    return common_post(f'{url}/collect', validated_data, timeout)
+
+
+def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> dict:
+    """
+    Post processed data to IntelligenceHub (/feedback).
+    :param url: IntelligenceHub url (without '/feedback' path).
+    :param data: Processed data.
+    :param timeout: Timeout in second
+    :return: Requests response or {'status': 'error', 'reason': 'error description'}
+    """
+    validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
+    if error_text:
+        return {'status': 'error', 'reason': error_text}
+    return common_post(f'{url}/feedback', validated_data, timeout)
+
+
+class IntelligenceHubWebService:
+    def __init__(self, *,
+                 serve_ip: str = '0.0.0.0',
+                 serve_port: int = DEFAULT_IHUB_PORT,
+                 intelligence_hub: IntelligenceHub):
+
+        # ---------------- Parameters ----------------
+
+        self.serve_ip = serve_ip
+        self.serve_port = serve_port
+        self.intelligence_hub = intelligence_hub
+
+        # ---------------- Web Service ----------------
+
+        self.app = Flask(__name__)
+        self._setup_apis()
+        self.server = make_server(serve_ip, self.serve_port, self.app)
+
+        # ----------------- Threads -----------------
+
+        self.server_thread = threading.Thread(target=self.server.serve_forever)
+
+    # ---------------------------------------------------- Web API -----------------------------------------------------
+
+    def _setup_apis(self):
+
+        @self.app.route('/collect', methods=['POST'])
+        def collect_api():
+            try:
+                data = dict(request.json)
+                result = self.intelligence_hub.submit_collected_data(data)
+                return jsonify(
+                    {
+                        'status': 'queued' if result else 'error',
+                        'uuid': data.get('UUID', '')
+                    })
+            except Exception as e:
+                logger.error(f"collect_api() fail: {str(e)}")
+                return jsonify({"status": "error", "uuid": ""})
+
+        @self.app.route('/feedback', methods=['POST'])
+        def feedback_api():
+            try:
+                data = dict(request.json)
+                result = self.intelligence_hub.submit_processed_data(data)
+                return jsonify(
+                    {
+                        'status': 'acknowledged' if result else 'error',
+                        'uuid': data.get('UUID', '')
+                    })
+            except Exception as e:
+                logger.error(f'feedback_api() error: {str(e)}')
+                return jsonify({'status': 'error', 'uuid': ''})
+
+        @self.app.route('/rssfeed.xml', methods=['GET'])
+        def rssfeed_api():
+            try:
+                feed_xml = self.intelligence_hub.get_rssfeed()
+                return feed_xml
+            except Exception as e:
+                logger.error(f'rssfeed_api() error: {str(e)}', stack_info=True)
+                return 'Error'
+
+        @self.app.route('/intelligence/<intelligence_uuid>', methods=['GET'])
+        def intelligence_viewer_api(intelligence_uuid: str):
+            intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)
+            try:
+                return default_article_render(intelligence)
+            except Exception as e:
+                logger.error(f'intelligence_viewer_api() error: {str(e)}', stack_info=True)
+                return 'Error'
+
+    # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
+
+    def startup(self):
+        self.server_thread.start()
+
+    def shutdown(self, timeout=10):
+        self.server.shutdown()
+        self.server_thread.join(timeout=timeout)

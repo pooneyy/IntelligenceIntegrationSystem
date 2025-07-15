@@ -4,7 +4,7 @@ import threading
 from typing import Callable, TypedDict, Dict, List
 
 from Tools.ContentHistory import has_url
-from IntelligenceHub import post_collected_intelligence, DEFAULT_IHUB_PORT
+from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
 
 
