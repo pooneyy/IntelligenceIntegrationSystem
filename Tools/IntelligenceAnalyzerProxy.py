@@ -23,13 +23,17 @@ class AIMessage(BaseModel):
     informant: str | None = None
 
 
-def extract_pure_response(text):
+def extract_pure_response(text: str):
     while '<think>' in text and '</think>' in text:
         start_idx = text.find('<think>')
         end_idx = text.find('</think>', start_idx) + len('</think>')
         text = text[:start_idx] + text[end_idx:]
     text = text.replace('<answer>', '').replace('</answer>', '')
     return text.strip()
+
+
+def extract_pure_json_text(text: str):
+    return text.strip().removeprefix('```json').removesuffix('```').strip()
 
 
 def analyze_with_ai(
@@ -82,8 +86,9 @@ def analyze_with_ai(
     if isinstance(response, Dict) and "choices" in response:
         ai_output = response["choices"][0]["message"]["content"]
         ai_answer = extract_pure_response(ai_output)
+        ai_json = extract_pure_json_text(ai_answer)
         try:
-            parsed_output = json.loads(ai_answer)
+            parsed_output = json.loads(ai_json)
             return parsed_output
         except json.JSONDecodeError:
             return {'error': "Cannot parse AI response to JSON."}

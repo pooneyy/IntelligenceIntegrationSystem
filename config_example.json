@@ -1,0 +1,45 @@
+{
+  "intelligence_hub": {
+
+    "ai_service": {
+      "url": "http://localhost:11434",
+      "token": "SleepySoft",
+      "model": "qwen3:14b"
+    },
+
+    "mongodb": {
+      "url": "mongodb://localhost:27017/",
+      "user": "",
+      "password": ""
+    }
+  },
+
+  "intelligence_hub_web_service": {
+
+    "service": {
+      "ip": "",
+      "port": 5000,
+      "host": "http://127.0.0.1"
+    },
+
+    "collector": {
+      "tokens": [
+      "67aa92ec-932a-43ef-9177-8d3bc8f89f07"
+      ]
+    },
+
+    "processor": {
+      "tokens": [
+        "60d9e091-e298-4598-b98e-a6b2669f12e3"
+      ]
+    }
+  },
+
+  "collector": {
+    "default_token": "67aa92ec-932a-43ef-9177-8d3bc8f89f07"
+  },
+
+  "processor": {
+    "default_token": "60d9e091-e298-4598-b98e-a6b2669f12e3"
+  }
+}
