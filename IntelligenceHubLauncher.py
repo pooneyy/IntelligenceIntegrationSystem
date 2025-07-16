@@ -24,7 +24,7 @@ def main():
         token=ai_service_token,
         default_model=ai_service_model)
 
-    ref_host_url = config.get('intelligence_hub_web_service.service.host_access_url', 'http://127.0.0.1:5000')
+    ref_host_url = config.get('intelligence_hub_web_service.service.host_url', 'http://127.0.0.1:5000')
 
     mongodb_host = config.get('mongodb.host', 'localhost')
     mongodb_port = config.get('mongodb.port', 27017)
@@ -54,7 +54,16 @@ def main():
     )
     hub.startup()
 
+    listen_ip = config.get('intelligence_hub_web_service.service.listen_ip', '0.0.0.0')
+    listen_port = config.get('intelligence_hub_web_service.rpc_api.listen_port', DEFAULT_IHUB_PORT)
+
+    rpc_api_token = config.get('intelligence_hub_web_service.rpc_api.tokens', [])
+    rpc_collector_token = config.get('intelligence_hub_web_service.collector.tokens', [])
+    rpc_processor_token = config.get('intelligence_hub_web_service.processor.tokens', [])
+
     hub_service = IntelligenceHubWebService(
+        serve_ip=listen_ip,
+        serve_port=listen_port,
         intelligence_hub = hub
     )
     hub_service.startup()

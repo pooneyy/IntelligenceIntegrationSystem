@@ -92,7 +92,7 @@ class MockIntelligenceProcessor:
             "timestamp": time.time()
         }
         requests.post(
-            f"{self.hub_url}/feedback",
+            f"{self.hub_url}/processed",
             json=processed_data,
             timeout=3
         )

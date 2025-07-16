@@ -18,29 +18,35 @@
   "intelligence_hub_web_service": {
 
     "service": {
-      "ip": "",
-      "port": 5000,
-      "host": "http://127.0.0.1"
+      "listen_ip": "0.0.0.0",
+      "listen_port": 5000,
+      "host_url": "http://127.0.0.1:5000"
+    },
+
+    "rpc_api": {
+      "tokens": [
+        "8567add0-604b-49d8-9949-0976f2553ac2"
+      ]
     },
 
     "collector": {
       "tokens": [
-      "67aa92ec-932a-43ef-9177-8d3bc8f89f07"
+      "13662a6a-b7fc-43c5-9def-56bb52976165"
       ]
     },
 
     "processor": {
       "tokens": [
-        "60d9e091-e298-4598-b98e-a6b2669f12e3"
+        "99092d44-0b93-4eca-b42a-af18c0d2e093"
       ]
     }
   },
 
   "collector": {
-    "default_token": "67aa92ec-932a-43ef-9177-8d3bc8f89f07"
+    "default_token": "13662a6a-b7fc-43c5-9def-56bb52976165"
   },
 
   "processor": {
-    "default_token": "60d9e091-e298-4598-b98e-a6b2669f12e3"
+    "default_token": "99092d44-0b93-4eca-b42a-af18c0d2e093"
   }
 }
