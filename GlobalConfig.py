@@ -10,6 +10,11 @@ DEFAULT_INTERNAL_TIMEOUT_MS = 20000         # Internal network timeout
 DEFAULT_NATIONAL_TIMEOUT_MS = 35000         # National network timeout
 
 
+DEFAULT_RPC_API_TOKEN = 'SleepySoft'
+DEFAULT_COLLECTOR_TOKEN = 'SleepySoft'
+DEFAULT_PROCESSOR_TOKEN = 'SleepySoft'
+
+
 USING_VPN = True
 USING_PROXY = False
 

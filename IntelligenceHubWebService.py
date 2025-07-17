@@ -75,23 +75,23 @@ def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> di
 
 class WebServiceAccessManager:
     def __init__(self,
-                 rpc_api_token: List[str],
-                 collector_token: List[str],
-                 processor_token: List[str],
+                 rpc_api_tokens: List[str],
+                 collector_tokens: List[str],
+                 processor_tokens: List[str],
                  deny_on_empty_config: bool = False):
-        self.rpc_api_token = rpc_api_token
-        self.collector_token = collector_token
-        self.processor_token = processor_token
+        self.rpc_api_tokens = rpc_api_tokens
+        self.collector_tokens = collector_tokens
+        self.processor_tokens = processor_tokens
         self.deny_on_empty_config = deny_on_empty_config
 
     def check_rpc_api_token(self, token: str) -> bool:
-        return (not self.deny_on_empty_config) if not self.rpc_api_token else (token in self.rpc_api_token)
+        return (not self.deny_on_empty_config) if not self.rpc_api_tokens else (token in self.rpc_api_tokens)
 
     def check_collector_token(self, token: str) -> bool:
-        return (not self.deny_on_empty_config) if not self.rpc_api_token else (token in self.collector_token)
+        return (not self.deny_on_empty_config) if not self.rpc_api_tokens else (token in self.collector_tokens)
 
     def check_processor_token(self, token: str) -> bool:
-        return (not self.deny_on_empty_config) if not self.rpc_api_token else (token in self.processor_token)
+        return (not self.deny_on_empty_config) if not self.rpc_api_tokens else (token in self.processor_tokens)
 
 
 class IntelligenceHubWebService:

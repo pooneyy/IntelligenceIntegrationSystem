@@ -2,12 +2,13 @@ from functools import partial
 
 import Scraper.RequestsScraper
 from GlobalConfig import APPLIED_PROXY, APPLIED_NATIONAL_TIMEOUT_MS
+from MyPythonUtility.easy_config import EasyConfig
+from ServiceEngine import ServiceContext
 from Tools.RSSFetcher import fetch_feed
 from Scraper.PlaywrightRenderedScraper import fetch_content
 from Scrubber.HTMLConvertor import html_content_converter
 from Scrubber.UnicodeSanitizer import sanitize_unicode_string
 from Workflow.CommonFeedsCrawFlow import feeds_craw_flow
-
 
 # https://www.voanews.com/rssfeeds
 # Too much video content.
@@ -34,12 +35,21 @@ feed_list = {
 }
 
 
-def module_init(service_context):
-    pass
+config: EasyConfig | None = None
+
+
+def module_init(service_context: ServiceContext):
+    global config
+    config = service_context.config
 
 
 def start_task(stop_event):
-    feeds_craw_flow('voanews', feed_list, stop_event, 15 * 60,
+    feeds_craw_flow('voanews',
+                    feed_list,
+                    stop_event,
+                    config,
+                    15 * 60,
+
                     partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy=APPLIED_PROXY),
                     partial(fetch_content, timeout_ms=APPLIED_NATIONAL_TIMEOUT_MS, proxy=APPLIED_PROXY),
                     [

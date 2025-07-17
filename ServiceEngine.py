@@ -6,6 +6,8 @@ import traceback
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
+from MyPythonUtility.easy_config import EasyConfig
 from Tools.MongoDBAccess import init_global_db_access
 from MyPythonUtility.plugin_manager import PluginManager, PluginWrapper, logger
 
@@ -19,6 +21,7 @@ class ServiceContext:
     def __init__(self):
         self.sys = sys
         self.logger = logger
+        self.config = EasyConfig()
         self.project_root = project_root
 
     def solve_import_path(self):

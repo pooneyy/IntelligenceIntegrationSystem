@@ -6,7 +6,7 @@ from MyPythonUtility.easy_config import EasyConfig
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.VectorDatabase import VectorDatabase
-from IntelligenceHubWebService import IntelligenceHubWebService
+from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
 
 
 def main():
@@ -57,14 +57,21 @@ def main():
     listen_ip = config.get('intelligence_hub_web_service.service.listen_ip', '0.0.0.0')
     listen_port = config.get('intelligence_hub_web_service.rpc_api.listen_port', DEFAULT_IHUB_PORT)
 
-    rpc_api_token = config.get('intelligence_hub_web_service.rpc_api.tokens', [])
-    rpc_collector_token = config.get('intelligence_hub_web_service.collector.tokens', [])
-    rpc_processor_token = config.get('intelligence_hub_web_service.processor.tokens', [])
+    rpc_api_tokens = config.get('intelligence_hub_web_service.rpc_api.tokens', [])
+    collector_tokens = config.get('intelligence_hub_web_service.collector.tokens', [])
+    processor_tokens = config.get('intelligence_hub_web_service.processor.tokens', [])
+
+    access_manager = WebServiceAccessManager(
+        rpc_api_tokens=rpc_api_tokens,
+        collector_tokens=collector_tokens,
+        processor_tokens=processor_tokens,
+        deny_on_empty_config=True)
 
     hub_service = IntelligenceHubWebService(
         serve_ip=listen_ip,
         serve_port=listen_port,
-        intelligence_hub = hub
+        intelligence_hub = hub,
+        access_manager=access_manager
     )
     hub_service.startup()
 

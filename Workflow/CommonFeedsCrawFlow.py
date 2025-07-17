@@ -3,6 +3,8 @@ import logging
 import threading
 from typing import Callable, TypedDict, Dict, List
 
+from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
+from MyPythonUtility.easy_config import EasyConfig
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
@@ -26,7 +28,12 @@ class FetchContentResult(TypedDict):
 
 
 
-def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading.Event, update_interval_s: int,
+def feeds_craw_flow(flow_name: str,
+                    feeds: Dict[str, str],
+                    stop_event: threading.Event,
+                    config: EasyConfig,
+                    update_interval_s: int,
+
                     fetch_feed: Callable[[str], FetchFeedResult],
                     fetch_content: Callable[[str], FetchContentResult],
                     scrubbers: List[Callable[[str], str]]):
@@ -40,6 +47,7 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                     'feed name': 'feed link'
                 }
     :param stop_event: The stop event to quit loop.
+    :param config: The easy config. This function will get token from it.
     :param update_interval_s: The polling update interval in second.
 
     :param fetch_feed: The function to fetch feed. Function declaration:
@@ -52,8 +60,12 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
     :return: None
     """
     prefix = f'[{flow_name}]:'
-    # prefix = f'[{flow_name}]:'.ljust(15)
     logger.info(f'{prefix} starts work.')
+
+    collector_tokens = config.get('intelligence_hub_web_service.collector.tokens')
+    token = collector_tokens[0] if collector_tokens else DEFAULT_COLLECTOR_TOKEN
+
+    logger.info(f'{prefix} submit token: {token}.')
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
@@ -111,14 +123,14 @@ def feeds_craw_flow(flow_name: str, feeds: Dict[str, str], stop_event: threading
                 # Post to IHub
 
                 collected_data = {
-                    # 'UUID': '',
-                    'token': 'SleepySoft',
+                    'UUID': '',
+                    'token': token,
                     # 'source': '',
                     # 'target': '',
                     # 'prompt': '',
 
                     'title': article['title'],
-                    'authors': article['authors'],
+                    'authors': article.get('authors', ''),
                     'content': text,
                     'pub_time': 'published',
                     'informant': article['link'],
