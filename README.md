@@ -1,7 +1,26 @@
 # IntelligenceIntegrationSystem
+
 Intelligence Integration System with AI and Workflow
 
 
-pip install -r requirements.txt -c constraints.txt
+# Environment and Run
 
+```
+# Suggest python 3.10
+python -m venv .venv
 
+# Install dependency
+pip install -r requirements.txt
+
+# If has dependency issue when using upper command
+pip install -r requirements_freeze.txt
+
+# Switch to venv
+.venv/Scripts/activate.bat
+
+# Run main service
+python IntelligenceHubLauncher.py
+
+# Run collectors
+python ServiceEngine.py
+```
