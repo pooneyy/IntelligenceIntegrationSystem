@@ -318,6 +318,8 @@ class IntelligenceHub:
             logger.info('**** NO AI API client - Thread QUIT ****')
             return
 
+        ai_process_max_retry = 3
+
         while not self.shutdown_flag.is_set():
             try:
                 data = self.original_queue.get(block=True)
@@ -328,8 +330,25 @@ class IntelligenceHub:
                 continue
             try:
                 self._notice_data_in_processing(data)
-                result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, data)
+
+                retry = 0
+                result = None
+                # Add retry to get correct answer from AI
+                while retry < ai_process_max_retry and not self.shutdown_flag.is_set():
+                    result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, data)
+                    if 'error' not in result:
+                        break
+                    retry += 1
+
                 self.original_queue.task_done()
+
+                if not result or 'error' in result:
+                    # TODO: Mark data as dropped in mongodb to really drop it.
+                    logger.error(f"AI process error after {retry} retries.")
+                    continue
+
+                if retry:
+                    logger.info(f'Got AI correct answer after {retry} retires.')
 
                 validated_data = self._validate_sanitize_processed_data(result)
 
@@ -337,7 +356,7 @@ class IntelligenceHub:
                     validated_data[APPENDIX_TIME_DONE] = time.time()
                     self.processed_queue.put(validated_data)
             except Exception as e:
-                logger.error(f"_processing_loop error: {str(e)}")
+                logger.error(f"AI process error: {str(e)}")
             finally:
                 self._notice_data_quit_processing(data)
 

@@ -55,7 +55,7 @@ def main():
     hub.startup()
 
     listen_ip = config.get('intelligence_hub_web_service.service.listen_ip', '0.0.0.0')
-    listen_port = config.get('intelligence_hub_web_service.rpc_api.listen_port', DEFAULT_IHUB_PORT)
+    listen_port = config.get('intelligence_hub_web_service.service.listen_port', DEFAULT_IHUB_PORT)
 
     rpc_api_tokens = config.get('intelligence_hub_web_service.rpc_api.tokens', [])
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens', [])

@@ -1,3 +1,5 @@
+import datetime
+import os
 import re
 import json
 import time
@@ -82,6 +84,27 @@ def analyze_with_ai(
 
     elapsed = time.time() - start
     print(f"AI response spends {elapsed} s")
+
+    # -------------------------- For Debug --------------------------
+
+    os.makedirs('conversion', exist_ok=True)
+    file_path = f"conversion/conversion_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.txt"
+    with open(file_path, 'wt', encoding='utf-8') as f:
+        f.write("[system]\n\n")
+        f.write(messages[0]['content'])
+
+        f.write("\n\n")
+        f.write("[user]\n\n")
+        f.write(messages[1]['content'])
+
+        f.write("\n\n")
+        f.write("[reply]\n\n")
+        if isinstance(response, Dict) and "choices" in response:
+            f.write(response["choices"][0]["message"]["content"])
+        else:
+            f.write('<None>')
+
+    # ------------------------------------------------------------------
 
     if isinstance(response, Dict) and "choices" in response:
         ai_output = response["choices"][0]["message"]["content"]

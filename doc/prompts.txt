@@ -684,10 +684,8 @@ intelligence_hub.ai_service.model: "qwen3:14b"
 
 
 
-
-帮我分析和优化以下的prompt，使其表述更精辟和精确，在较小的模型上有同样好的表现。
-要求细化"RATE"中的评分标准，给出更典型的输出示例，以准确指导模型准确输出内容。
-
+我有以下prompt，但其在规模较小的模型上表现不稳定，请分析原因和优化以下的prompt，使其表述更精辟和精确，同时在较小的模型上有同样好的表现。
+要求检查原prompt中的错误，细化"RATE"中的评分标准，给出更典型的输出示例，以准确指导模型准确输出内容。
 
 
 DEFAULT_ANALYSIS_PROMPT = """# 角色设定
@@ -778,14 +776,20 @@ DEFAULT_ANALYSIS_PROMPT = """# 角色设定
 
 # 输出示例
 输入："
-https://example.com
+- UUID: 218bd628-33c4-401a-b081-313f9da653a9
+- title: 新华社消息
+- authors: ['胡锡桧']
+- pub_time: published
+- informant: https://www.cbc.ca/news/science
 
-新华社消息（胡锡桧报道）：2024年7月19日，中美在APEC峰会达成人工智能芯片出口管制协议，涉及英伟达、AMD等企业
+## 正文内容
+2024年7月19日，中美在APEC峰会达成人工智能芯片出口管制协议，涉及英伟达、AMD等企业
 "
+
 输出：
 {
-  "UUID": "传入的UUID",
-  "INFORMANT": "https://example.com",
+  "UUID": "218bd628-33c4-401a-b081-313f9da653a9",
+  "INFORMANT": "https://www.cbc.ca/news/science",
   "TIME": "2024-07-19",
   "LOCATION": "APEC峰会",
   "PEOPLE": [],
