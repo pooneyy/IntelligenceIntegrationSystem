@@ -1,25 +1,22 @@
-import uuid
 import time
 import queue
 import logging
 import pymongo
 import datetime
-import requests
 import threading
 
 from attr import dataclass
 from pydantic import BaseModel
 from typing import List, Tuple, Optional
 from pymongo.errors import ConnectionFailure
-from requests.exceptions import RequestException
 
+from prompts import ANALYSIS_PROMPT
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.RSSPublisher import RSSPublisher, RssItem
 from Tools.VectorDatabase import VectorDatabase
-from Tools.Validation import check_sanitize_dict
-from prompts import ANALYSIS_PROMPT
+from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
 

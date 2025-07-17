@@ -11,8 +11,7 @@ from flask import Flask, request, jsonify
 
 from GlobalConfig import *
 from MyPythonUtility.ArbitraryRPC import RPCService
-from MyPythonUtility.easy_config import EasyConfig
-from Tools.Validation import check_sanitize_dict
+from MyPythonUtility.DictTools import check_sanitize_dict
 from Tools.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
 
