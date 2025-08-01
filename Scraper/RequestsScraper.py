@@ -97,7 +97,8 @@ class RequestsScraper:
                 headers=self.headers,
                 timeout=timeout,
                 allow_redirects=True,
-                stream=True
+                stream=True,
+                verify=False            # TODO: Fix certs issue
             )
             response.raise_for_status()
 
