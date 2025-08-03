@@ -57,6 +57,7 @@ PyRSS2Gen==1.1               # RSS generator
 ### Commented Optional Dependencies
 ##############################
 # faiss-gpu                   # GPU-accelerated version for Linux/Mac (requires NVIDIA env)
-# transformers==4.36.0       # Hugging Face NLP model library
+# faiss-cpu                   # Or use GPU version
+# transformers==4.36.0        # Hugging Face NLP model library
 # sentence-transformers       # Text embedding models (requires `transformers`)
 # hnswlib                     # Approximate nearest neighbor search library

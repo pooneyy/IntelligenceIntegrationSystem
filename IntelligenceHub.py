@@ -53,9 +53,19 @@ class ProcessedData(BaseModel):
     TIPS: str | None = None
 
 
+class ArchivedDataExtraFields(BaseModel):
+    RAW_DATA: dict | None
+    SUBMITTER: str | None
+
+
+class ArchivedData(ProcessedData, ArchivedDataExtraFields):
+    pass
+
+
 APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
 APPENDIX_TIME_POST      = '__TIME_POST__'           # Timestamp of post to processor
 APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from processor
+APPENDIX_TIME_ARCHIVED  = '__TIME_ARCHIVED__'
 APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
 APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
 
