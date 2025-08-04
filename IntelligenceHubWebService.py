@@ -159,24 +159,24 @@ class IntelligenceHubWebService:
                 logger.error(f'collect_api() fail: {str(e)}')
                 return jsonify({'resp': 'error', 'uuid': ''})
 
-        @self.app.route('/processed', methods=['POST'])
-        def feedback_api():
-            try:
-                data = dict(request.json)
-                if self.access_manager.check_processor_token(data.get('token', '')):
-                    result = self.intelligence_hub.submit_processed_data(data)
-                    response = 'acknowledged' if result else 'error',
-                else:
-                    response = 'invalid token'
-
-                return jsonify(
-                    {
-                        'resp': response,
-                        'uuid': data.get('UUID', '')
-                    })
-            except Exception as e:
-                logger.error(f'feedback_api() error: {str(e)}')
-                return jsonify({'resp': 'error', 'uuid': ''})
+        # @self.app.route('/processed', methods=['POST'])
+        # def feedback_api():
+        #     try:
+        #         data = dict(request.json)
+        #         if self.access_manager.check_processor_token(data.get('token', '')):
+        #             result = self.intelligence_hub.submit_processed_data(data)
+        #             response = 'acknowledged' if result else 'error',
+        #         else:
+        #             response = 'invalid token'
+        #
+        #         return jsonify(
+        #             {
+        #                 'resp': response,
+        #                 'uuid': data.get('UUID', '')
+        #             })
+        #     except Exception as e:
+        #         logger.error(f'feedback_api() error: {str(e)}')
+        #         return jsonify({'resp': 'error', 'uuid': ''})
 
         @self.app.route('/rssfeed.xml', methods=['GET'])
         def rssfeed_api():
