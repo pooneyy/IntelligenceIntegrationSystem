@@ -1013,6 +1013,23 @@ zipp==3.22.0
 
 
 
+分析并理解以下代码，做以下重构：
+
+所有注释和文本皆为英文
+query_intelligence增加条数限制参数
+除非有重大问题，否则代码不要大改，否则难以比对你所更新的地方。
+
+
+
+
+
+
+
+分析以下代码，增加几个函数，注意增加的函数注释及文本需要使用英文，下面提供的函数名仅供参考，请根据语义取更合适的名字：
+
+get_intelligence_cout_and_base: 获取当前所有的条目数据，同时返回首条索引，作为base
+get_intelligence_by_base_offset: 将base，offset，count传入，获取以base为基准，offset后的count条数据（用做数据浏览，指定base以免新增条目引起跳动）
+
 
 
 

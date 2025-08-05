@@ -1,11 +1,14 @@
-
 import re
-import pytz  # 时区处理
+import pytz  # Time zone handling
+import logging
 import pymongo
-from datetime import datetime
-from typing import Optional, List, Tuple, Union
+import datetime
+from typing import Optional, List, Tuple, Union, Dict
 
 from Tools.MongoDBAccess import MongoDBStorage
+
+
+logger = logging.getLogger(__name__)
 
 
 class IntelligenceQueryEngine:
@@ -13,72 +16,148 @@ class IntelligenceQueryEngine:
         self.__mongo_db = db
 
     def get_intelligence(self, _uuid: str) -> Optional[dict]:
-        """通过UUID获取单个情报条目
+        """Retrieve single intelligence entry by UUID
 
-        参数:
-            _uuid (str): 要查询的UUID字符串
+        Args:
+            _uuid (str): UUID string to query
 
-        返回:
-            Optional[dict]: 如果找到匹配文档则返回文档字典，否则返回None
+        Returns:
+            Optional[dict]: Document dictionary if found, otherwise None
         """
-        # 参数验证
+        # Parameter validation
         if not _uuid:
-            logger.error("UUID参数为空")
+            logger.error("UUID parameter is empty")
             return None
 
         try:
-            # 尝试获取数据库连接
+            # Attempt to get database connection
             collection = self.__mongo_db.collection
             if collection is None:
-                logger.error("数据库连接未初始化")
+                logger.error("Database connection not initialized")
                 return None
 
-            # 构建精确匹配UUID的查询
+            # Build exact match UUID query
             query = {"UUID": str(_uuid).lower()}
 
-            # 执行查询 - 只获取第一个匹配项
+            # Execute query - get first match
             doc = collection.find_one(query)
 
             if doc is None:
-                logger.warning(f"未找到匹配的UUID: {_uuid}")
+                logger.warning(f"No matching UUID found: {_uuid}")
                 return None
 
-            # 处理文档格式
+            # Process document format
             return self.process_document(doc)
 
         except pymongo.errors.PyMongoError as e:
-            logger.error(f"数据库查询失败: {str(e)}")
+            logger.error(f"Database query failed: {str(e)}")
             return None
         except Exception as e:
-            logger.exception(f"未知错误: {str(e)}")
+            logger.exception(f"Unknown error: {str(e)}")
             return None
+
+    def get_intelligence_summary(self) -> Dict[str, Union[int, Optional[str]]]:
+        """
+        Retrieve total intelligence count and latest document ID as base snapshot
+
+        Returns:
+            dict: Dictionary containing:
+                - total_count: Total number of intelligence documents
+                - base_uuid: UUID of the newest document (as stable pagination base)
+
+        Ensures consistent pagination even when new documents are added.
+        """
+        collection = self.__mongo_db.collection
+
+        try:
+            # Get total document count
+            total_count = collection.count_documents({})
+
+            # Find the newest document as base reference
+            newest_doc = collection.find_one(
+                filter={},
+                sort=[("TIME", pymongo.DESCENDING)]
+            )
+
+            base_uuid = newest_doc["UUID"] if newest_doc else None
+
+            return {
+                "total_count": total_count,
+                "base_uuid": base_uuid
+            }
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Intelligence summary retrieval failed: {str(e)}")
+            return {"total_count": 0, "base_uuid": None}
+
+    def get_paginated_intelligences(self, base_uuid: str, offset: int, limit: int) -> List[dict]:
+        """
+        Retrieve paginated intelligence using stable base UUID
+
+        Args:
+            base_uuid: Reference UUID for stable pagination anchor
+            offset: Number of documents to skip from the base
+            limit: Maximum number of documents to return
+
+        Returns:
+            List of processed intelligence documents
+        """
+        if not base_uuid or limit <= 0:
+            return []
+
+        collection = self.__mongo_db.collection
+
+        try:
+            # Get position of the base document
+            base_doc = collection.find_one({"UUID": base_uuid})
+            if not base_doc:
+                logger.warning(f"Base UUID not found: {base_uuid}")
+                return []
+
+            # Execute paginated query with stable ordering
+            cursor = collection.find(
+                filter={"TIME": {"$lte": base_doc["TIME"]}},
+                skip=offset,
+                limit=limit
+            ).sort([
+                ("TIME", pymongo.DESCENDING),
+                ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
+            ])
+
+            return [self.process_document(doc) for doc in cursor]
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Pagination query failed: {str(e)}")
+            return []
 
     def query_intelligence(
             self,
             *,
-            period: Optional[Tuple[datetime, datetime]] = None,
+            period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
             locations: Optional[Union[str, List[str]]] = None,
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
-            keywords: Optional[str] = None
+            keywords: Optional[str] = None,
+            limit: Optional[int] = None  # NEW: Added limit parameter
     ) -> List[dict]:
-        """执行智能情报查询
+        """Execute intelligence query
 
-        参数：
-        period: UTC时间范围 (起始时间, 结束时间)
-        locations: 地点标识 (str或str列表)
-        peoples: 人员标识 (str或str列表)
-        organizations: 组织机构标识 (str或str列表)
-        keywords: 关键词全文检索
+        Args:
+            period: UTC time range (start, end)
+            locations: Location ID(s) (str or str list)
+            peoples: Person ID(s) (str or str list)
+            organizations: Organization ID(s) (str or str list)
+            keywords: Full-text keywords
+            limit: Maximum number of results to return (NEW)
 
-        返回：
-        符合条件的情报文档列表
+        Returns:
+            List of matching intelligence documents
         """
-        # 获取指定数据库集合
+        # Get specified database collection
         collection = self.__mongo_db.collection
 
         try:
-            # 构建MongoDB查询
+            # Build MongoDB query
             query = self.build_intelligence_query(
                 period=period,
                 locations=locations,
@@ -87,49 +166,41 @@ class IntelligenceQueryEngine:
                 keywords=keywords
             )
 
-            # 执行查询并转换结果
-            return self.execute_query(collection, query)
+            # Execute query and return results with limit
+            return self.execute_query(collection, query, limit)  # Modified: Added limit argument
 
         except pymongo.errors.PyMongoError as e:
-            logger.error(f"情报查询失败: {str(e)}")
+            logger.error(f"Intelligence query failed: {str(e)}")
             return []
 
     def build_intelligence_query(
             self,
-            period: Optional[Tuple[datetime, datetime]] = None,
+            period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
             locations: Optional[Union[str, List[str]]] = None,
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
             keywords: Optional[str] = None
     ) -> dict:
-        """构建MongoDB查询字典"""
         query_conditions = []
 
-        # 1. 时间范围过滤
         if period:
             query_conditions.append(self.build_time_condition(*period))
 
-        # 2. 地点过滤
         if locations:
             query_conditions.append(self.build_list_condition("LOCATION", locations))
 
-        # 3. 人员过滤
         if peoples:
             query_conditions.append(self.build_list_condition("PEOPLE", peoples))
 
-        # 4. 组织过滤
         if organizations:
             query_conditions.append(self.build_list_condition("ORGANIZATION", organizations))
 
-        # 5. 关键词全文检索
         if keywords:
             query_conditions.append(self.build_keyword_condition(keywords))
 
-        # 组合最终查询条件
         return {"$and": query_conditions} if query_conditions else {}
 
     def process_document(self, doc: dict) -> dict:
-        """标准化处理MongoDB文档"""
         # 转换ObjectId为字符串
         if '_id' in doc:
             doc['_id'] = str(doc['_id'])
@@ -153,8 +224,7 @@ class IntelligenceQueryEngine:
 
         return doc
 
-    def build_time_condition(self, start_time: datetime, end_time: datetime) -> dict:
-        """构建时间范围查询条件"""
+    def build_time_condition(self, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
         # 转换为UTC时间并格式化为ISO字符串
         utc_start = start_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         utc_end = end_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -192,9 +262,17 @@ class IntelligenceQueryEngine:
         # 转义特殊字符并添加边界匹配
         return [r'\b' + re.escape(kw) + r'\b' for kw in keywords]
 
-    def execute_query(self, collection: pymongo.collection.Collection, query: dict) -> List[dict]:
-        """执行查询并处理结果"""
+    def execute_query(
+            self,
+            collection: pymongo.collection.Collection,
+            query: dict,
+            limit: Optional[int] = None  # NEW: Added limit parameter
+    ) -> List[dict]:
+        """Execute query and process results with optional limit"""
         cursor = collection.find(query).sort("TIME", pymongo.DESCENDING)
+
+        if limit is not None and limit > 0:
+            cursor = cursor.limit(limit)
 
         return [self.process_document(doc) for doc in cursor]
 

@@ -276,18 +276,6 @@ class IntelligenceHub:
             logger.error(f"Collection API fail: {str(e)}")
             return IntelligenceHub.Error(False, e, [str(e)])
 
-    # def submit_processed_data(self, data: dict) -> True or Error:
-    #     try:
-    #         validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
-    #         if error_text:
-    #             return IntelligenceHub.Error(False, error_list=[error_text])
-    #         validated_data[APPENDIX_TIME_DONE] = time.time()
-    #
-    #         return True
-    #     except Exception as e:
-    #         logger.error(f"Feedback API error: {str(e)}")
-    #         return IntelligenceHub.Error(False, e, [str(e)])
-
     def submit_archived_data(self, data: dict) -> True or Error:
         try:
             validated_data, error_text = check_sanitize_dict(dict(data), ArchivedData)
@@ -302,6 +290,8 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f"Submit archived data API error: {str(e)}")
             return IntelligenceHub.Error(False, e, [str(e)])
+
+    # ------------------------------------------------------------------------------------------
 
     def get_rssfeed(self) -> str or Error:
         try:
@@ -321,6 +311,7 @@ class IntelligenceHub:
     def query_intelligence(self,
                            *,
                            db: str = 'cache',
+                           top_n:       Optional[int] = 100,
                            period:      Optional[Tuple[datetime.date, datetime.date]] = None,
                            locations:   Optional[List[str]] = None,
                            peoples:     Optional[List[str]] = None,
