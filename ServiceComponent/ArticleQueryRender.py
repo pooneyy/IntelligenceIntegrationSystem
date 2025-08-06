@@ -1,61 +1,11 @@
 import datetime
 from urllib.parse import urlencode
 
-
-def render_results_table(results):
-    if not results:
-        return "<div class='alert alert-info'>No results found</div>"
-
-    # 表头定义（根据实际数据结构调整）
-    headers = ["Document ID", "Title", "Date", "Locations", "People", "Organizations"]
-
-    table = """
-    <div class='table-responsive'>
-    <table class="table table-striped table-hover">
-        <thead class="table-dark">
-            <tr>
-    """
-    # 动态生成表头
-    for header in headers:
-        table += f"<th>{header}</th>"
-    table += """
-            </tr>
-        </thead>
-        <tbody>
-    """
-
-    for doc in results:
-        # 安全获取字段值（适配不同数据结构）
-        doc_id = doc.get('id') or doc.get('_id') or doc.get('doc_id') or ''
-        title = doc.get('title') or doc.get('headline') or doc.get('subject') or ''
-
-        # 处理日期格式
-        date_val = doc.get('date', '')
-        if isinstance(date_val, datetime.datetime):
-            date_val = date_val.strftime("%Y-%m-%d %H:%M")
-
-        # 处理列表类型字段
-        locations = ", ".join(doc.get('locations', [])) or ''
-        peoples = ", ".join(doc.get('peoples', []) or doc.get('people', [])) or ''
-        organizations = ", ".join(doc.get('organizations', []) or doc.get('orgs', [])) or ''
-
-        table += f"""
-            <tr>
-                <td>{doc_id}</td>
-                <td>{title}</td>
-                <td>{date_val}</td>
-                <td>{locations}</td>
-                <td>{peoples}</td>
-                <td>{organizations}</td>
-            </tr>
-        """
-
-    table += "</tbody></table></div>"
-    return table
+from ServiceComponent.ArticleTableRender import generate_articles_table, article_table_style
 
 
 def render_query_page(params, results, total_results):
-    total_pages = max(1, (total_results + params['per_page'] - 1) // params['per_page'])
+    # total_pages = max(1, (total_results + params['per_page'] - 1) // params['per_page'])
 
     return f"""
     <!DOCTYPE html>
@@ -65,6 +15,8 @@ def render_query_page(params, results, total_results):
         <!-- 引入Bootstrap CSS -->
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
+            {article_table_style}
+            
             .card {{ margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
             .form-label {{ font-weight: 500; }}
             .pagination {{ margin-top: 20px; }}
@@ -145,15 +97,34 @@ def render_query_page(params, results, total_results):
                     </form>
                 </div>
             </div>
+            
+            <!-- Results Section -->
+            <div class="results-header">
+                <h3>Query Results</h3>
+                <p class="mb-0">Showing page {params["page"]}, {len(results)} records</p>
+            </div>
 
+            {generate_articles_table(results)}
+
+        </div>
+
+        <!-- 引入Bootstrap JS -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    </body>
+    </html>
+    """
+
+
+
+RECYCLED = """
             <!-- Results Section -->
             <div class="results-header">
                 <h3>Query Results</h3>
                 <p class="mb-0">Showing {len(results)} of {total_results} records</p>
             </div>
-
-            {render_results_table(results)}
-
+            
+            {generate_articles_table(results)}
+            
             <!-- Pagination -->
             <nav aria-label="Page navigation">
                 <ul class="pagination justify-content-center">
@@ -170,10 +141,6 @@ def render_query_page(params, results, total_results):
                     </li>
                 </ul>
             </nav>
-        </div>
+"""
 
-        <!-- 引入Bootstrap JS -->
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    </body>
-    </html>
-    """
+

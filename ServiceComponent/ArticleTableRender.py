@@ -2,6 +2,100 @@ import re
 import html
 
 
+article_table_style = """
+.article-list { 
+    max-width: 1000px; 
+    margin: 0 auto; 
+    background: white;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+.article-list h1 {
+    color: #343a40;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 15px;
+    margin-bottom: 25px;
+}
+.article-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    transition: all 0.3s ease;
+    background: white;
+}
+.article-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 7px 15px rgba(0,0,0,0.1);
+    border-color: #c5cae9;
+}
+.article-title {
+    color: #1a73e8;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.4rem;
+    display: block;
+    margin-bottom: 8px;
+}
+.article-title:hover { 
+    text-decoration: underline; 
+    color: #0d47a1;
+}
+.article-meta {
+    color: #5f6368;
+    font-size: 0.95em;
+    margin: 10px 0;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.article-time {
+    background: #e3f2fd;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+.article-source {
+    color: #4a4a4a;
+}
+.source-link {
+    color: #1565c0;
+    text-decoration: none;
+}
+.source-link:hover {
+    text-decoration: underline;
+}
+.article-summary {
+    color: #202124;
+    line-height: 1.7;
+    margin: 15px 0;
+    font-size: 1.05rem;
+}
+.debug-info {
+    background-color: #f5f5f5;
+    border-left: 3px solid #90a4ae;
+    padding: 10px 15px;
+    margin-top: 15px;
+    font-size: 0.85rem;
+    color: #546e7a;
+    border-radius: 0 4px 4px 0;
+    word-break: break-all;
+}
+.debug-label {
+    font-weight: 600;
+    color: #37474f;
+    margin-right: 5px;
+}
+.debug-link {
+    color: #0288d1;
+    text-decoration: none;
+}
+.debug-link:hover {
+    text-decoration: underline;
+}
+"""
+
+
 def generate_articles_table(articles):
     """
     生成文章列表的HTML部分，可以被多个页面复用

@@ -14,7 +14,7 @@ from GlobalConfig import *
 from MyPythonUtility.ArbitraryRPC import RPCService
 from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.ArticleListRender import default_article_list_render
-from ServiceComponent.ArticleQueryFormRender import render_query_page
+from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
 
