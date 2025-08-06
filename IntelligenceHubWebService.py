@@ -4,15 +4,17 @@ import logging
 from typing import List
 
 import requests
+import datetime
 import threading
 from requests import RequestException
 from werkzeug.serving import make_server
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 
 from GlobalConfig import *
 from MyPythonUtility.ArbitraryRPC import RPCService
 from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.ArticleListRender import default_article_list_render
+from ServiceComponent.ArticleQueryFormRender import render_query_page
 from ServiceComponent.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
 
@@ -212,6 +214,52 @@ class IntelligenceHubWebService:
             except Exception as e:
                 logger.error(f'intelligences_list_api() error: {str(e)}', stack_info=True)
                 return jsonify({"error": "Server error"}), 500
+
+        @self.app.route('/intelligences/query', methods=['GET', 'POST'])
+        def intelligences_query_api():
+            form_data = request.form if request.method == 'POST' else {}
+
+            # Parse form data
+            params = {
+                'start_time': form_data.get('start_time', ''),
+                'end_time': form_data.get('end_time', ''),
+                'locations': form_data.get('locations', ''),
+                'peoples': form_data.get('peoples', ''),
+                'organizations': form_data.get('organizations', ''),
+                'keywords': form_data.get('keywords', ''),
+                'page': int(form_data.get('page', 1)),
+                'per_page': int(form_data.get('per_page', 10))
+            }
+
+            # Convert to query parameters
+            query_params = {}
+            if params['start_time'] and params['end_time']:
+                query_params['period'] = (
+                    datetime.datetime.fromisoformat(params['start_time']),
+                    datetime.datetime.fromisoformat(params['end_time'])
+                )
+
+            for field in ['locations', 'peoples', 'organizations']:
+                if params[field]:
+                    query_params[field] = [x.strip() for x in params[field].split(',')]
+
+            if params['keywords']:
+                query_params['keywords'] = params['keywords']
+
+            # Add pagination
+            skip = (params['page'] - 1) * params['per_page']
+            query_params.update({'skip': skip, 'limit': params['per_page']})
+
+            # Execute query
+            results = []
+            total_results = 1000
+            try:
+                results = self.intelligence_hub.query_intelligence(**query_params)
+            except Exception as e:
+                error = f"Query error: {str(e)}"
+
+            # Render HTML response
+            return render_query_page(params, results, total_results)
 
         @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
         def intelligence_viewer_api(intelligence_uuid: str):

@@ -142,7 +142,8 @@ class IntelligenceQueryEngine:
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
             keywords: Optional[str] = None,
-            limit: Optional[int] = None  # NEW: Added limit parameter
+            skip: Optional[int] = None,
+            limit: Optional[int] = None
     ) -> List[dict]:
         """Execute intelligence query
 
@@ -152,7 +153,8 @@ class IntelligenceQueryEngine:
             peoples: Person ID(s) (str or str list)
             organizations: Organization ID(s) (str or str list)
             keywords: Full-text keywords
-            limit: Maximum number of results to return (NEW)
+            skip: Number of documents to skip
+            limit: Maximum number of results to return
 
         Returns:
             List of matching intelligence documents
@@ -171,7 +173,7 @@ class IntelligenceQueryEngine:
             )
 
             # Execute query and return results with limit
-            return self.execute_query(collection, query, limit)  # Modified: Added limit argument
+            return self.execute_query(collection, query, skip=skip, limit=limit)
 
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Intelligence query failed: {str(e)}")
@@ -285,23 +287,37 @@ class IntelligenceQueryEngine:
             self,
             collection: pymongo.collection.Collection,
             query: dict,
-            limit: Optional[int] = None  # NEW: Added limit parameter
+            skip: Optional[int] = None,
+            limit: Optional[int] = None
     ) -> List[dict]:
-        """Execute query and process results with optional limit"""
-        cursor = collection.find(query).sort("TIME", pymongo.DESCENDING)
+        """Execute query and process results with pagination support
 
-        if limit is not None and limit > 0:
-            cursor = cursor.limit(limit)
+        Args:
+            collection: MongoDB collection to query
+            query: MongoDB query dictionary
+            skip: Number of documents to skip (for pagination)
+            limit: Maximum number of documents to return
 
-        return [self.process_document(doc) for doc in cursor]
+        Returns:
+            List of processed documents matching the query
+        """
+        try:
+            # Apply sorting by TIME field in descending order
+            cursor = collection.find(query).sort("TIME", pymongo.DESCENDING)
 
-    def process_document(self, doc: dict) -> dict:
-        """处理MongoDB文档"""
-        # 转换ObjectId为字符串
-        doc['_id'] = str(doc['_id'])
+            # Apply pagination parameters if provided
+            if skip is not None and skip > 0:
+                cursor = cursor.skip(skip)  # Skip documents for pagination [6,7](@ref)
 
-        # 确保关键字段存在
-        for field in ['RATE', 'IMPACT', 'TIPS']:
-            doc.setdefault(field, None)
+            if limit is not None and limit > 0:
+                cursor = cursor.limit(limit)  # Limit result size [6](@ref)
 
-        return doc
+            # Process and return results
+            return [self.process_document(doc) for doc in cursor]
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"MongoDB query execution failed: {str(e)}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error during query execution: {str(e)}", stack_info=True)
+            return []
