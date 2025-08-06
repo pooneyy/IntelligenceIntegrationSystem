@@ -311,17 +311,27 @@ class IntelligenceHub:
     def query_intelligence(self,
                            *,
                            db: str = 'cache',
-                           top_n:       Optional[int] = 100,
                            period:      Optional[Tuple[datetime.date, datetime.date]] = None,
                            locations:   Optional[List[str]] = None,
                            peoples:     Optional[List[str]] = None,
                            organizations: Optional[List[str]] = None,
-                           keywords: Optional[str] = None
+                           keywords: Optional[str] = None,
+                           limit: int = 100,
                            ) -> List[dict]:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result = query_engine.query_intelligence(
             period = period, locations = locations, peoples = peoples,
-            organizations = organizations, keywords = keywords)
+            organizations = organizations, keywords = keywords, limit=limit)
+        return result
+
+    def get_intelligence_summary(self) -> Tuple[int, str]:
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        summary = query_engine.get_intelligence_summary()
+        return summary["total_count"], summary["base_uuid"]
+
+    def get_paginated_intelligences(self, base_uuid: str, offset: int, limit: int) -> List[dict]:
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        result = query_engine.get_paginated_intelligences(base_uuid, offset, limit)
         return result
 
     # ---------------------------------------------------- Workers -----------------------------------------------------
