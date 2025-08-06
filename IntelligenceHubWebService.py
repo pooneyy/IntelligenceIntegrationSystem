@@ -52,7 +52,7 @@ def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> di
     :param timeout: Timeout in second
     :return: Requests response or {'status': 'error', 'reason': 'error description'}
     """
-    if 'UUID' not in data:
+    if not data.get('UUID', ''):
         data['UUID'] = str(uuid.uuid4())
         logger.info(f"Generated new UUID: {data['UUID']}")
     validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
@@ -147,6 +147,9 @@ class IntelligenceHubWebService:
         def collect_api():
             try:
                 data = dict(request.json)
+                if not data.get('UUID', ''):
+                    raise ValueError('Invalid UUID.')
+
                 if self.access_manager.check_collector_token(data.get('token', '')):
                     result = self.intelligence_hub.submit_collected_data(data)
                     response = 'queued' if result else 'error',

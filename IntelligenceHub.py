@@ -269,7 +269,9 @@ class IntelligenceHub:
 
             self._cache_original_data(validated_data)
 
+            del validated_data['token']
             validated_data[APPENDIX_TIME_GOT] = time.time()
+
             self.original_queue.put(validated_data)
 
             return True
