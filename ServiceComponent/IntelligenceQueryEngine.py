@@ -172,6 +172,10 @@ class IntelligenceQueryEngine:
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Intelligence query failed: {str(e)}")
             return []
+        except Exception as e:
+            logger.error(f"Intelligence query error: {str(e)}", stack_info=True)
+            return []
+
 
     def build_intelligence_query(
             self,
@@ -196,7 +200,7 @@ class IntelligenceQueryEngine:
             query_conditions.append(self.build_list_condition("ORGANIZATION", organizations))
 
         if keywords:
-            query_conditions.append(self.build_keyword_condition(keywords))
+            query_conditions.append(self.build_keyword_or_condition(keywords))
 
         return {"$and": query_conditions} if query_conditions else {}
 
@@ -236,23 +240,34 @@ class IntelligenceQueryEngine:
         target_list = [values] if isinstance(values, str) else values
         return {field: {"$in": target_list}}
 
-    def build_keyword_condition(self, keywords: str) -> dict:
-        """构建全文检索查询条件"""
-        # 清洗并分割关键词
+    def build_keyword_or_condition(self, keywords: str) -> dict:
         cleaned_keywords = self.sanitize_keywords(keywords)
+        # 平铺所有字段条件（无需二维列表）
+        conditions = []
+        for kw in cleaned_keywords:
+            conditions.append({"EVENT_BRIEF": {"$regex": kw, "$options": "i"}})
+            conditions.append({"EVENT_TEXT": {"$regex": kw, "$options": "i"}})
+        return {"$or": conditions}  # 匹配任一条件
 
-        # 为关键字段创建正则表达式条件
-        regex_conditions = [
-            condition
-            for kw_pattern in cleaned_keywords
-            for condition in [
-                {"EVENT_BRIEF": {"$regex": kw_pattern, "$options": "i"}},
-                {"EVENT_TEXT": {"$regex": kw_pattern, "$options": "i"}}
-            ]
-        ]
+    def build_keyword_and_condition(self, keywords: str) -> dict:
+        """构建全文检索查询条件（同时匹配所有关键词）"""
+        cleaned_keywords = self.sanitize_keywords(keywords)
+        if not cleaned_keywords:
+            return {}
 
-        # 使用逻辑OR组合所有关键词条件
-        return {"$or": [condition for sublist in regex_conditions for condition in sublist]}
+        conditions = []
+        for kw in cleaned_keywords:
+            # 每个关键词在任意字段出现即可（字段间OR）
+            kw_condition = {
+                "$or": [
+                    {"EVENT_BRIEF": {"$regex": kw, "$options": "i"}},
+                    {"EVENT_TEXT": {"$regex": kw, "$options": "i"}}
+                ]
+            }
+            conditions.append(kw_condition)  # 每个关键词独立条件组
+
+        # 用AND组合所有关键词条件
+        return {"$and": conditions}
 
     def sanitize_keywords(self, keywords: str) -> List[str]:
         """清洗并优化关键词"""

@@ -335,20 +335,20 @@ class IntelligenceHub:
 
         while not self.shutdown_flag.is_set():
             try:
-                data = self.original_queue.get(block=True)
-                if not data:
+                original_data = self.original_queue.get(block=True)
+                if not original_data:
                     self.original_queue.task_done()
                     continue
             except queue.Empty:
                 continue
             try:
-                self._notice_data_in_processing(data)
+                self._notice_data_in_processing(original_data)
 
                 retry = 0
                 result = None
                 # Add retry to get correct answer from AI
                 while retry < ai_process_max_retry and not self.shutdown_flag.is_set():
-                    result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, data)
+                    result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, original_data)
                     if 'error' not in result:
                         break
                     retry += 1
@@ -365,13 +365,15 @@ class IntelligenceHub:
 
                 validated_data = self._validate_sanitize_processed_data(result)
 
-                if validated_data:
-                    validated_data[APPENDIX_TIME_DONE] = time.time()
-                    self.processed_queue.put(validated_data)
+                validated_data['RAW_DATA'] = original_data
+                validated_data['SUBMITTER'] = 'Analysis Thread'
+
+                self.submit_archived_data(validated_data)
+
             except Exception as e:
                 logger.error(f"AI process error: {str(e)}")
             finally:
-                self._notice_data_quit_processing(data)
+                self._notice_data_quit_processing(original_data)
 
     def _post_process_worker(self):
         while not self.shutdown_flag.is_set():
@@ -492,7 +494,6 @@ class IntelligenceHub:
                 with self.lock:
                     self.drop_counter += 1
                 return None
-            validated_data['ARCHIVE_TIME'] = datetime.datetime.now(datetime.timezone.utc)
             return validated_data
         except Exception as e:
             logger.error(f"Check processed data got exception: {str(e)}")

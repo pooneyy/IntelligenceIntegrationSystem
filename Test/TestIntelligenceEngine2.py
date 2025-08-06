@@ -107,7 +107,7 @@ def test_get_paginated_intelligences(engine, base_uuid):
 def main():
     """主测试函数"""
     # 初始化数据库连接
-    db = MongoDBStorage()
+    db = MongoDBStorage(db_name = 'test_db',)
     engine = IntelligenceQueryEngine(db)
 
     # 填充测试数据
