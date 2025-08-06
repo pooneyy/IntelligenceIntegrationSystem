@@ -1,13 +1,18 @@
-import json
 import os
-import faiss
-import pickle
+import json
 import logging
 import threading
 import traceback
-
 import numpy as np
-from sentence_transformers import SentenceTransformer
+
+try:
+    import faiss
+    from sentence_transformers import SentenceTransformer
+except Exception as e:
+    faiss = None
+    SentenceTransformer = None
+    print('No vector related library. Vector indexing is invalid.')
+    print(str(e))
 
 
 logger = logging.getLogger(__name__)
@@ -54,7 +59,8 @@ class VectorDatabase:
         os.makedirs(self.save_path, exist_ok=True)
 
         self.lock = threading.RLock()
-        faiss.omp_set_num_threads(4)
+        if faiss:
+            faiss.omp_set_num_threads(4)
         self.n_probe = n_probe
         self.nlist = nlist
 
@@ -73,8 +79,9 @@ class VectorDatabase:
         self.load()
 
     def _init_index(self):
-        quantizer = faiss.IndexFlatL2(self.dimension)
-        self.index = faiss.IndexIVFFlat(quantizer, self.dimension, self.nlist)
+        if faiss:
+            quantizer = faiss.IndexFlatL2(self.dimension)
+            self.index = faiss.IndexIVFFlat(quantizer, self.dimension, self.nlist)
 
     def _train_index(self, vectors):
         if self._require_training:

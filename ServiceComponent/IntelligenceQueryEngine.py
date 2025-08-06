@@ -92,42 +92,46 @@ class IntelligenceQueryEngine:
 
     def get_paginated_intelligences(self, base_uuid: str, offset: int, limit: int) -> List[dict]:
         """
-        Retrieve paginated intelligence using stable base UUID
+        Retrieve paginated intelligence with stable ordering
 
         Args:
-            base_uuid: Reference UUID for stable pagination anchor
+            base_uuid: Reference UUID for stable pagination anchor (None for start)
             offset: Number of documents to skip from the base
             limit: Maximum number of documents to return
 
         Returns:
             List of processed intelligence documents
         """
-        if not base_uuid or limit <= 0:
+        if limit <= 0:
             return []
 
         collection = self.__mongo_db.collection
+        sort_order = [
+            ("TIME", pymongo.DESCENDING),
+            ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
+        ]
 
         try:
-            # Get position of the base document
-            base_doc = collection.find_one({"UUID": base_uuid})
-            if not base_doc:
-                logger.warning(f"Base UUID not found: {base_uuid}")
-                return []
+            if base_uuid:
+                base_doc = collection.find_one({"UUID": base_uuid})
+                if not base_doc:
+                    logger.warning(f"Base UUID not found: {base_uuid}")
+                    return []
 
-            # Execute paginated query with stable ordering
-            cursor = collection.find(
-                filter={"TIME": {"$lte": base_doc["TIME"]}},
-                skip=offset,
-                limit=limit
-            ).sort([
-                ("TIME", pymongo.DESCENDING),
-                ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
-            ])
+                cursor = collection.find(
+                    filter={"TIME": {"$lte": base_doc["TIME"]}}
+                ).sort(sort_order).skip(offset).limit(limit)
+            else:
+                cursor = collection.find().sort(sort_order).skip(offset).limit(limit)
 
             return [self.process_document(doc) for doc in cursor]
 
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Pagination query failed: {str(e)}")
+            return []
+
+        except Exception as e:
+            logger.error(f"Exception on query: {str(e)}")
             return []
 
     def query_intelligence(

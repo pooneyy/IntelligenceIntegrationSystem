@@ -12,7 +12,8 @@ from flask import Flask, request, jsonify
 from GlobalConfig import *
 from MyPythonUtility.ArbitraryRPC import RPCService
 from MyPythonUtility.DictTools import check_sanitize_dict
-from Tools.ArticleRender import default_article_render
+from ServiceComponent.ArticleListRender import default_article_list_render
+from ServiceComponent.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
 
 logger = logging.getLogger(__name__)
@@ -187,14 +188,42 @@ class IntelligenceHubWebService:
                 logger.error(f'rssfeed_api() error: {str(e)}', stack_info=True)
                 return 'Error'
 
-        @self.app.route('/intelligence/<intelligence_uuid>', methods=['GET'])
-        def intelligence_viewer_api(intelligence_uuid: str):
-            intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)
+        @self.app.route('/intelligences', methods=['GET'])
+        def intelligences_list_api():
             try:
-                return default_article_render(intelligence)
+                offset = request.args.get('offset', default=0, type=int)
+                count = request.args.get('count', default=10, type=int)
+
+                if count > 100:
+                    count = 100
+
+                total_count, _ = self.intelligence_hub.get_intelligence_summary()
+
+                if offset < total_count:
+                    intelligences = self.intelligence_hub.get_paginated_intelligences(
+                        base_uuid=None,
+                        offset=offset,
+                        limit=count
+                    )
+                    return default_article_list_render(intelligences, offset, count, total_count)
+                else:
+                    return default_article_list_render([], offset, count, total_count)
+
+            except Exception as e:
+                logger.error(f'intelligences_list_api() error: {str(e)}', stack_info=True)
+                return jsonify({"error": "Server error"}), 500
+
+        @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
+        def intelligence_viewer_api(intelligence_uuid: str):
+            try:
+                intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)
+                if intelligence:
+                    return default_article_render(intelligence)
+                else:
+                    return jsonify({"error": "Intelligence not found"}), 404
             except Exception as e:
                 logger.error(f'intelligence_viewer_api() error: {str(e)}', stack_info=True)
-                return 'Error'
+                return jsonify({"error": "Server error"}), 500
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 

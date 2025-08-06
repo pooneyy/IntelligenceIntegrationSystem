@@ -1027,8 +1027,29 @@ query_intelligence增加条数限制参数
 
 分析以下代码，增加几个函数，注意增加的函数注释及文本需要使用英文，下面提供的函数名仅供参考，请根据语义取更合适的名字：
 
-get_intelligence_cout_and_base: 获取当前所有的条目数据，同时返回首条索引，作为base
+get_intelligence_count_and_base: 获取当前所有的条目数据，同时返回首条索引，作为base
 get_intelligence_by_base_offset: 将base，offset，count传入，获取以base为基准，offset后的count条数据（用做数据浏览，指定base以免新增条目引起跳动）
+
+
+
+
+
+
+
+使用python写一个函数 default_article_list_render() ，传入下面这样的dict列表，dict内容描述如下。要求：
+1. 将列表内容组织为易于阅读且美观的HTML，便于用户浏览。其中使用的css最好是网上通用的在线格式。
+2. 标题显示超链接，格式为：'/intelligence/<string:intelligence_uuid>'。暂时使用相对路径url，点击在新页面打开该url。
+3. 下方显示翻页按钮，当前页面的参数为“/intelligences?offset=100,count=20”，则上一页的url为“/intelligences?offset=80,count=20”，下一页为“/intelligences?offset=120,count=20”，以此类推。尽可能使用简单的方法实现这一功能。
+4. 返回HTML，可以带有简单的样式表和脚本，不得过于复杂。
+5. 注意该功能不使用前后端，如描述所示，所有页面由服务器生成。
+
+{
+  "UUID": "将输入的UUID原封不动地放在这里",
+  "INFORMANT": "如果输入包含URL，则将输入的URL放在这里，否则查找来源信息，如果没有相关信息，则为空"
+  "TIME": "YYYY-MM-DD格式，无则null",,
+  "EVENT_TITLE": "20字内描述核心内容的标题",
+  "EVENT_BRIEF": "50字内描述核心事实",
+}
 
 
 

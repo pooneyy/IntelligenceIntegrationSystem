@@ -329,7 +329,7 @@ class IntelligenceHub:
         summary = query_engine.get_intelligence_summary()
         return summary["total_count"], summary["base_uuid"]
 
-    def get_paginated_intelligences(self, base_uuid: str, offset: int, limit: int) -> List[dict]:
+    def get_paginated_intelligences(self, base_uuid: Optional[str], offset: int, limit: int) -> List[dict]:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result = query_engine.get_paginated_intelligences(base_uuid, offset, limit)
         return result
