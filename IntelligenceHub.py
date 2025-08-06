@@ -148,7 +148,8 @@ class IntelligenceHub:
     # ----------------------------------------------------- Setups -----------------------------------------------------
 
     def _load_vector_db(self):
-        self.vector_db_idx.load()
+        if self.vector_db_idx:
+            self.vector_db_idx.load()
 
     def _load_unarchived_data(self):
         """Load unarchived data into a queue."""
@@ -451,9 +452,10 @@ class IntelligenceHub:
                 del self.processing_table[uuid_str]
 
     def _index_archived_data(self, data: dict):
-        self.vector_db_idx.add_text(data['UUID'], data['EVENT_TEXT'])
-        # TODO: Decrease save frequency.
-        self.vector_db_idx.save()
+        if self.vector_db_idx:
+            self.vector_db_idx.add_text(data['UUID'], data['EVENT_TEXT'])
+            # TODO: Decrease save frequency.
+            self.vector_db_idx.save()
 
     def _cache_original_data(self, data: dict):
         try:

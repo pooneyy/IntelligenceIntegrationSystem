@@ -34,7 +34,7 @@ def main():
     hub = IntelligenceHub(
         ref_url=ref_host_url,
 
-        db_vector=VectorDatabase('IntelligenceIndex'),
+        # db_vector=VectorDatabase('IntelligenceIndex'),
 
         db_cache=MongoDBStorage(
             host=mongodb_host,
