@@ -41,7 +41,7 @@ class CollectedData(BaseModel):
 
 class ProcessedData(BaseModel):
     UUID: str
-    INFORMANT: str | None = None
+    INFORMANT: str
     TIME: str | None = None
     LOCATION: list | None = None
     PEOPLE: list | None = None
@@ -421,7 +421,7 @@ class IntelligenceHub:
                 # According to the prompt (ANALYSIS_PROMPT),
                 #   if the article does not have any value, just "UUID" is returned.
                 if 'EVENT_TEXT' not in data:
-                    logger.info(f"Message {data['UUID']} not archived.")
+                    logger.info(f"Message {data['UUID']} dropped.")
                     self._mark_cache_data_archived_flag(data['UUID'], 'F')
                     self.drop_counter += 1
                     self.processed_queue.task_done()
@@ -435,9 +435,25 @@ class IntelligenceHub:
                     self.processed_queue.task_done()
                     continue
 
-                # TODO: Check uuid and informant duplication
+                _uuid = validated_data['UUID']
+                informant = validated_data['INFORMANT']
 
+                if not informant:
+                    logger.info(f"Message {data['UUID']} dropped because has no informant.")
+                    continue
 
+                query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+                exists_record = query_engine.common_query(
+                    conditions = {
+                        'UUID': _uuid,
+                        'INFORMANT': informant
+                    },
+                    operator = "or"
+                )
+
+                if exists_record:
+                    logger.info(f"Duplicated message {data['UUID']} dropped.")
+                    continue
 
                 try:
                     self._archive_processed_data(validated_data)

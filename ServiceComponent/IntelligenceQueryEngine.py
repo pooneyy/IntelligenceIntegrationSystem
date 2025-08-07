@@ -209,7 +209,7 @@ class IntelligenceQueryEngine:
 
         return {"$and": query_conditions} if query_conditions else {}
 
-    def dynamic_query(
+    def common_query(
             self,
             *,
             conditions: Dict[str, Any],
@@ -248,7 +248,7 @@ class IntelligenceQueryEngine:
         collection = self.__mongo_db.collection
 
         try:
-            query = self.build_dynamic_conditions(conditions, operator)
+            query = self.build_common_conditions(conditions, operator)
             return self.execute_query(collection, query, skip=skip, limit=limit)
 
         except pymongo.errors.PyMongoError as e:
@@ -262,7 +262,7 @@ class IntelligenceQueryEngine:
             return []
 
     @staticmethod
-    def build_dynamic_conditions(conditions: Dict[str, Any], operator: str = "$and") -> dict:
+    def build_common_conditions(conditions: Dict[str, Any], operator: str = "$and") -> dict:
         """
         Construct MongoDB query conditions from dynamic field specifications.
 
