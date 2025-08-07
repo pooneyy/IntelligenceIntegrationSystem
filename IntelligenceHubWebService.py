@@ -100,14 +100,14 @@ class WebServiceAccessManager:
         # TODO: Credential management
         return 1 if username == 'sleepy' and password == 'SleepySoft' else None
 
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session or not session['logged_in']:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+    @staticmethod
+    def login_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'logged_in' not in session or not session['logged_in']:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
 
 
 class IntelligenceHubWebService:
@@ -153,6 +153,8 @@ class IntelligenceHubWebService:
 
     def _setup_apis(self):
 
+        # -------------------------------------------------- Security --------------------------------------------------
+
         @self.app.before_request
         def refresh_session():
             session.modified = True
@@ -176,13 +178,15 @@ class IntelligenceHubWebService:
             return render_template('login.html')
 
         @self.app.route('/logout')
-        @login_required
+        @WebServiceAccessManager.login_required
         def logout():
             session.clear()
             return redirect(url_for('login'))
 
+        # -------------------------------------------- API and Open Service --------------------------------------------
+
         @self.app.route('/api', methods=['POST'])
-        @login_required
+        @WebServiceAccessManager.login_required
         def rpc_api():
             try:
                 response = self.rpc_service.handle_flask_request(request)
@@ -215,8 +219,10 @@ class IntelligenceHubWebService:
                 logger.error(f'collect_api() fail: {str(e)}')
                 return jsonify({'resp': 'error', 'uuid': ''})
 
+        # ---------------------------------------------------- Pages ---------------------------------------------------
+
         @self.app.route('/rssfeed.xml', methods=['GET'])
-        @login_required
+        @WebServiceAccessManager.login_required
         def rssfeed_api():
             try:
                 feed_xml = self.intelligence_hub.get_rssfeed()
@@ -226,7 +232,7 @@ class IntelligenceHubWebService:
                 return 'Error'
 
         @self.app.route('/intelligences', methods=['GET'])
-        @login_required
+        @WebServiceAccessManager.login_required
         def intelligences_list_api():
             try:
                 offset = request.args.get('offset', default=0, type=int)
@@ -252,7 +258,7 @@ class IntelligenceHubWebService:
                 return jsonify({"error": "Server error"}), 500
 
         @self.app.route('/intelligences/query', methods=['GET', 'POST'])
-        @login_required
+        @WebServiceAccessManager.login_required
         def intelligences_query_api():
             form_data = request.form if request.method == 'POST' else {}
 
@@ -299,7 +305,7 @@ class IntelligenceHubWebService:
             return render_query_page(params, results, total_results)
 
         @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
-        @login_required
+        @WebServiceAccessManager.login_required
         def intelligence_viewer_api(intelligence_uuid: str):
             try:
                 intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)

@@ -3,7 +3,7 @@ import pytz  # Time zone handling
 import logging
 import pymongo
 import datetime
-from typing import Optional, List, Tuple, Union, Dict
+from typing import Optional, List, Tuple, Union, Dict, Any
 
 from Tools.MongoDBAccess import MongoDBStorage
 
@@ -182,7 +182,6 @@ class IntelligenceQueryEngine:
             logger.error(f"Intelligence query error: {str(e)}", stack_info=True)
             return []
 
-
     def build_intelligence_query(
             self,
             period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
@@ -209,6 +208,113 @@ class IntelligenceQueryEngine:
             query_conditions.append(self.build_keyword_or_condition(keywords))
 
         return {"$and": query_conditions} if query_conditions else {}
+
+    def dynamic_query(
+            self,
+            *,
+            conditions: Dict[str, Any],
+            operator: str = "$and",
+            skip: Optional[int] = None,
+            limit: Optional[int] = None
+    ) -> List[dict]:
+        """
+        Execute a dynamic query on the intelligence collection using flexible field conditions.
+
+        This function constructs and executes a MongoDB query based on arbitrary field specifications,
+        supporting nested fields (using dot notation) and multiple logical operators. It handles both
+        simple equality checks and complex conditions (e.g., range queries, existence checks) dynamically.
+
+        Args:
+            conditions: A dictionary mapping field paths to query conditions.
+                - Keys can be top-level fields (e.g., "status") or nested paths (e.g., "meta.author.organization").
+                - Values can be direct values (implicit equality check) or operator dictionaries (e.g.,
+                  {"$gte": 10}, {"$in": ["A", "B"]}, {"$exists": True}).
+            operator: Logical operator to combine conditions ("$and" or "$or"). Defaults to "$and".
+            skip: Number of documents to skip (for pagination).
+            limit: Maximum number of documents to return.
+
+        Returns:
+            List[dict]: Matching documents from the collection. Returns empty list on query errors.
+
+        Example:
+            conditions = {
+                "status": "active",
+                "confidence": {"$gte": 0.7},
+                "entities.locations": {"$in": ["Beijing", "Shanghai"]},
+                "timestamp": {"$exists": True}
+            }
+            results = dynamic_query(conditions=conditions, operator="$and", skip=0, limit=10)
+        """
+        collection = self.__mongo_db.collection
+
+        try:
+            query = self.build_dynamic_conditions(conditions, operator)
+            return self.execute_query(collection, query, skip=skip, limit=limit)
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Dynamic query failed: {str(e)}")
+            return []
+        except ValueError as e:
+            logger.error(f"Invalid operator: {str(e)}")
+            return []
+        except Exception as e:
+            logger.error(f"Dynamic query error: {str(e)}", stack_info=True)
+            return []
+
+    @staticmethod
+    def build_dynamic_conditions(conditions: Dict[str, Any], operator: str = "$and") -> dict:
+        """
+        Construct MongoDB query conditions from dynamic field specifications.
+
+        Transforms a dictionary of field-based conditions into a valid MongoDB query. Supports:
+        - Nested field resolution using dot notation (e.g., "meta.location.city" → nested document query)
+        - Explicit operator syntax (e.g., {"$gt": 100})
+        - Logical combination of conditions via "$and" or "$or"
+
+        Args:
+            conditions: Dictionary of field paths to conditions.
+                Each key-value pair generates a condition clause.
+            operator: Logical operator ("$and" or "$or") to combine conditions.
+                Raises ValueError for invalid operators.
+
+        Returns:
+            dict: Valid MongoDB query document. Returns empty dict if no conditions provided.
+
+        Raises:
+            ValueError: If operator is not "$and" or "$or".
+
+        Example output for conditions {"a": 1, "b.c": {"$lt": 5}}:
+            {"$and": [{"a": 1}, {"b.c": {"$lt": 5}}]}
+
+        Notes:
+            - Single-condition inputs return directly without logical operator wrapping.
+            - Dot-notated fields are expanded into nested documents (e.g., "x.y.z" → {"x": {"y": {"z": value}}}).
+        """
+        if operator not in ["$and", "$or"]:
+            raise ValueError("Operator must be '$and' or '$or'")
+
+        # 处理嵌套字段和操作符
+        condition_list = []
+        for field_path, condition in conditions.items():
+            # 处理嵌套字段（使用MongoDB的点表示法）
+            if "." in field_path:
+                field_parts = field_path.split(".")
+                # 构建嵌套查询条件
+                nested_cond = {f"{field_parts[-1]}": condition}
+                for part in reversed(field_parts[:-1]):
+                    nested_cond = {part: nested_cond}
+                condition_list.append(nested_cond)
+            else:
+                # 直接字段查询
+                condition_list.append({field_path: condition})
+
+        # 组合所有条件
+        if not condition_list:
+            return {}  # 无任何条件
+        elif len(condition_list) == 1:
+            return condition_list[0]  # 单一条件无需运算符
+        else:
+            return {operator: condition_list}
 
     def process_document(self, doc: dict) -> dict:
         # 转换ObjectId为字符串
@@ -321,3 +427,88 @@ class IntelligenceQueryEngine:
         except Exception as e:
             logger.error(f"Unexpected error during query execution: {str(e)}", stack_info=True)
             return []
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def test_build_dynamic_conditions():
+    """Test the build_dynamic_conditions function using assert statements."""
+    # 1. 空条件测试
+    result = IntelligenceQueryEngine.build_dynamic_conditions({})
+    assert result == {}, "空条件应返回空字典"
+
+    # 2. 单一条件测试
+    result = IntelligenceQueryEngine.build_dynamic_conditions({"status": "active"})
+    assert result == {"status": "active"}, "单一条件应直接返回该条件"
+
+    # 3. 多条件AND测试
+    result = IntelligenceQueryEngine.build_dynamic_conditions(
+        {"status": "active", "rating": {"$gte": 4}},
+        operator="$and"
+    )
+    expected = {"$and": [{"status": "active"}, {"rating": {"$gte": 4}}]}
+    assert result == expected, "多条件AND组合错误"
+
+    # 4. 多条件OR测试
+    result = IntelligenceQueryEngine.build_dynamic_conditions(
+        {"status": "pending", "priority": "high"},
+        operator="$or"
+    )
+    expected = {"$or": [{"status": "pending"}, {"priority": "high"}]}
+    assert result == expected, "多条件OR组合错误"
+
+    # 5. 嵌套字段测试
+    result = IntelligenceQueryEngine.build_dynamic_conditions({"author.name": "John"})
+    assert result == {"author": {"name": "John"}}, "嵌套字段转换错误"
+
+    # 6. 混合嵌套与普通字段
+    result = IntelligenceQueryEngine.build_dynamic_conditions({
+        "meta.version": 2,
+        "tags": {"$in": ["urgent"]}
+    })
+    expected = {
+        "$and": [
+            {"meta": {"version": 2}},
+            {"tags": {"$in": ["urgent"]}}
+        ]
+    }
+    assert result == expected, "混合字段处理错误"
+
+    # 7. 复杂操作符测试
+    result = IntelligenceQueryEngine.build_dynamic_conditions({
+        "timestamp": {"$gte": "2025-01-01", "$lte": "2025-12-31"},
+        "deleted": {"$exists": False}
+    })
+    expected = {
+        "$and": [
+            {"timestamp": {"$gte": "2025-01-01", "$lte": "2025-12-31"}},
+            {"deleted": {"$exists": False}}
+        ]
+    }
+    assert result == expected, "复杂操作符处理错误"
+
+    # 8. 无效操作符测试
+    try:
+        IntelligenceQueryEngine.build_dynamic_conditions({"status": "active"}, operator="$invalid")
+        assert False, "无效操作符应触发ValueError"
+    except ValueError as e:
+        assert str(e) == "Operator must be '$and' or '$or'", "异常消息不匹配"
+
+    # 9. 边界值测试
+    # 9.1 空字符串字段名
+    result = IntelligenceQueryEngine.build_dynamic_conditions({"": "value"})
+    assert result == {"": "value"}, "空字符串字段名处理错误"
+
+    # 9.2 None值条件
+    result = IntelligenceQueryEngine.build_dynamic_conditions({"archived": None})
+    assert result == {"archived": None}, "None值条件处理错误"
+
+    print("✅ 所有测试通过")
+
+
+def main():
+    test_build_dynamic_conditions()
+
+
+if __name__ == '__main__':
+    main()

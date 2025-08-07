@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import List, Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
+from Tools.DateTimeUtility import time_str_to_datetime
 from prompts import ANALYSIS_PROMPT
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
@@ -259,7 +260,7 @@ class IntelligenceHub:
 
     # ------------------------------------------------ Public Functions ------------------------------------------------
 
-    # ---------------------------------------- Web API ----------------------------------------
+    # --------------------------------------- Data Submission ---------------------------------------
 
     def submit_collected_data(self, data: dict) -> True or Error:
         try:
@@ -285,16 +286,28 @@ class IntelligenceHub:
             if error_text:
                 return IntelligenceHub.Error(False, error_list=[error_text])
 
-            if validated_data:
-                validated_data[APPENDIX_TIME_ARCHIVED] = time.time()
-                self.processed_queue.put(validated_data)
+            if not validated_data:
+                return IntelligenceHub.Error(False, error_list=['Empty data'])
+
+            ts = datetime.datetime.now()
+            article_time = validated_data.get('TIME', None)
+
+            if article_time and isinstance(article_time, str):
+                article_time = time_str_to_datetime(article_time)
+            if not isinstance(article_time, datetime.datetime) or article_time > ts:
+                article_time = ts
+
+            validated_data['TIME'] = article_time
+            validated_data[APPENDIX_TIME_ARCHIVED] = ts
+
+            self.processed_queue.put(validated_data)
 
             return True
         except Exception as e:
             logger.error(f"Submit archived data API error: {str(e)}")
             return IntelligenceHub.Error(False, e, [str(e)])
 
-    # ------------------------------------------------------------------------------------------
+    # -------------------------------------- Gets and Queries --------------------------------------
 
     def get_rssfeed(self) -> str or Error:
         try:
@@ -313,7 +326,7 @@ class IntelligenceHub:
 
     def query_intelligence(self,
                            *,
-                           db: str = 'cache',
+                           db: str = 'archive',
                            period:      Optional[Tuple[datetime.date, datetime.date]] = None,
                            locations:   Optional[List[str]] = None,
                            peoples:     Optional[List[str]] = None,
@@ -322,7 +335,10 @@ class IntelligenceHub:
                            skip: Optional[str] = None,
                            limit: int = 100,
                            ) -> List[dict]:
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        if db == 'cache':
+            query_engine = IntelligenceQueryEngine(self.mongo_db_cache)
+        else:
+            query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result = query_engine.query_intelligence(
             period = period, locations = locations, peoples = peoples,
             organizations = organizations, keywords = keywords, skip=skip, limit=limit)
@@ -334,6 +350,7 @@ class IntelligenceHub:
         return summary["total_count"], summary["base_uuid"]
 
     def get_paginated_intelligences(self, base_uuid: Optional[str], offset: int, limit: int) -> List[dict]:
+        # TODO: Combine with query_intelligence()
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result = query_engine.get_paginated_intelligences(base_uuid, offset, limit)
         return result
@@ -417,6 +434,10 @@ class IntelligenceHub:
                     self.error_counter += 1
                     self.processed_queue.task_done()
                     continue
+
+                # TODO: Check uuid and informant duplication
+
+
 
                 try:
                     self._archive_processed_data(validated_data)
