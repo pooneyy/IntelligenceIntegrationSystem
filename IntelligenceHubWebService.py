@@ -1,6 +1,7 @@
 import traceback
 import uuid
 import logging
+from functools import wraps
 from typing import List
 
 import requests
@@ -8,7 +9,7 @@ import datetime
 import threading
 from requests import RequestException
 from werkzeug.serving import make_server
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template
 
 from GlobalConfig import *
 from MyPythonUtility.ArbitraryRPC import RPCService
@@ -95,6 +96,19 @@ class WebServiceAccessManager:
     def check_processor_token(self, token: str) -> bool:
         return (not self.deny_on_empty_config) if not self.rpc_api_tokens else (token in self.processor_tokens)
 
+    def check_user_credential(self, username: str, password: str) -> int or None:
+        # TODO: Credential management
+        return 1 if username == 'sleepy' and password == 'SleepySoft' else None
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session or not session['logged_in']:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 class IntelligenceHubWebService:
     def __init__(self, *,
@@ -113,6 +127,13 @@ class IntelligenceHubWebService:
         # ---------------- Web Service ----------------
 
         self.app = Flask(__name__)
+        self.app.secret_key = str(uuid.uuid4())
+        self.app.permanent_session_lifetime = datetime.timedelta(days=7)
+        self.app.config.update(
+            # SESSION_COOKIE_SECURE=True,  # 仅通过HTTPS发送（生产环境必须）
+            SESSION_COOKIE_HTTPONLY=True,  # 防止JavaScript访问（安全）
+            SESSION_COOKIE_SAMESITE='Lax'  # 防止CSRF攻击
+        )
         self._setup_apis()
         self.server = make_server(serve_ip, self.serve_port, self.app)
 
@@ -132,7 +153,36 @@ class IntelligenceHubWebService:
 
     def _setup_apis(self):
 
+        @self.app.before_request
+        def refresh_session():
+            session.modified = True
+
+        @self.app.route('/login', methods=['GET', 'POST'])
+        def login():
+            if request.method == 'POST':
+                username = request.form['username']
+                password = request.form['password']
+
+                user_id = self.access_manager.check_user_credential(username, password)
+
+                if user_id:
+                    session['logged_in'] = True
+                    session['user_id'] = user_id
+                    session['username'] = username
+                    session.permanent = True
+                    return redirect(url_for('intelligences_list_api'))
+                else:
+                    return "Invalid credentials", 401
+            return render_template('login.html')
+
+        @self.app.route('/logout')
+        @login_required
+        def logout():
+            session.clear()
+            return redirect(url_for('login'))
+
         @self.app.route('/api', methods=['POST'])
+        @login_required
         def rpc_api():
             try:
                 response = self.rpc_service.handle_flask_request(request)
@@ -165,26 +215,8 @@ class IntelligenceHubWebService:
                 logger.error(f'collect_api() fail: {str(e)}')
                 return jsonify({'resp': 'error', 'uuid': ''})
 
-        # @self.app.route('/processed', methods=['POST'])
-        # def feedback_api():
-        #     try:
-        #         data = dict(request.json)
-        #         if self.access_manager.check_processor_token(data.get('token', '')):
-        #             result = self.intelligence_hub.submit_processed_data(data)
-        #             response = 'acknowledged' if result else 'error',
-        #         else:
-        #             response = 'invalid token'
-        #
-        #         return jsonify(
-        #             {
-        #                 'resp': response,
-        #                 'uuid': data.get('UUID', '')
-        #             })
-        #     except Exception as e:
-        #         logger.error(f'feedback_api() error: {str(e)}')
-        #         return jsonify({'resp': 'error', 'uuid': ''})
-
         @self.app.route('/rssfeed.xml', methods=['GET'])
+        @login_required
         def rssfeed_api():
             try:
                 feed_xml = self.intelligence_hub.get_rssfeed()
@@ -194,6 +226,7 @@ class IntelligenceHubWebService:
                 return 'Error'
 
         @self.app.route('/intelligences', methods=['GET'])
+        @login_required
         def intelligences_list_api():
             try:
                 offset = request.args.get('offset', default=0, type=int)
@@ -219,6 +252,7 @@ class IntelligenceHubWebService:
                 return jsonify({"error": "Server error"}), 500
 
         @self.app.route('/intelligences/query', methods=['GET', 'POST'])
+        @login_required
         def intelligences_query_api():
             form_data = request.form if request.method == 'POST' else {}
 
@@ -265,6 +299,7 @@ class IntelligenceHubWebService:
             return render_query_page(params, results, total_results)
 
         @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
+        @login_required
         def intelligence_viewer_api(intelligence_uuid: str):
             try:
                 intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)

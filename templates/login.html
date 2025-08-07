@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IIS Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: #000;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 30px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 24px;
+            font-weight: 300;
+            color: #ddd;
+        }
+
+        .flash-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+
+        .flash-success {
+            background-color: rgba(0, 150, 50, 0.3);
+            color: #0f0;
+        }
+
+        .flash-error {
+            background-color: rgba(150, 0, 0, 0.3);
+            color: #f00;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 3px;
+            color: #fff;
+            font-size: 16px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #555;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background: #222;
+            border: none;
+            border-radius: 3px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .btn-login:hover {
+            background: #333;
+        }
+
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">System Login</div>
+        <form action="/login" method="POST">
+            <div class="input-group">
+                <label for="username">User Name</label>
+                <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    placeholder="Input Username"
+                    required
+                >
+            </div>
+
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Input Password"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="btn-login">Login</button>
+        </form>
+    </div>
+</body>
+</html>
