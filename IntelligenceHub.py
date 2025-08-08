@@ -42,7 +42,7 @@ class CollectedData(BaseModel):
 class ProcessedData(BaseModel):
     UUID: str
     INFORMANT: str
-    TIME: str | None = None
+    TIME: str | datetime.datetime | None = None
     LOCATION: list | None = None
     PEOPLE: list | None = None
     ORGANIZATION: list | None = None
@@ -430,7 +430,7 @@ class IntelligenceHub:
                 validated_data = self._validate_sanitize_processed_data(data)
 
                 if not validated_data:
-                    self._mark_cache_data_archived_flag(validated_data['UUID'], 'E')
+                    self._mark_cache_data_archived_flag(data['UUID'], 'E')
                     self.error_counter += 1
                     self.processed_queue.task_done()
                     continue
