@@ -83,6 +83,12 @@ APPENDIX_FIELDS = [
 ]
 
 
+ARCHIVED_FLAG_DROP= 'D'
+ARCHIVED_FLAG_ERROR = 'E'
+ARCHIVED_FLAG_RETRY = 'R'
+ARCHIVED_FLAG_ARCHIVED= 'A'
+
+
 def data_without_appendix(data: dict) -> dict:
     return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
 
@@ -90,13 +96,12 @@ def data_without_appendix(data: dict) -> dict:
 class IntelligenceHub:
     @dataclass
     class Error:
-        success: bool
-        exception: Exception = None
+        exception: Exception | None = None
         error_list: List[str] = []
         warning_list: List[str] = []
 
         def __bool__(self):
-            return self.success
+            return False
 
     def __init__(self, *,
                  ref_url: str = 'http://locohost:8080',
@@ -157,28 +162,35 @@ class IntelligenceHub:
             self.vector_db_idx.load()
 
     def _load_unarchived_data(self):
-        """Load unarchived data into a queue."""
+        """Load unarchived data into a queue, compatible with both old and new archival markers."""
         if not self.mongo_db_cache:
             return
 
         try:
-            # 1. Build query
-            query = {APPENDIX_ARCHIVED_FLAG: {"$exists": False}}
+            # 兼容查询条件：同时支持旧版（顶层__ARCHIVED__）和新版（APPENDIX.__ARCHIVED__）
+            query = {
+                "$and": [
+                    # Old design: Flag is at root level
+                    {APPENDIX_ARCHIVED_FLAG: {"$exists": False}},
+                    # New design: Flag is under "APPENDIX"
+                    {
+                        "APPENDIX": {
+                            "$not": {"$elemMatch": {f"{APPENDIX_ARCHIVED_FLAG}": {"$exists": True}}}
+                        }
+                    }
+                ]
+            }
 
-            # 2. Stream processing
             cursor = self.mongo_db_cache.collection.find(query)
             for doc in cursor:
-                # Convert ObjectId to string
-                doc['_id'] = str(doc['_id'])
-
-                # 3. Handle queue with timeout
+                doc['_id'] = str(doc['_id'])  # 转换ObjectId
                 try:
                     self.original_queue.put(doc, block=True, timeout=5)
                 except queue.Full:
                     logger.error("Queue full, failed to add document")
                     break
 
-            logger.info(f'Previous unprocessed data loaded, item count: {self.original_queue.qsize()}')
+            logger.info(f'Unarchived data loaded, item count: {self.original_queue.qsize()}')
 
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Database operation failed: {str(e)}")
@@ -270,7 +282,7 @@ class IntelligenceHub:
         try:
             validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
             if error_text:
-                return IntelligenceHub.Error(False, error_list=[error_text])
+                return IntelligenceHub.Error(error_list=[error_text])
 
             self._cache_original_data(validated_data)
 
@@ -282,34 +294,19 @@ class IntelligenceHub:
             return True
         except Exception as e:
             logger.error(f"Collection API fail: {str(e)}")
-            return IntelligenceHub.Error(False, e, [str(e)])
+            return IntelligenceHub.Error(e, [str(e)])
 
     def submit_archived_data(self, data: dict) -> True or Error:
         try:
             validated_data, error_text = check_sanitize_dict(dict(data), ArchivedData)
             if error_text:
-                return IntelligenceHub.Error(False, error_list=[error_text])
-
+                return IntelligenceHub.Error(error_list=[error_text])
             if not validated_data:
-                return IntelligenceHub.Error(False, error_list=['Empty data'])
-
-            ts = datetime.datetime.now()
-            article_time = validated_data.get('PUB_TIME', None)
-
-            if article_time and isinstance(article_time, str):
-                article_time = time_str_to_datetime(article_time)
-            if not isinstance(article_time, datetime.datetime) or article_time > ts:
-                article_time = ts
-
-            validated_data['PUB_TIME'] = article_time
-            validated_data[APPENDIX_TIME_ARCHIVED] = ts
-
-            self.processed_queue.put(validated_data)
-
-            return True
+                return IntelligenceHub.Error(error_list=['Empty data'])
+            return self._enqueue_processed_data(validated_data, False)
         except Exception as e:
             logger.error(f"Submit archived data API error: {str(e)}")
-            return IntelligenceHub.Error(False, e, [str(e)])
+            return IntelligenceHub.Error(e, [str(e)])
 
     # -------------------------------------- Gets and Queries --------------------------------------
 
@@ -322,7 +319,7 @@ class IntelligenceHub:
             return feed_xml
         except Exception as e:
             logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
-            return IntelligenceHub.Error(False, e, [str(e)])
+            return IntelligenceHub.Error(e, [str(e)])
 
     def get_intelligence(self, _uuid: str) -> dict:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
@@ -376,6 +373,7 @@ class IntelligenceHub:
                     continue
             except queue.Empty:
                 continue
+
             try:
                 self._notice_data_in_processing(original_data)
 
@@ -388,12 +386,10 @@ class IntelligenceHub:
                         break
                     retry += 1
 
-                self.original_queue.task_done()
-
                 if not result or 'error' in result:
-                    # TODO: Mark data as dropped in mongodb to really drop it.
-                    logger.error(f"AI process error after {retry} retries.")
-                    continue
+                    error_msg = f"AI process error after {retry} retries."
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
 
                 if retry:
                     logger.info(f'Got AI correct answer after {retry} retires.')
@@ -403,11 +399,13 @@ class IntelligenceHub:
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
 
-                self.submit_archived_data(validated_data)
+                self._enqueue_processed_data(validated_data, True)
 
             except Exception as e:
-                logger.error(f"AI process error: {str(e)}")
+                logger.error(f"Analysis error: {str(e)}")
+                self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_ERROR)
             finally:
+                self.original_queue.task_done()
                 self._notice_data_quit_processing(original_data)
 
     def _post_process_worker(self):
@@ -415,63 +413,44 @@ class IntelligenceHub:
             try:
                 data = self.processed_queue.get(timeout=1)
 
-                if 'UUID' not in data:
-                    # There's no reason to reach this path.
-                    logger.error('NO UUID field. This data is not even error.')
-                    self.error_counter += 1
-                    self.processed_queue.task_done()
-                    continue
-
-                # According to the prompt (ANALYSIS_PROMPT),
-                #   if the article does not have any value, just "UUID" is returned.
-                if 'EVENT_TEXT' not in data:
-                    logger.info(f"Message {data['UUID']} dropped.")
-                    self._mark_cache_data_archived_flag(data['UUID'], 'F')
-                    self.drop_counter += 1
-                    self.processed_queue.task_done()
-                    continue
-
-                validated_data = self._validate_sanitize_processed_data(data)
-
-                if not validated_data:
-                    self._mark_cache_data_archived_flag(data['UUID'], 'E')
-                    self.error_counter += 1
-                    self.processed_queue.task_done()
-                    continue
-
-                _uuid = validated_data['UUID']
-                informant = validated_data['INFORMANT']
-
-                if not informant:
-                    logger.info(f"Message {data['UUID']} dropped because has no informant.")
-                    continue
-
-                query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-                exists_record = query_engine.common_query(
-                    conditions = {
-                        'UUID': _uuid,
-                        'INFORMANT': informant
-                    },
-                    operator = "or"
-                )
-
-                if exists_record:
-                    logger.info(f"Duplicated message {data['UUID']} dropped.")
-                    continue
+                # if 'UUID' not in data:
+                #     # There's no reason to reach this path.
+                #     logger.error('NO UUID field. This data is not even error.')
+                #     self.error_counter += 1
+                #     self.processed_queue.task_done()
+                #     continue
+                #
+                # # According to the prompt (ANALYSIS_PROMPT),
+                # #   if the article does not have any value, just "UUID" is returned.
+                # if 'EVENT_TEXT' not in data:
+                #     logger.info(f"Message {data['UUID']} dropped.")
+                #     self._mark_cache_data_archived_flag(data['UUID'], 'F')
+                #     self.drop_counter += 1
+                #     self.processed_queue.task_done()
+                #     continue
+                #
+                # validated_data = self._validate_sanitize_processed_data(data)
+                #
+                # if not validated_data:
+                #     self._mark_cache_data_archived_flag(data['UUID'], 'E')
+                #     self.error_counter += 1
+                #     self.processed_queue.task_done()
+                #     continue
 
                 try:
-                    self._archive_processed_data(validated_data)
-                    self._index_archived_data(validated_data)
-                    self._mark_cache_data_archived_flag(validated_data['UUID'], 'T')
-                    self._publish_article_to_rss(validated_data)
+                    self._archive_processed_data(data)
+                    self._index_archived_data(data)
+                    self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ARCHIVED)
+                    self._publish_article_to_rss(data)
                     self.archived_counter += 1
 
-                    logger.info(f"Message {validated_data['UUID']} archived.")
+                    logger.info(f"Message {data['UUID']} archived.")
 
                     # TODO: Call post processor plugins
                 except Exception as e:
                     logger.error(f"Archived fail with exception: {str(e)}")
-                    self._mark_cache_data_archived_flag(validated_data['UUID'], 'E')
+                    self.error_counter += 1
+                    self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ERROR)
                 finally:
                     self.processed_queue.task_done()
             except queue.Empty:
@@ -535,7 +514,9 @@ class IntelligenceHub:
             if isinstance(archived, bool):
                 archived = 'T' if archived else 'F'
             if self.mongo_db_cache:
-                self.mongo_db_cache.update({'UUID': _uuid}, {APPENDIX_ARCHIVED_FLAG: archived})
+                self.mongo_db_cache.update({
+                    'UUID': _uuid},
+                    {f'APPENDIX.{APPENDIX_ARCHIVED_FLAG}': archived})
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
@@ -556,3 +537,45 @@ class IntelligenceHub:
             with self.lock:
                 self.drop_counter += 1
             return None
+
+    def _enqueue_processed_data(self, data: dict, allow_empty_informant: bool) -> True or Error:
+        try:
+            if self._check_data_duplication(data, allow_empty_informant):
+                error_msg = f"Duplicated message {data['UUID']}."
+                logger.info(error_msg)
+                return IntelligenceHub.Error(error_list=[error_msg])
+
+            ts = datetime.datetime.now()
+            article_time = data.get('PUB_TIME', None)
+
+            if article_time and isinstance(article_time, str):
+                article_time = time_str_to_datetime(article_time)
+            if not isinstance(article_time, datetime.datetime) or article_time > ts:
+                article_time = ts
+
+            data['PUB_TIME'] = article_time
+            data[APPENDIX_TIME_ARCHIVED] = ts
+
+            self.processed_queue.put(data)
+
+            return True
+
+        except Exception as e:
+            self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ERROR)
+            logger.error(f"Enqueue archived data error: {str(e)}")
+            return IntelligenceHub.Error(e, [str(e)])
+
+    def _check_data_duplication(self, data: dict, allow_empty_informant: bool) -> bool:
+        _uuid = data['UUID']
+        informant = data['INFORMANT']
+
+        if not allow_empty_informant and not informant:
+            logger.info(f"Message {data['UUID']} dropped because has no informant.")
+            raise ValueError('No valid informant.')
+
+        conditions = { 'UUID': _uuid, 'INFORMANT': informant } if informant else { 'UUID': _uuid}
+
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        exists_record = query_engine.common_query(conditions=conditions, operator="$or")
+
+        return bool(exists_record)
