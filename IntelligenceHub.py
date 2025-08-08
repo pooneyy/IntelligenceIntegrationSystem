@@ -1,6 +1,8 @@
 import time
 import queue
 import logging
+import uuid
+
 import pymongo
 import datetime
 import threading
@@ -375,6 +377,10 @@ class IntelligenceHub:
                 continue
 
             try:
+                # If there's no UUID...
+                if not original_data.get('UUID', ''):
+                    original_data['UUID'] = str(uuid.uuid4())
+
                 self._notice_data_in_processing(original_data)
 
                 retry = 0
@@ -388,13 +394,20 @@ class IntelligenceHub:
 
                 if not result or 'error' in result:
                     error_msg = f"AI process error after {retry} retries."
-                    logger.error(error_msg)
                     raise ValueError(error_msg)
 
                 if retry:
-                    logger.info(f'Got AI correct answer after {retry} retires.')
+                    logger.info(f'Got AI match format answer after {retry} retires.')
+
+                # Try to fix if UUID is missing.
+                if not result.get('UUID', ''):
+                    original_uuid = original_data.get('UUID', '')
+                    logger.info(f"Try to fix UUID missing: {original_uuid}")
+                    result = original_uuid
 
                 validated_data = self._validate_sanitize_processed_data(result)
+                if validated_data is None:
+                    raise ValueError('AI analysis result validation fail.')
 
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
