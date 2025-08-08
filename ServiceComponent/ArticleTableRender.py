@@ -142,7 +142,7 @@ def generate_articles_table(articles):
                 </a>
             </h3>
             <div class="article-meta">
-                <span class="article-time">{escape_text(article.get("TIME") or 'NO Datetime')}</span>
+                <span class="article-time">{escape_text(article.get("PUB_TIME") or 'NO Datetime')}</span>
                 <span class="article-source">来源: {informant_html}</span>
             </div>
             <p class="article-summary">{escape_text(article.get("EVENT_BRIEF", "No Brief"))}</p>

@@ -415,6 +415,7 @@ class IntelligenceHub:
                 self._enqueue_processed_data(validated_data, True)
 
             except Exception as e:
+                self.error_counter += 1
                 logger.error(f"Analysis error: {str(e)}")
                 self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_ERROR)
             finally:
