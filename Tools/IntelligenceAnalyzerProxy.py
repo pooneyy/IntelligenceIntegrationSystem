@@ -66,8 +66,9 @@ def analyze_with_ai(
         return {'error': str(e)}
 
     metadata_items = [f"- {k}: {v}" for k, v in sanitized_data.items() if k != "content"]
+    metadata_block = '## metadata\n' + "\n".join(metadata_items)
     content_block = f"\n\n## 正文内容\n{sanitized_data['content']}"
-    user_message = "\n".join(metadata_items) + content_block
+    user_message = metadata_block + content_block
 
     messages = context if context else []
     messages.append({"role": "system", "content": prompt})

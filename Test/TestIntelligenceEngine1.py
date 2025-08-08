@@ -8,7 +8,7 @@ from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 def print_intel_doc(doc):
     """格式化打印情报文档"""
     print(f"UUID: {doc['UUID']}")
-    print(f"时间: {doc['TIME']}")
+    print(f"时间: {', '.join(doc['TIME'])}")
     print(f"地点: {', '.join(doc['LOCATION'])}")
     print(f"人员: {', '.join(doc['PEOPLE'])}")
     print(f"组织: {', '.join(doc['ORGANIZATION'])}")

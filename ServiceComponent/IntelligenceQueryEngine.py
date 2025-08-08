@@ -76,7 +76,7 @@ class IntelligenceQueryEngine:
             # Find the newest document as base reference
             newest_doc = collection.find_one(
                 filter={},
-                sort=[("TIME", pymongo.DESCENDING)]
+                sort=[("PUB_TIME", pymongo.DESCENDING)]
             )
 
             base_uuid = newest_doc["UUID"] if newest_doc else None
@@ -107,7 +107,7 @@ class IntelligenceQueryEngine:
 
         collection = self.__mongo_db.collection
         sort_order = [
-            ("TIME", pymongo.DESCENDING),
+            ("PUB_TIME", pymongo.DESCENDING),
             ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
         ]
 
@@ -119,7 +119,7 @@ class IntelligenceQueryEngine:
                     return []
 
                 cursor = collection.find(
-                    filter={"TIME": {"$lte": base_doc["TIME"]}}
+                    filter={"PUB_TIME": {"$lte": base_doc["PUB_TIME"]}}
                 ).sort(sort_order).skip(offset).limit(limit)
             else:
                 cursor = collection.find().sort(sort_order).skip(offset).limit(limit)
@@ -323,7 +323,7 @@ class IntelligenceQueryEngine:
 
         # 确保所有字段都有默认值
         fields = {
-            'TIME': None,
+            'TIME': [],
             'LOCATION': [],
             'PEOPLE': [],
             'ORGANIZATION': [],
@@ -345,7 +345,7 @@ class IntelligenceQueryEngine:
         utc_start = start_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         utc_end = end_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        return {"TIME": {"$gte": utc_start, "$lte": utc_end}}
+        return {"PUB_TIME": {"$gte": utc_start, "$lte": utc_end}}
 
     def build_list_condition(self, field: str, values: Union[str, List[str]]) -> dict:
         """构建列表字段查询条件"""
@@ -409,7 +409,7 @@ class IntelligenceQueryEngine:
         """
         try:
             # Apply sorting by TIME field in descending order
-            cursor = collection.find(query).sort("TIME", pymongo.DESCENDING)
+            cursor = collection.find(query).sort("PUB_TIME", pymongo.DESCENDING)
 
             # Apply pagination parameters if provided
             if skip is not None and skip > 0:

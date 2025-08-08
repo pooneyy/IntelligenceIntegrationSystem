@@ -6,7 +6,7 @@ import datetime
 import threading
 
 from attr import dataclass
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
@@ -26,29 +26,32 @@ logger.setLevel(logging.INFO)
 
 
 class CollectedData(BaseModel):
-    UUID: str                           # [MUST]: The UUID to identify a message.
-    token: str                          # [MUST]: The token to identify the legal end point.
-    source: str | None = None           # (Optional): Message source. If it requires reply.
-    target: str | None = None           # (Optional): Message source. If it requires reply.
-    prompt: str | None = None           # (Optional): The prompt to ask LLM to process this message.
+    UUID: str = Field(..., min_length=1)    # [MUST]: The UUID to identify a message.
+    token: str = Field(..., min_length=1)   # [MUST]: The token to identify the legal end point.
+    source: str | None = None               # (Optional): Message source. If it requires reply.
+    target: str | None = None               # (Optional): Message source. If it requires reply.
+    prompt: str | None = None               # (Optional): The prompt to ask LLM to process this message.
 
-    title: str | None = None            # [MUST]: The content to be processed.
-    authors: List[str] | None = []      # (Optional): Article authors.
-    content: str                        # [MUST]: The content to be processed.
-    pub_time: str | None = None         # (Optional): Content publish time.
-    informant: str | None = None        # (Optional): The source of message (like URL).
+    title: str | None = None                # [MUST]: The content to be processed.
+    authors: List[str] | None = []          # (Optional): Article authors.
+    content: str                            # [MUST]: The content to be processed.
+    pub_time: str | None = None             # (Optional): Content publish time.
+    informant: str | None = None            # (Optional): The source of message (like URL).
 
 
 class ProcessedData(BaseModel):
-    UUID: str
-    INFORMANT: str
-    TIME: str | datetime.datetime | None = None
-    LOCATION: list | None = None
-    PEOPLE: list | None = None
-    ORGANIZATION: list | None = None
-    EVENT_TITLE: str | None = None
-    EVENT_BRIEF: str | None = None
+    UUID: str = Field(..., min_length=1)
+    INFORMANT: str = Field(..., min_length=1)
+    PUB_TIME: str | datetime.datetime | None = None
+
+    TIME: list | None = Field(default_factory=list)
+    LOCATION: list | None = Field(default_factory=list)
+    PEOPLE: list | None = Field(default_factory=list)
+    ORGANIZATION: list | None = Field(default_factory=list)
+    EVENT_TITLE: str | None = Field(..., min_length=1)
+    EVENT_BRIEF: str | None = Field(..., min_length=1)
     EVENT_TEXT: str | None = None
+
     RATE: dict | None = {}
     IMPACT: str | None = None
     TIPS: str | None = None
@@ -57,6 +60,7 @@ class ProcessedData(BaseModel):
 class ArchivedDataExtraFields(BaseModel):
     RAW_DATA: dict | None
     SUBMITTER: str | None
+    APPENDIX: dict | None
 
 
 class ArchivedData(ProcessedData, ArchivedDataExtraFields):
@@ -290,14 +294,14 @@ class IntelligenceHub:
                 return IntelligenceHub.Error(False, error_list=['Empty data'])
 
             ts = datetime.datetime.now()
-            article_time = validated_data.get('TIME', None)
+            article_time = validated_data.get('PUB_TIME', None)
 
             if article_time and isinstance(article_time, str):
                 article_time = time_str_to_datetime(article_time)
             if not isinstance(article_time, datetime.datetime) or article_time > ts:
                 article_time = ts
 
-            validated_data['TIME'] = article_time
+            validated_data['PUB_TIME'] = article_time
             validated_data[APPENDIX_TIME_ARCHIVED] = ts
 
             self.processed_queue.put(validated_data)

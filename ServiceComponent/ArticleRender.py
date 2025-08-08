@@ -3,39 +3,53 @@ from datetime import datetime
 
 def default_article_render(article_dict):
     """
-    将文章字典数据渲染为美观的HTML页面
+    Renders article dictionary data into a formatted HTML page
 
-    参数:
-        article_dict (dict): 包含文章数据的字典
+    Parameters:
+        article_dict (dict): Dictionary containing article data
 
-    返回:
-        str: 格式化的HTML字符串
+    Returns:
+        str: Formatted HTML string
     """
-    # 安全获取可能为空的数据
+    # Safely get data that might be empty
     uuid_val = article_dict.get('UUID', '')
     informant = article_dict.get('INFORMANT', '')
-    time_str = article_dict.get('TIME', '无时间信息')
+    pub_time = article_dict.get('PUB_TIME', 'N/A')
+    event_times = article_dict.get('TIME', [])
     locations = article_dict.get('LOCATION', [])
     people = article_dict.get('PEOPLE', [])
     organizations = article_dict.get('ORGANIZATION', [])
-    title = article_dict.get('EVENT_TITLE', '无标题')
-    brief = article_dict.get('EVENT_BRIEF', '无简介')
-    content = article_dict.get('EVENT_TEXT', '无内容')
+    title = article_dict.get('EVENT_TITLE', 'No Title')
+    brief = article_dict.get('EVENT_BRIEF', 'No Brief')
+    content = article_dict.get('EVENT_TEXT', 'No Content')
     rates = article_dict.get('RATE', {})
-    impact = article_dict.get('IMPACT', '无明显影响分析')
-    tips = article_dict.get('TIPS', '无提示信息')
+    impact = article_dict.get('IMPACT', 'No Impact')
+    tips = article_dict.get('TIPS', 'No Tips')
 
-    # 处理时间显示
-    if time_str and time_str != 'null':
+    # Format publication time
+    if pub_time and pub_time != 'null':
         try:
-            article_date = datetime.strptime(time_str, "%Y-%m-%d")
-            time_display = article_date.strftime("%Y年%m月%d日")
+            pub_date = datetime.strptime(pub_time, "%Y-%m-%d")
+            pub_time_display = pub_date.strftime("%B %d, %Y")
         except:
-            time_display = time_str
+            pub_time_display = pub_time
     else:
-        time_display = "时间未指定"
+        pub_time_display = "Not available"
 
-    # 创建评分星星
+    # Format event times
+    formatted_times = []
+    if event_times and event_times != 'null':
+        if not isinstance(event_times, list):
+            event_times = [event_times]
+
+        for time_str in event_times:
+            try:
+                time_obj = datetime.strptime(time_str, "%Y-%m-%d")
+                formatted_times.append(time_obj.strftime("%B %d, %Y"))
+            except:
+                formatted_times.append(time_str)
+
+    # Create rating stars display
     def create_rating_stars(score):
         stars = ""
         full_stars = int(score) // 2
@@ -49,21 +63,21 @@ def default_article_render(article_dict):
         stars += f' <span class="ms-2 text-muted">{score}/10</span>'
         return stars
 
-    # 构建评分表
+    # Build rating table
     rating_table = ""
     if rates:
-        rating_table = '<div class="mt-4"><h5><i class="bi bi-graph-up"></i> 分析评估</h5>'
+        rating_table = '<div class="mt-4"><h5><i class="bi bi-graph-up"></i> Analysis & Evaluation</h5>'
         rating_table += '<div class="table-responsive"><table class="table table-sm">'
-        rating_table += '<thead><tr><th>评估维度</th><th>评分</th></tr></thead><tbody>'
+        rating_table += '<thead><tr><th>Dimension</th><th>Rating</th></tr></thead><tbody>'
         for key, score in rates.items():
             if isinstance(score, (int, float)) and 0 <= score <= 10:
                 rating_table += f'<tr><td>{key}</td><td>{create_rating_stars(score)}</td></tr>'
         rating_table += '</tbody></table></div></div>'
 
-    # 构建HTML
+    # Build HTML
     html_content = f"""
     <!DOCTYPE html>
-    <html lang="zh-CN">
+    <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -119,83 +133,93 @@ def default_article_render(article_dict):
     </head>
     <body>
         <div class="container">
-            <!-- 文章头部信息 -->
+            <!-- Article header -->
             <div class="article-header text-center">
                 <div class="container">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div class="text-start">
-                            <small class="d-block"><i class="bi bi-calendar-event"></i> {time_display}</small>
+                            <small class="d-block"><i class="bi bi-calendar-event"></i> Published: {pub_time_display}</small>
                             <small class="d-block"><i class="bi bi-upc-scan"></i> {uuid_val}</small>
                         </div>
                         <h1 class="display-5 fw-bold">{title}</h1>
                         <div>
-                            {f'<a href="{informant}" class="btn btn-sm btn-light"><i class="bi bi-link-45deg"></i> 来源</a>' if informant else ''}
+                            {f'<a href="{informant}" class="btn btn-sm btn-light"><i class="bi bi-link-45deg"></i> Source</a>' if informant else ''}
                         </div>
                     </div>
                     <div class="lead">{brief}</div>
                 </div>
             </div>
 
-            <!-- 关键元数据 -->
+            <!-- Metadata section -->
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="meta-box">
-                        <h5><i class="bi bi-geo-alt"></i> 地理位置</h5>
-                        {', '.join(locations) if locations else "无地理位置信息"}
+                        <h5><i class="bi bi-geo-alt"></i> Geographic Locations</h5>
+                        {', '.join(locations) if locations else "No location data"}
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="meta-box">
-                        <h5><i class="bi bi-people"></i> 涉及人物</h5>
-                        {', '.join(people) if people else "无相关人物"}
+                        <h5><i class="bi bi-people"></i> Related People</h5>
+                        {', '.join(people) if people else "No associated people"}
                     </div>
                 </div>
-                <div class="col-12">
+                <div class="col-md-4">
                     <div class="meta-box">
-                        <h5><i class="bi bi-building"></i> 相关组织</h5>
-                        {', '.join(organizations) if organizations else "无相关组织"}
+                        <h5><i class="bi bi-building"></i> Related Organizations</h5>
+                        {', '.join(organizations) if organizations else "No related organizations"}
                     </div>
                 </div>
             </div>
 
-            <!-- 主要内容 -->
+            <!-- Event time section -->
+            <div class="row mt-2">
+                <div class="col-12">
+                    <div class="meta-box">
+                        <h5><i class="bi bi-clock-history"></i> Event Time(s)</h5>
+                        {', '.join(formatted_times) if formatted_times else "No specific timing data"}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main content -->
             <div class="content-section mt-4">
                 {content}
             </div>
 
-            <!-- 分析评估 -->
+            <!-- Analysis section -->
             {rating_table}
 
-            <!-- 影响分析 -->
+            <!-- Impact analysis -->
             <div class="impact-card">
-                <h5><i class="bi bi-lightning-charge"></i> 潜在影响分析</h5>
+                <h5><i class="bi bi-lightning-charge"></i> Potential Impact</h5>
                 <p>{impact}</p>
             </div>
 
-            <!-- 提示信息 -->
+            <!-- Tips section -->
             <div class="tip-card">
-                <h5><i class="bi bi-lightbulb"></i> 分析师提示</h5>
+                <h5><i class="bi bi-lightbulb"></i> Analyst Notes</h5>
                 <p>{tips}</p>
             </div>
         </div>
 
         <footer>
             <div class="container">
-                <div class="footer-content">
+                <div class="d-flex justify-content-between">
                     <div>
                         <div class="system-name">
                             <i class="bi bi-cpu"></i> Intelligence Integration System
                         </div>
                         <div class="mt-2 text-muted">© {datetime.now().year} All rights reserved</div>
                     </div>
-                    <div class="mt-3 mt-md-0 text-end">
+                    <div class="text-end">
                         <div class="author-brand">SleepySoft</div>
                         <div class="tagline">Turning data into insight</div>
                     </div>
                 </div>
                 <div class="text-center mt-4 pt-3 border-top border-secondary border-opacity-25">
                     <small class="d-block opacity-75">
-                        Intelligent report generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                        Report generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     </small>
                 </div>
             </div>
@@ -209,31 +233,30 @@ def default_article_render(article_dict):
     return html_content
 
 
-# 测试用例
+# Test case
 if __name__ == "__main__":
     sample_article = {
         "UUID": "a3d8f7c9-4b2e-4567-8c29-1234abcd5678",
         "INFORMANT": "https://news.example.com/article/12345",
-        "TIME": "2023-10-15",
-        "LOCATION": ["中国", "广东省", "深圳市"],
-        "PEOPLE": ["张三", "李四", "王五"],
-        "ORGANIZATION": ["腾讯科技有限公司", "深圳市政府"],
-        "EVENT_TITLE": "深圳科技园区启动新基建项目",
-        "EVENT_BRIEF": "深圳科技园区宣布启动新一代数字基础设施建设项目，预计投资500亿元",
-        "EVENT_TEXT": "<p>深圳市政府与多家科技企业联合宣布，将在深圳科技园区启动新一代数字基础设施建设项目。该项目预计总投资500亿元人民币，计划在三年内完成。</p><p>项目建设包括5G基站、人工智能计算中心、物联网设施等先进技术基础设施。深圳市委常委张三在发布会上表示："
-        "该项目将进一步巩固深圳在科技创新领域的领先地位。</p><p>腾讯科技CEO李四表示："
-        "新一代基础设施建设将为深圳科技企业提供强大支撑，加速产业数字化升级。</p>",
-    "RATE": {
-        "战略相关性": 8,
-        "国际关联度": 4,
-        "金融影响力": 9,
-        "政策关联度": 10,
-        "科技前瞻性": 8,
-        "投资价值": 9,
-        "内容准确率": 7,
-    },
-    "IMPACT": "该事件可能提升深圳地区科技类上市公司估值，特别是5G和人工智能相关企业，同时为基建行业带来增长机会",
-    "TIPS": "建议投资者关注5G、人工智能、物联网相关企业的投资机会"
+        "PUB_TIME": "2023-10-15",
+        "TIME": ["2023-10-18", "2023-11-01"],
+        "LOCATION": ["China", "Guangdong Province", "Shenzhen"],
+        "PEOPLE": ["Zhang San", "Li Si", "Wang Wu"],
+        "ORGANIZATION": ["Tencent Inc", "Shenzhen Municipal Government"],
+        "EVENT_TITLE": "New Infrastructure Project Launched in Shenzhen Tech Park",
+        "EVENT_BRIEF": "Shenzhen Technology Park announces launch of next-gen digital infrastructure project with ¥50B investment",
+        "EVENT_TEXT": "<p>The Shenzhen Municipal Government and several tech companies jointly announced the launch of a new digital infrastructure project in Shenzhen Technology Park. The project is expected to involve a total investment of ¥50 billion yuan, with completion planned within three years.</p><p>The project includes construction of 5G base stations, AI computing centers, IoT facilities and other advanced technical infrastructure. Zhang San, member of Shenzhen Municipal Standing Committee stated: 'This project will further solidify Shenzhen's leading position in technological innovation.'</p><p>Li Si, CEO of Tencent Technology commented: 'The new infrastructure construction will provide strong support for Shenzhen tech companies and accelerate digital transformation.'</p>",
+        "RATE": {
+            "Strategic Relevance": 8,
+            "Global Connectivity": 4,
+            "Financial Impact": 9,
+            "Policy Relevance": 10,
+            "Technical Innovation": 8,
+            "Investment Value": 9,
+            "Accuracy": 7,
+        },
+        "IMPACT": "This event may increase valuation of technology companies in Shenzhen, especially in 5G and AI sectors, while creating opportunities in infrastructure industry",
+        "TIPS": "Investors should watch opportunities in 5G, AI, and IoT companies"
     }
 
     html_output = default_article_render(sample_article)
