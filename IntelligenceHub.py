@@ -175,11 +175,7 @@ class IntelligenceHub:
                     # Old design: Flag is at root level
                     {APPENDIX_ARCHIVED_FLAG: {"$exists": False}},
                     # New design: Flag is under "APPENDIX"
-                    {
-                        "APPENDIX": {
-                            "$not": {"$elemMatch": {f"{APPENDIX_ARCHIVED_FLAG}": {"$exists": True}}}
-                        }
-                    }
+                    {f"APPENDIX.{APPENDIX_ARCHIVED_FLAG}": {"$exists": False}}
                 ]
             }
 
