@@ -329,15 +329,14 @@ class IntelligenceHubWebService:
             query_params.update({'skip': skip, 'limit': params['per_page']})
 
             # Execute query
-            results = []
-            total_results = 1000
             try:
-                results = self.intelligence_hub.query_intelligence(**query_params)
+                results, total_results = self.intelligence_hub.query_intelligence(**query_params)
+                # Render HTML response
+                return render_query_page(params, results, total_results)
             except Exception as e:
                 error = f"Query error: {str(e)}"
-
-            # Render HTML response
-            return render_query_page(params, results, total_results)
+                logger.error(error)
+                return ''
 
         @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
         @WebServiceAccessManager.login_required

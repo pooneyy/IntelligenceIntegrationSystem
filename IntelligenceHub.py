@@ -338,10 +338,10 @@ class IntelligenceHub:
             query_engine = IntelligenceQueryEngine(self.mongo_db_cache)
         else:
             query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        result = query_engine.query_intelligence(
+        result, total = query_engine.query_intelligence(
             period = period, locations = locations, peoples = peoples,
             organizations = organizations, keywords = keywords, skip=skip, limit=limit)
-        return result
+        return result, total
 
     def get_intelligence_summary(self) -> Tuple[int, str]:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)

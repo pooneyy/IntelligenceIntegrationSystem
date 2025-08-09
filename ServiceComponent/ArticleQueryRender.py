@@ -5,7 +5,7 @@ from ServiceComponent.ArticleTableRender import generate_articles_table, article
 
 
 def render_query_page(params, results, total_results):
-    # total_pages = max(1, (total_results + params['per_page'] - 1) // params['per_page'])
+    total_pages = max(1, (total_results + params['per_page'] - 1) // params['per_page'])
 
     return f"""
     <!DOCTYPE html>
@@ -94,11 +94,28 @@ def render_query_page(params, results, total_results):
             <!-- Results Section -->
             <div class="results-header">
                 <h3>Query Results</h3>
-                <p class="mb-0">Showing page {params["page"]}, {len(results)} records</p>
+                <p class="mb-0">Showing {len(results)} of {total_results} records</p>
             </div>
 
             {generate_articles_table(results)}
 
+            <!-- Pagination -->
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item {"disabled" if params['page'] == 1 else ""}">
+                        <a class="page-link" href="?page={params['page'] - 1}&{urlencode(params)}">Previous</a>
+                    </li>
+                    {"".join(
+        f'<li class="page-item {"active" if i == params["page"] else ""}">'
+        f'<a class="page-link" href="?page={i}&{urlencode(params)}">{i}</a></li>'
+        for i in range(1, min(total_pages + 1, 11))
+    )}
+                    <li class="page-item {"disabled" if params['page'] >= total_pages else ""}">
+                        <a class="page-link" href="?page={params['page'] + 1}&{urlencode(params)}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+            
         </div>
 
         <!-- 引入Bootstrap JS -->

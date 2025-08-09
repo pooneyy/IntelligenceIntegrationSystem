@@ -144,7 +144,7 @@ class IntelligenceQueryEngine:
             keywords: Optional[str] = None,
             skip: Optional[int] = None,
             limit: Optional[int] = None
-    ) -> List[dict]:
+    ) -> Tuple[List[dict], int]:
         """Execute intelligence query
 
         Args:
@@ -157,7 +157,9 @@ class IntelligenceQueryEngine:
             limit: Maximum number of results to return
 
         Returns:
-            List of matching intelligence documents
+            Tuple of
+                List of matching intelligence documents
+                All document count without specifying skip and limit.
         """
         # Get specified database collection
         collection = self.__mongo_db.collection
@@ -173,7 +175,10 @@ class IntelligenceQueryEngine:
             )
 
             # Execute query and return results with limit
-            return self.execute_query(collection, query, skip=skip, limit=limit)
+            data = self.execute_query(collection, query, skip=skip, limit=limit)
+            total = collection.count_documents(query)
+
+            return data, total
 
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Intelligence query failed: {str(e)}")

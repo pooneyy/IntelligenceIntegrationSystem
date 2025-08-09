@@ -84,6 +84,7 @@ def default_article_list_render(articles, offset, count, total_count):
             <div class="articles-container">
                 {articles_html if articles else '<p class="text-center py-5">NO Intelligence</p>'}
             </div>
+            {pagination_html}
         </div>
     </body>
     </html>

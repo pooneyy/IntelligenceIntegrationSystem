@@ -34,7 +34,7 @@ def demo_query_engine():
     print("=" * 70)
     print("演示1: 无限制查询 - 获取全部匹配结果")
     print("=" * 70)
-    results = engine.query_intelligence(
+    results, _ = engine.query_intelligence(
         period=(start_time, end_time),
         locations=["美国"]
     )
@@ -45,7 +45,7 @@ def demo_query_engine():
     print("\n" + "=" * 70)
     print("演示2: 使用limit=5 - 限制结果数量")
     print("=" * 70)
-    results_limited = engine.query_intelligence(
+    results_limited, _ = engine.query_intelligence(
         period=(start_time, end_time),
         locations=["美国"],
         limit=5
@@ -57,7 +57,7 @@ def demo_query_engine():
     print("\n" + "=" * 70)
     print("演示3: 综合条件查询")
     print("=" * 70)
-    complex_results = engine.query_intelligence(
+    complex_results, _ = engine.query_intelligence(
         period=(start_time, end_time),
         locations=["美国", "中国"],
         peoples=["特朗普"],
