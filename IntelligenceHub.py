@@ -395,14 +395,23 @@ class IntelligenceHub:
                 if retry:
                     logger.info(f'Got AI match format answer after {retry} retires.')
 
+                original_uuid = original_data.get('UUID', '')
+
+                # If this article has no value. Only return { UUID: xxxxx }
+                if len(result) <= 1:
+                    with self.lock:
+                        self.drop_counter += 1
+                    logger.info(f"Valueless article dropped: {original_uuid}")
+                    self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_DROP)
+                    continue
+
                 # Try to fix if UUID is missing.
                 if not result.get('UUID', ''):
-                    original_uuid = original_data.get('UUID', '')
                     logger.info(f"Try to fix UUID missing: {original_uuid}")
                     result = original_uuid
 
-                validated_data = self._validate_sanitize_processed_data(result)
-                if validated_data is None:
+                validated_data, error_text = check_sanitize_dict(dict(result), ProcessedData)
+                if error_text:
                     raise ValueError('AI analysis result validation fail.')
 
                 validated_data['RAW_DATA'] = original_data
@@ -411,7 +420,8 @@ class IntelligenceHub:
                 self._enqueue_processed_data(validated_data, True)
 
             except Exception as e:
-                self.error_counter += 1
+                with self.lock:
+                    self.error_counter += 1
                 logger.error(f"Analysis error: {str(e)}")
                 self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_ERROR)
             finally:
@@ -458,8 +468,9 @@ class IntelligenceHub:
 
                     # TODO: Call post processor plugins
                 except Exception as e:
+                    with self.lock:
+                        self.error_counter += 1
                     logger.error(f"Archived fail with exception: {str(e)}")
-                    self.error_counter += 1
                     self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ERROR)
                 finally:
                     self.processed_queue.task_done()
@@ -530,23 +541,23 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
-    def _validate_sanitize_processed_data(self, data: dict) -> dict or None:
-        try:
-            validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
-            if error_text:
-                print('Processed data check fail - Drop.')
-                print('-------------------------------')
-                print(str(data))
-                print('-------------------------------')
-                with self.lock:
-                    self.drop_counter += 1
-                return None
-            return validated_data
-        except Exception as e:
-            logger.error(f"Check processed data got exception: {str(e)}")
-            with self.lock:
-                self.drop_counter += 1
-            return None
+    # def _validate_sanitize_processed_data(self, data: dict) -> dict or None:
+    #     try:
+    #         validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
+    #         if error_text:
+    #             print('Processed data check fail - Drop.')
+    #             print('-------------------------------')
+    #             print(str(data))
+    #             print('-------------------------------')
+    #             with self.lock:
+    #                 self.drop_counter += 1
+    #             return None
+    #         return validated_data
+    #     except Exception as e:
+    #         logger.error(f"Check processed data got exception: {str(e)}")
+    #         with self.lock:
+    #             self.drop_counter += 1
+    #         return None
 
     def _enqueue_processed_data(self, data: dict, allow_empty_informant: bool) -> True or Error:
         try:

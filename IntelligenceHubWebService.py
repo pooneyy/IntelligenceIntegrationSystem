@@ -5,7 +5,6 @@ import logging
 from functools import wraps
 from typing import List
 
-import markdown
 import requests
 import datetime
 import threading
@@ -20,7 +19,7 @@ from ServiceComponent.ArticleListRender import default_article_list_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
-from Tools.PostManager import generate_html_from_markdown
+from ServiceComponent.PostManager import generate_html_from_markdown
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
