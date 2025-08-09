@@ -1,15 +1,17 @@
+import os
 import traceback
 import uuid
 import logging
 from functools import wraps
 from typing import List
 
+import markdown
 import requests
 import datetime
 import threading
 from requests import RequestException
 from werkzeug.serving import make_server
-from flask import Flask, request, jsonify, session, redirect, url_for, render_template
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort
 
 from GlobalConfig import *
 from MyPythonUtility.ArbitraryRPC import RPCService
@@ -18,6 +20,7 @@ from ServiceComponent.ArticleListRender import default_article_list_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleRender import default_article_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
+from Tools.PostManager import generate_html_from_markdown
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -182,6 +185,35 @@ class IntelligenceHubWebService:
         def logout():
             session.clear()
             return redirect(url_for('login'))
+
+        @self.app.route('/post/<path:article>')
+        def show_post(article):
+            """
+            Render a Markdown article as HTML with caching mechanism.
+
+            Args:
+                article: URL path of the Markdown file (relative to 'posts' directory)
+
+            Returns:
+                Rendered HTML template or 404 error
+            """
+            # Sanitize input and construct safe file path
+            safe_article = article.replace('..', '').strip('/')  # Prevent directory traversal
+            md_file_path = os.path.join('posts', f"{safe_article}.md")
+
+            # Generate HTML from Markdown
+            rendered_html_path = generate_html_from_markdown(md_file_path)
+
+            if rendered_html_path:
+                # Extract relative template path (remove 'templates/' prefix)
+                template_path = os.path.relpath(
+                    rendered_html_path,
+                    start='templates'
+                ).replace('\\', '/')  # Windows compatibility
+
+                return render_template(template_path)
+            else:
+                abort(404)  # File not found or conversion failed
 
         # -------------------------------------------- API and Open Service --------------------------------------------
 

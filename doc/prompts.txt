@@ -1152,3 +1152,24 @@ def intelligences_query_api():
 
 
 
+
+
+帮我写一个文章管理的功能，当有请求到来时，检查对应的markdown文件，并生成对应的html文件到template目录下。
+
+为了避免反复生成，在转换成html时会记录markdown文件的hash，如果hash相同且对应html文件存在，则不会重新生成。
+
+为了避免和手写的template混淆，生成的html位于generated子目录下，生成文件之前要确保该目录存在。
+
+
+
+
+
+
+
+
+
+
+
+
+
+

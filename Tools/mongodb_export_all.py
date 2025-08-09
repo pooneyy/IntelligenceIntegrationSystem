@@ -1,5 +1,5 @@
 import datetime
-from Tools.mongodb_exporter import export_mongodb_data
+from mongodb_exporter import export_mongodb_data
 
 
 if __name__ == "__main__":
@@ -18,8 +18,5 @@ if __name__ == "__main__":
 
 
 """
-mongoimport --uri=mongodb://localhost:27017 \
-  --db=generic_db \
-  --collection=intelligence_archived_backup \
-  --file=intelligence_archived_20250809_163212.json
+mongoimport --uri=mongodb://localhost:27017 --db=generic_db --collection=intelligence_archived --file=intelligence_archived_20250809_172812.json
 """

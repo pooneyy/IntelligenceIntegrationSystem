@@ -1,5 +1,5 @@
 import datetime
-from Tools.mongodb_exporter import export_mongodb_data
+from mongodb_exporter import export_mongodb_data
 
 
 def get_current_month_range() -> (str, str):
