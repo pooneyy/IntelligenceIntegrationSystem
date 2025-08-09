@@ -1,23 +1,6 @@
 import datetime
 
-
-# TODO: I have better functions, let me look for it.
-def format_date(input_date):
-    if isinstance(input_date, datetime.datetime):
-        return input_date.strftime("%B %d, %Y")
-
-    if isinstance(input_date, str):
-        # 尝试常见日期格式
-        formats = ["%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"]
-        for fmt in formats:
-            try:
-                date_obj = datetime.datetime.strptime(input_date, fmt)
-                return date_obj.strftime("%B %d, %Y")
-            except ValueError:
-                continue
-    # 其他情况返回原始值（转字符串）
-    return str(input_date)
-
+from Tools.DateTimeUtility import any_time_to_time_str
 
 
 def default_article_render(article_dict):
@@ -45,18 +28,8 @@ def default_article_render(article_dict):
     impact = article_dict.get('IMPACT', 'No Impact')
     tips = article_dict.get('TIPS', 'No Tips')
 
-    # Format publication time
-    # TODO: Use the better one.
-    if pub_time and pub_time != 'null':
-        try:
-            pub_date = datetime.datetime.strptime(pub_time, "%Y-%m-%d")
-            pub_time_display = pub_date.strftime("%B %d, %Y")
-        except:
-            pub_time_display = str(pub_time)
-    else:
-        pub_time_display = "Not available"
-
-    formatted_times = [format_date(item) for item in event_times]
+    pub_time_display = any_time_to_time_str(pub_time)
+    formatted_times = [any_time_to_time_str(item) for item in event_times]
 
     # Create rating stars display
     def create_rating_stars(score):
