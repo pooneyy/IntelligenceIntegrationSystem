@@ -69,13 +69,6 @@ def render_query_page(params, results, total_results):
                                     name="organizations" placeholder="Comma-separated IDs" 
                                     value="{params['organizations']}">
                             </div>
-
-                            <!-- Keywords & Pagination -->
-                            <div class="col-md-8">
-                                <label class="form-label">Keywords</label>
-                                <input type="text" class="form-control" 
-                                    name="keywords" value="{params['keywords']}">
-                            </div>
                             <div class="col-md-2">
                                 <label class="form-label">Results per page</label>
                                 <select class="form-select" name="per_page">

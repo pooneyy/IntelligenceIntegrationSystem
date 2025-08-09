@@ -175,7 +175,7 @@ class IntelligenceHubWebService:
                     session['user_id'] = user_id
                     session['username'] = username
                     session.permanent = True
-                    return redirect(url_for('intelligences_list_api'))
+                    return redirect(url_for('show_post', article='index'))
                 else:
                     return "Invalid credentials", 401
             return render_template('login.html')
@@ -186,7 +186,10 @@ class IntelligenceHubWebService:
             session.clear()
             return redirect(url_for('login'))
 
+        # ---------------------------------------------- Post and Article ----------------------------------------------
+
         @self.app.route('/post/<path:article>')
+        @WebServiceAccessManager.login_required
         def show_post(article):
             """
             Render a Markdown article as HTML with caching mechanism.
@@ -301,7 +304,7 @@ class IntelligenceHubWebService:
                 'locations': form_data.get('locations', ''),
                 'peoples': form_data.get('peoples', ''),
                 'organizations': form_data.get('organizations', ''),
-                'keywords': form_data.get('keywords', ''),
+                # 'keywords': form_data.get('keywords', ''),
                 'page': int(form_data.get('page', 1)),
                 'per_page': int(form_data.get('per_page', 10))
             }
@@ -318,8 +321,8 @@ class IntelligenceHubWebService:
                 if params[field]:
                     query_params[field] = [x.strip() for x in params[field].split(',')]
 
-            if params['keywords']:
-                query_params['keywords'] = params['keywords']
+            # if params['keywords']:
+            #     query_params['keywords'] = params['keywords']
 
             # Add pagination
             skip = (params['page'] - 1) * params['per_page']
