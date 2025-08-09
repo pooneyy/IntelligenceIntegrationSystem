@@ -314,7 +314,9 @@ class IntelligenceHubWebService:
                 else:
                     return jsonify({"error": "Intelligence not found"}), 404
             except Exception as e:
-                logger.error(f'intelligence_viewer_api() error: {str(e)}', stack_info=True)
+                # logger.error(f'intelligence_viewer_api() error: {str(e)}', stack_info=True)
+                print(str(e))
+                traceback.print_exc()
                 return jsonify({"error": "Server error"}), 500
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------

@@ -1,4 +1,23 @@
-from datetime import datetime
+import datetime
+
+
+# TODO: I have better functions, let me look for it.
+def format_date(input_date):
+    if isinstance(input_date, datetime.datetime):
+        return input_date.strftime("%B %d, %Y")
+
+    if isinstance(input_date, str):
+        # 尝试常见日期格式
+        formats = ["%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"]
+        for fmt in formats:
+            try:
+                date_obj = datetime.datetime.strptime(input_date, fmt)
+                return date_obj.strftime("%B %d, %Y")
+            except ValueError:
+                continue
+    # 其他情况返回原始值（转字符串）
+    return str(input_date)
+
 
 
 def default_article_render(article_dict):
@@ -27,27 +46,17 @@ def default_article_render(article_dict):
     tips = article_dict.get('TIPS', 'No Tips')
 
     # Format publication time
+    # TODO: Use the better one.
     if pub_time and pub_time != 'null':
         try:
-            pub_date = datetime.strptime(pub_time, "%Y-%m-%d")
+            pub_date = datetime.datetime.strptime(pub_time, "%Y-%m-%d")
             pub_time_display = pub_date.strftime("%B %d, %Y")
         except:
-            pub_time_display = pub_time
+            pub_time_display = str(pub_time)
     else:
         pub_time_display = "Not available"
 
-    # Format event times
-    formatted_times = []
-    if event_times and event_times != 'null':
-        if not isinstance(event_times, list):
-            event_times = [event_times]
-
-        for time_str in event_times:
-            try:
-                time_obj = datetime.strptime(time_str, "%Y-%m-%d")
-                formatted_times.append(time_obj.strftime("%B %d, %Y"))
-            except:
-                formatted_times.append(time_str)
+    formatted_times = [format_date(item) for item in event_times]
 
     # Create rating stars display
     def create_rating_stars(score):
@@ -210,7 +219,7 @@ def default_article_render(article_dict):
                         <div class="system-name">
                             <i class="bi bi-cpu"></i> Intelligence Integration System
                         </div>
-                        <div class="mt-2 text-muted">© {datetime.now().year} All rights reserved</div>
+                        <div class="mt-2 text-muted">© {datetime.datetime.now().year} All rights reserved</div>
                     </div>
                     <div class="text-end">
                         <div class="author-brand">SleepySoft</div>
@@ -219,7 +228,7 @@ def default_article_render(article_dict):
                 </div>
                 <div class="text-center mt-4 pt-3 border-top border-secondary border-opacity-25">
                     <small class="d-block opacity-75">
-                        Report generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                        Report generated at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     </small>
                 </div>
             </div>
