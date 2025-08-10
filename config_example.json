@@ -43,6 +43,18 @@
   },
 
   "collector": {
+    "submit_ihub_url": "http://127.0.0.1:5000",
+
+    "cn_site_proxy": {
+      "http": "",
+      "https": ""
+    },
+
+    "global_site_proxy": {
+      "http": "socks5://127.0.0.1:10808",
+      "https": "socks5://127.0.0.1:10808"
+    },
+
     "default_token": "13662a6a-b7fc-43c5-9def-56bb52976165"
   },
 

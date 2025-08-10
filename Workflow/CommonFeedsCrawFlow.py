@@ -62,9 +62,11 @@ def feeds_craw_flow(flow_name: str,
     prefix = f'[{flow_name}]:'
     logger.info(f'{prefix} starts work.')
 
+    submit_ihub_url = config.get('collector.submit_ihub_url', f'http://127.0.0.1:{DEFAULT_IHUB_PORT}')
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens')
     token = collector_tokens[0] if collector_tokens else DEFAULT_COLLECTOR_TOKEN
 
+    logger.info(f'{prefix} submit token: {token}.')
     logger.info(f'{prefix} submit token: {token}.')
 
     for feed_name, feed_url in feeds.items():
@@ -132,11 +134,11 @@ def feeds_craw_flow(flow_name: str,
                     'title': article['title'],
                     'authors': article.get('authors', ''),
                     'content': text,
-                    'pub_time': 'published',
+                    'pub_time': article.get('published', ''),
                     'informant': article['link'],
                 }
 
-                post_collected_intelligence(f'http://127.0.0.1:{DEFAULT_IHUB_PORT}', collected_data)
+                post_collected_intelligence(submit_ihub_url, collected_data)
 
                 statistics['success'] += 1
 
