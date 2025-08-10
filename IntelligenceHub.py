@@ -75,7 +75,8 @@ APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from
 APPENDIX_TIME_ARCHIVED  = '__TIME_ARCHIVED__'
 APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
 APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
-APPENDIX_MAX_RATE       = '__MAX_RATE__'
+APPENDIX_MAX_RATE_CLASS = '__MAX_RATE_CLASS__'
+APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
 
 
 ARCHIVED_FLAG_DROP= 'D'
@@ -423,31 +424,16 @@ class IntelligenceHub:
                 data = self.processed_queue.get(timeout=1)
 
                 # Record the max rate for easier filter
-                data['APPENDIX'][APPENDIX_MAX_RATE] = max(data.get('RATE', { 'a': '0' }).values())
-
-                # if 'UUID' not in data:
-                #     # There's no reason to reach this path.
-                #     logger.error('NO UUID field. This data is not even error.')
-                #     self.error_counter += 1
-                #     self.processed_queue.task_done()
-                #     continue
-                #
-                # # According to the prompt (ANALYSIS_PROMPT),
-                # #   if the article does not have any value, just "UUID" is returned.
-                # if 'EVENT_TEXT' not in data:
-                #     logger.info(f"Message {data['UUID']} dropped.")
-                #     self._mark_cache_data_archived_flag(data['UUID'], 'F')
-                #     self.drop_counter += 1
-                #     self.processed_queue.task_done()
-                #     continue
-                #
-                # validated_data = self._validate_sanitize_processed_data(data)
-                #
-                # if not validated_data:
-                #     self._mark_cache_data_archived_flag(data['UUID'], 'E')
-                #     self.error_counter += 1
-                #     self.processed_queue.task_done()
-                #     continue
+                if 'APPENDIX' not in data:
+                    data['APPENDIX'] = {}
+                rate_dict = data.get('RATE', {'N/A': '0'})
+                numeric_rates = {k: int(v) for k, v in rate_dict.items()}
+                if numeric_rates:
+                    max_key, max_value = max(numeric_rates.items(), key=lambda x: x[1])
+                else:
+                    max_key, max_value = 'N/A', 0
+                data['APPENDIX'][APPENDIX_MAX_RATE_CLASS] = max_key
+                data['APPENDIX'][APPENDIX_MAX_RATE_SCORE] = max_value
 
                 try:
                     self._archive_processed_data(data)
