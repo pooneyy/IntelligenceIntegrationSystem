@@ -364,8 +364,9 @@ class IntelligenceHub:
 
             try:
                 # If there's no UUID...
-                if not original_data.get('UUID', ''):
-                    original_data['UUID'] = str(uuid.uuid4())
+                original_uuid = str(original_data.get('UUID', '')).strip()
+                if not original_uuid:
+                    original_data['UUID'] = original_uuid = str(uuid.uuid4())
 
                 self._notice_data_in_processing(original_data)
 
@@ -385,8 +386,6 @@ class IntelligenceHub:
                 if retry:
                     logger.info(f'Got AI match format answer after {retry} retires.')
 
-                original_uuid = original_data.get('UUID', '')
-
                 # If this article has no value. Only return { UUID: xxxxx }
                 if 'EVENT_TEXT' not in result:
                     with self.lock:
@@ -395,10 +394,14 @@ class IntelligenceHub:
                     self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_DROP)
                     continue
 
-                # Try to fix if UUID is missing.
-                if not result.get('UUID', ''):
-                    logger.info(f"Try to fix UUID missing: {original_uuid}")
-                    result = original_uuid
+                # Just user original UUID and Informant. The value from AI can be a reference.
+
+                result['UUID'] = original_uuid
+                original_informant = str(original_data.get('INFORMANT', '')).strip()
+                if original_informant:
+                    result['INFORMANT'] = original_informant
+
+                #
 
                 validated_data, error_text = check_sanitize_dict(dict(result), ProcessedData)
                 if error_text:
