@@ -75,24 +75,13 @@ APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from
 APPENDIX_TIME_ARCHIVED  = '__TIME_ARCHIVED__'
 APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
 APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
-
-APPENDIX_FIELDS = [
-    APPENDIX_TIME_GOT,
-    APPENDIX_TIME_POST,
-    APPENDIX_TIME_DONE,
-    APPENDIX_RETRY_COUNT,
-    APPENDIX_ARCHIVED_FLAG
-]
+APPENDIX_MAX_RATE       = '__MAX_RATE__'
 
 
 ARCHIVED_FLAG_DROP= 'D'
 ARCHIVED_FLAG_ERROR = 'E'
 ARCHIVED_FLAG_RETRY = 'R'
 ARCHIVED_FLAG_ARCHIVED= 'A'
-
-
-def data_without_appendix(data: dict) -> dict:
-    return {k: v for k, v in data.items() if k not in APPENDIX_FIELDS}
 
 
 class IntelligenceHub:
@@ -398,7 +387,7 @@ class IntelligenceHub:
                 original_uuid = original_data.get('UUID', '')
 
                 # If this article has no value. Only return { UUID: xxxxx }
-                if len(result) <= 1:
+                if 'EVENT_TEXT' not in result:
                     with self.lock:
                         self.drop_counter += 1
                     logger.info(f"Valueless article dropped: {original_uuid}")
@@ -433,6 +422,9 @@ class IntelligenceHub:
             try:
                 data = self.processed_queue.get(timeout=1)
 
+                # Record the max rate for easier filter
+                data['APPENDIX'][APPENDIX_MAX_RATE] = max(data.get('RATE', { 'a': '0' }).values())
+
                 # if 'UUID' not in data:
                 #     # There's no reason to reach this path.
                 #     logger.error('NO UUID field. This data is not even error.')
@@ -459,12 +451,14 @@ class IntelligenceHub:
 
                 try:
                     self._archive_processed_data(data)
-                    self._index_archived_data(data)
                     self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ARCHIVED)
-                    self._publish_article_to_rss(data)
-                    self.archived_counter += 1
 
+                    with self.lock:
+                        self.archived_counter += 1
                     logger.info(f"Message {data['UUID']} archived.")
+
+                    self._index_archived_data(data)
+                    self._publish_article_to_rss(data)
 
                     # TODO: Call post processor plugins
                 except Exception as e:
