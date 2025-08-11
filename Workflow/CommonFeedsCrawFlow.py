@@ -1,13 +1,18 @@
 import time
 import logging
+import urllib3
 import threading
 from typing import Callable, TypedDict, Dict, List
 
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
+from IntelligenceHub import CollectedData
 from MyPythonUtility.easy_config import EasyConfig
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
+
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +31,14 @@ class FetchFeedResult(TypedDict):
 class FetchContentResult(TypedDict):
     content: str
 
+
+# Re-assign this function pointer to re-direct output for debug.
+intelligence_sink: Callable[[str, dict, int], dict] = post_collected_intelligence
+
+
+def set_intelligence_sink(func: Callable[[str, dict, int], dict] | None):
+    global intelligence_sink
+    intelligence_sink = func
 
 
 def feeds_craw_flow(flow_name: str,
@@ -67,7 +80,7 @@ def feeds_craw_flow(flow_name: str,
     token = collector_tokens[0] if collector_tokens else DEFAULT_COLLECTOR_TOKEN
 
     logger.info(f'{prefix} submit token: {token}.')
-    logger.info(f'{prefix} submit token: {token}.')
+    logger.info(f'{prefix} submit URL: {submit_ihub_url}.')
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
@@ -138,7 +151,8 @@ def feeds_craw_flow(flow_name: str,
                     'informant': article['link'],
                 }
 
-                post_collected_intelligence(submit_ihub_url, collected_data)
+                if intelligence_sink:
+                    intelligence_sink(submit_ihub_url, collected_data, 10)
 
                 statistics['success'] += 1
 

@@ -1,11 +1,15 @@
 import os
 import threading
 import traceback
+from functools import partial
 
 from ServiceEngine import ServiceContext
+from Workflow.CommonFeedsCrawFlow import set_intelligence_sink
 
 
 def drive_module(module):
+    set_intelligence_sink(None)
+
     stop_event = threading.Event()
     service_context = ServiceContext()
 

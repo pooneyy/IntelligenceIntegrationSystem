@@ -35,8 +35,8 @@ def start_task(stop_event):
                     config,
                     15 * 60,
 
-                    partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy=APPLIED_PROXY),
-                    partial(fetch_content, timeout_ms=APPLIED_NATIONAL_TIMEOUT_MS, proxy=APPLIED_PROXY, format='lxml'),
+                    partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy=config.get('collector.global_site_proxy', {})),
+                    partial(fetch_content, timeout_ms=APPLIED_NATIONAL_TIMEOUT_MS, proxy=config.get('collector.global_site_proxy', {}), format='lxml'),
                     [
                         partial(html_content_converter, selector='div[data-cy="storyWrapper"]'),
                         partial(sanitize_unicode_string, max_length=10240)
