@@ -424,7 +424,13 @@ class IntelligenceHub:
     def _post_process_worker(self):
         while not self.shutdown_flag.is_set():
             try:
-                data = self.processed_queue.get(timeout=1)
+                try:
+                    data = self.processed_queue.get(timeout=1)
+                    if not data:
+                        self.processed_queue.task_done()
+                        continue
+                except queue.Empty:
+                    continue
 
                 # Record the max rate for easier filter
                 if 'APPENDIX' not in data:
