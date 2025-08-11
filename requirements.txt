@@ -15,6 +15,7 @@ markdown
 ### Network Requests & Parsing
 ##############################
 requests==2.32.3             # HTTP requests library (includes SOCKS proxy support)
+requests[socks]
 urllib3==1.26.20             # HTTP client (Note: requires 1.26.9 ≤ ver < 1.27)
 aiohttp==3.12.2              # Async HTTP client (dependency for FastAPI/Playwright)
 beautifulsoup4==4.13.4       # HTML parsing library
