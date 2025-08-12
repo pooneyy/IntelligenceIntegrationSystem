@@ -1189,7 +1189,6 @@ mongodb的记录中有RATE字段，内容为{ "评分维度": "评分" }。评�
 
 分析我的意图并帮我完善代码，注意注释文本都需要使用英文：
 
-
 class CrawlStatistics:
     # TODO: Singleton with multi-thread protecting
 

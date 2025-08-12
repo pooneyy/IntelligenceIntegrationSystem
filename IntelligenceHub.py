@@ -37,7 +37,7 @@ class CollectedData(BaseModel):
     title: str | None = None                # [MUST]: The content to be processed.
     authors: List[str] | None = []          # (Optional): Article authors.
     content: str                            # [MUST]: The content to be processed.
-    pub_time: str | None = None             # (Optional): Content publish time.
+    pub_time: object | None = None          # (Optional): Content publish time. Can be time.struct_time, datetime, str, ...
     informant: str | None = None            # (Optional): The source of message (like URL).
 
 

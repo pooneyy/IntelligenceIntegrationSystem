@@ -1,8 +1,12 @@
 import time
 import logging
+from uuid import uuid4
+
 import urllib3
 import threading
 from typing import Callable, TypedDict, Dict, List
+
+from pydantic import UUID1
 
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
 from IntelligenceHub import CollectedData
@@ -10,6 +14,7 @@ from MyPythonUtility.easy_config import EasyConfig
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
+from Tools.CrawlStatistics import CrawlStatistics
 from Tools.RSSFetcher import FeedData
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -69,56 +74,62 @@ def feeds_craw_flow(flow_name: str,
     :return: None
     """
     prefix = f'[{flow_name}]:'
-    logger.info(f'{prefix} starts work.')
+    print(f'{prefix} starts work.')
 
     submit_ihub_url = config.get('collector.submit_ihub_url', f'http://127.0.0.1:{DEFAULT_IHUB_PORT}')
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens')
     token = collector_tokens[0] if collector_tokens else DEFAULT_COLLECTOR_TOKEN
 
-    logger.info(f'{prefix} submit token: {token}.')
-    logger.info(f'{prefix} submit URL: {submit_ihub_url}.')
+    print(f'{prefix} submit token: {token}.')
+    print(f'{prefix} submit URL: {submit_ihub_url}.')
+
+    craw_statistics = CrawlStatistics()
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
             break
+        stat_name = [flow_name, feed_url]
 
-        statistics = {
+        feed_statistics = {
             'total': 0,
             'index': 0,
-            'current': 0,
             'success': 0,
             'skip': 0,
         }
 
         try:
             # -------------------------------- Fetch and Parse feeds --------------------------------
-
-            logger.info(f'{prefix} Process feed: {feed_name} : {feed_url}')
+            print()
+            print('=' * 100)
+            print(f'{prefix} Process feed: {feed_name} : {feed_url}')
 
             result = fetch_feed(feed_url)
             if result.fatal:
+                craw_statistics.counter_log(stat_name, 'fail', '\n'.join(result.errors))
                 continue
+            else:
+                craw_statistics.counter_log(stat_name, 'success')
 
-            statistics['total'] = len(result['entries'])
+            feed_statistics['total'] = len(result.entries)
 
             # ------------------------------- Fetch and Parse articles ------------------------------
 
-            for article in result['entries']:
-                statistics['index'] += 1
-                article_link = article['link']
+            for article in result.entries:
+                feed_statistics['index'] += 1
+                article_link = article.link
 
                 if has_url(article_link):
-                    statistics['skip'] += 1
+                    feed_statistics['skip'] += 1
                     continue
 
-                statistics['current'] += 1
-                logger.info(f"{prefix} |--Fetch article ({statistics['index']}/{statistics['total']}): {article_link}")
+                print(f"{prefix} --Fetch article ({feed_statistics['index']}/{feed_statistics['total']}): {article_link}")
 
                 content = fetch_content(article_link)
 
                 raw_html = content['content']
                 if not raw_html:
-                    logger.error(f'{prefix}   |--Got empty HTML content.')
+                    # logger.error(f'{prefix}   |--Got empty HTML content.')
+                    craw_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
                     continue
 
                 # TODO: If an article always convert fail. Need a special treatment.
@@ -127,48 +138,54 @@ def feeds_craw_flow(flow_name: str,
                 for scrubber in scrubbers:
                     text = scrubber(text)
                     if not text:
-                        logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
                         break
                 if not text:
+                    # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
+                    craw_statistics.sub_item_log(stat_name, article_link, 'scrub emtpy')
                     continue
 
                 success, file_path = to_file_and_history(
-                    article_link, text, article['title'], feed_name, '.md')
+                    article_link, text, article.title, feed_name, '.md')
                 if not success:
-                    logger.error(f'{prefix}   |--Save content {file_path} fail.')
+                    # logger.error(f'{prefix}   |--Save content {file_path} fail.')
+                    craw_statistics.sub_item_log(stat_name, article_link, 'persists fail')
                     continue
 
                 # Post to IHub
+                collected_data = CollectedData(
+                    UUID=str(uuid4()),
+                    token=token,
 
-                collected_data = {
-                    'UUID': '',
-                    'token': token,
-                    # 'source': '',
-                    # 'target': '',
-                    # 'prompt': '',
-
-                    'title': article['title'],
-                    'authors': article.get('authors', ''),
-                    'content': text,
-                    'pub_time': article.get('published', ''),
-                    'informant': article['link'],
-                }
+                    title=article.title,
+                    authors=article.authors,
+                    content=text,
+                    pub_time=article.published,
+                    informant=article.link
+                )
 
                 if _intelligence_sink:
                     _intelligence_sink(submit_ihub_url, collected_data, 10)
 
-                statistics['success'] += 1
+                feed_statistics['success'] += 1
+                craw_statistics.sub_item_log(stat_name, article_link, 'success')
 
         except Exception as e:
             logger.error(f"{prefix} Process feed fail: {feed_url} - {str(e)}")
+            craw_statistics.counter_log(stat_name, 'exception')
 
-        logger.info(f"{prefix} Feed: {feed_name} finished.\n"
-                    f"     Total: {statistics['total']}\n"
-                    f"     Success: {statistics['success']}\n"
-                    f"     Skip: {statistics['skip']}\n"
-                    f"     Fail: {statistics['total'] - statistics['success'] - statistics['skip']}\n")
+        print(f"{prefix} Feed: {feed_name} finished.\n"
+                    f"     Total: {feed_statistics['total']}\n"
+                    f"     Success: {feed_statistics['success']}\n"
+                    f"     Skip: {feed_statistics['skip']}\n"
+                    f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n")
 
-    logger.info(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
+        print('-' * 80)
+        print(craw_statistics.dump(stat_name))
+        print()
+        print('=' * 100)
+        print()
+
+    print(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
 
     # Wait for next loop and check event per 5s.
     # noinspection PyTypeChecker

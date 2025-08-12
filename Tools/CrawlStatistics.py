@@ -1,5 +1,5 @@
 import threading
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, Set, Union
 
 
 class CrawlStatistics:
@@ -30,7 +30,7 @@ class CrawlStatistics:
 
         self._initialized = True  # Mark initialization complete
 
-    def counter_log(self, leveled_names: List[str], counter_item_name: str, log_text: str) -> None:
+    def counter_log(self, leveled_names: List[str], counter_item_name: str, log_text: str = '') -> None:
         """Increment counter for a specific item in a hierarchical namespace.
 
         Args:
@@ -97,3 +97,119 @@ class CrawlStatistics:
                 status: items.copy()  # Copy list to prevent external modification
                 for status, items in status_dict.items()
             }
+
+    def reset(self, leveled_names: Union[List[str], None] = None) -> None:
+        """Reset statistics either completely or for specified namespace(s)
+
+        Args:
+            leveled_names:
+                - None: Reset all statistics
+                - List: Reset specific namespace and its children
+        """
+        if leveled_names is None:
+            # Reset everything
+            with self._counter_log_lock, self._sub_item_log_lock:
+                self._counter_log_record.clear()
+                self._sub_item_log_record.clear()
+            return
+
+        # Convert to tuple for matching
+        target_key = tuple(leveled_names)
+
+        with self._counter_log_lock:
+            # Remove target namespace and any child namespaces
+            keys_to_remove = [
+                k for k in self._counter_log_record.keys()
+                if k[:len(target_key)] == target_key
+            ]
+            for k in keys_to_remove:
+                del self._counter_log_record[k]
+
+        with self._sub_item_log_lock:
+            # Repeat for sub-item log
+            keys_to_remove = [
+                k for k in self._sub_item_log_record.keys()
+                if k[:len(target_key)] == target_key
+            ]
+            for k in keys_to_remove:
+                del self._sub_item_log_record[k]
+
+    def dump(self, leveled_names: Union[List[str], None] = None) -> str:
+        """Generate formatted statistics report either for all namespaces or specified one
+
+        Args:
+            leveled_names:
+                - None: Dump all namespaces
+                - List: Dump specific namespace and its children
+
+        Returns:
+            Formatted multi-line statistics report
+        """
+        # Handle all-namespace case
+        if leveled_names is None:
+            return self._dump_all_namespaces()
+
+        # Handle specific namespace case
+        target_key = tuple(leveled_names)
+        return self._dump_single_namespace(target_key, include_children=True)
+
+    def _get_all_namespaces(self) -> Set[Tuple]:
+        """Get combined keys from both log records"""
+        with self._counter_log_lock:
+            counter_keys = set(self._counter_log_record.keys())
+        with self._sub_item_log_lock:
+            subitem_keys = set(self._sub_item_log_record.keys())
+        return counter_keys | subitem_keys
+
+    def _dump_all_namespaces(self) -> str:
+        """Generate report for all namespaces"""
+        all_keys = sorted(self._get_all_namespaces(), key=lambda x: (len(x), x))
+        return "\n\n".join([self._dump_single_namespace(key) for key in all_keys])
+
+    def _dump_single_namespace(
+            self,
+            namespace_key: Tuple,
+            include_children: bool = False
+    ) -> str:
+        """Generate report for a single namespace (including children if requested)"""
+        # Collect matching keys
+        matching_keys = []
+        if include_children:
+            all_keys = self._get_all_namespaces()
+            matching_keys = sorted(
+                [k for k in all_keys if k[:len(namespace_key)] == namespace_key],
+                key=lambda x: (len(x), x)
+            )
+        else:
+            matching_keys = [namespace_key]
+
+        # Generate report sections
+        sections = []
+        for key in matching_keys:
+            counter_data = self.get_classified_counter(list(key))
+            subitem_data = self.get_sub_item_statistics(list(key))
+
+            # Skip empty namespaces
+            if not counter_data and not subitem_data:
+                continue
+
+            section = [
+                f"Namespace: {'.'.join(key)}",
+                "\nCounter Statistics:"
+            ]
+
+            # Format counters
+            for name, count in counter_data.items():
+                section.append(f"  {name}: {count}")
+
+            # Format subitems
+            if subitem_data:
+                section.append("\nSub-item Statistics:")
+                for status, items in subitem_data.items():
+                    section.append(f"  STATUS: {status} (Count: {len(items)})")
+                    for i, item in enumerate(items, 1):
+                        section.append(f"    {i}. {str(item)}")
+
+            sections.append("\n".join(section))
+
+        return "\n\n".join(sections) if sections else ""
