@@ -180,10 +180,12 @@ def feeds_craw_flow(flow_name: str,
                     f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n")
 
         print('-' * 80)
-        print(craw_statistics.dump(stat_name))
+        print(craw_statistics.dump_sub_items(stat_name, statuses=['fetch emtpy', 'scrub emtpy', 'persists fail']))
         print()
         print('=' * 100)
         print()
+
+    craw_statistics.dump_counters(['flow_name'])
 
     print(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
 

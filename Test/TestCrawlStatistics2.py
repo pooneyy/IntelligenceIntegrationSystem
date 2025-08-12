@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     # 测试4: dump全部统计信息
     print("\n测试4: dump全部统计信息")
-    full_dump = stats.dump()
+    full_dump = stats.dump_counters() + '\n' + stats.dump_sub_items()
     print("完整转储输出:")
     print(full_dump)
 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     # 测试5: 按命名空间dump
     print("\n测试5: 按命名空间dump")
     print("转储domain1:")
-    domain1_dump = stats.dump(["domain1"])
+    domain1_dump = stats.dump_counters(["domain1"]) + '\n' + stats.dump_sub_items(["domain1"])
     print(domain1_dump)
 
     # 验证内容
@@ -97,13 +97,14 @@ if __name__ == "__main__":
     # 测试8: 完全重置
     print("\n测试8: 完全重置")
     stats.reset()
-    full_dump_after_reset = stats.dump()
+    full_dump_after_reset = stats.dump_counters(["domain1"]) + '\n' + stats.dump_sub_items(["domain1"])
     print("完全重置后dump:", full_dump_after_reset)
 
     # 验证所有数据被清除
     assert stats.get_classified_counter(["domain1"]) == {}
     assert stats.get_classified_counter(["domain1", "page2"]) == {}
-    assert full_dump_after_reset == ""
+    assert 'No counter data for namespace' in full_dump_after_reset
+    assert 'No sub-item data for namespace' in full_dump_after_reset
 
     # 测试9: 复杂dump场景
     print("\n测试9: 复杂dump场景")
@@ -118,31 +119,66 @@ if __name__ == "__main__":
 
     # 转储特定层级
     print("API v1 转储:")
-    api_v1_dump = stats.dump(["api", "v1"])
+    api_v1_dump = stats.dump_counters(["api", "v1"]) + '\n' + stats.dump_sub_items(["api", "v1"])
     print(api_v1_dump)
 
     # 验证内容格式
     assert "v1" in api_v1_dump
     assert "users" in api_v1_dump
     assert "requests: 2" in api_v1_dump  # 计数器值
-    assert "STATUS: success (Count: 1)" in api_v1_dump
+    assert "success (1)" in api_v1_dump
     assert "user-001" in api_v1_dump
     # 验证v2内容不包含
     assert "v2" not in api_v1_dump
 
     # 测试10: 空命名空间处理
     print("\n测试10: 空命名空间处理")
-    empty_dump = stats.dump(["nonexistent"])
+    empty_dump = stats.dump_counters(["nonexistent"]) + '\n' + stats.dump_sub_items(["nonexistent"])
     print("空命名空间转储:", empty_dump)
     assert "" in empty_dump
 
     # 测试11: 重置子命名空间
     print("\n测试11: 重置子命名空间")
     stats.reset(["api", "v1", "users"])
-    users_dump = stats.dump(["api", "v1", "users"])
+    users_dump = stats.dump_counters(["api", "v1", "users"]) + '\n' + stats.dump_sub_items(["api", "v1", "users"])
     print("重置后的用户命名空间:", users_dump)
     assert "" in users_dump
     # 验证兄弟命名空间仍然存在
     assert stats.get_classified_counter(["api", "v1", "products"]) != {}
+
+    print('-' * 100)
+
+    stats.counter_log(["web", "example.com", "products"], "items_found", 5)
+    stats.counter_log(["web", "example.com", "products"], "images_loaded", 12)
+    stats.counter_log(["web", "example.com", "about"], "pages_crawled", 1)
+
+    stats.sub_item_log(["web", "example.com", "products"], "product-101", "available")
+    stats.sub_item_log(["web", "example.com", "products"], "product-102", "out_of_stock")
+    stats.sub_item_log(["web", "example.com", "products"], "product-103", "available")
+    stats.sub_item_log(["web", "example.com", "contact"], "form-submission", "success")
+
+    # 测试1: 独立的计数器转储
+    print("\n测试1: dump_counters - 所有命名空间")
+    print(stats.dump_counters())
+
+    print("\n测试2: dump_counters - 指定父命名空间")
+    print(stats.dump_counters(["web", "example.com"]))
+
+    # 测试3: 独立的子项转储（带状态过滤）
+    print("\n测试3: dump_sub_items - 所有命名空间")
+    print(stats.dump_sub_items())
+
+    print("\n测试4: dump_sub_items - 指定状态过滤")
+    print(stats.dump_sub_items(["web", "example.com", "products"], statuses=["available"]))
+
+    # 测试5: 获取子命名空间
+    print("\n测试5: get_child_namespaces - 优雅获取子命名空间")
+    children = stats.get_child_namespaces(["web", "example.com"])
+    print(f"example.com的直接子命名空间: {['.'.join(c) for c in children]}")
+
+    # 测试6: 不包含子空间的转储
+    print("\n测试6: 不包含子空间的转储")
+    print(stats.dump_counters(["web"], include_children=False))
+    print(stats.dump_sub_items(["web", "example.com"], include_children=False))
 
     print("\n==== 所有测试通过! ====")

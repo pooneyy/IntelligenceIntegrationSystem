@@ -1,5 +1,5 @@
 import threading
-from typing import Any, Dict, List, Tuple, Optional, Set, Union
+from typing import Any, Dict, List, Tuple, Optional, Set, Union, Iterable
 
 
 class CrawlStatistics:
@@ -134,24 +134,24 @@ class CrawlStatistics:
             for k in keys_to_remove:
                 del self._sub_item_log_record[k]
 
-    def dump(self, leveled_names: Union[List[str], None] = None) -> str:
-        """Generate formatted statistics report either for all namespaces or specified one
-
-        Args:
-            leveled_names:
-                - None: Dump all namespaces
-                - List: Dump specific namespace and its children
-
-        Returns:
-            Formatted multi-line statistics report
-        """
-        # Handle all-namespace case
-        if leveled_names is None:
-            return self._dump_all_namespaces()
-
-        # Handle specific namespace case
-        target_key = tuple(leveled_names)
-        return self._dump_single_namespace(target_key, include_children=True)
+    # def dump(self, leveled_names: Union[List[str], None] = None) -> str:
+    #     """Generate formatted statistics report either for all namespaces or specified one
+    #
+    #     Args:
+    #         leveled_names:
+    #             - None: Dump all namespaces
+    #             - List: Dump specific namespace and its children
+    #
+    #     Returns:
+    #         Formatted multi-line statistics report
+    #     """
+    #     # Handle all-namespace case
+    #     if leveled_names is None:
+    #         return self._dump_all_namespaces()
+    #
+    #     # Handle specific namespace case
+    #     target_key = tuple(leveled_names)
+    #     return self._dump_single_namespace(target_key, include_children=True)
 
     def _get_all_namespaces(self) -> Set[Tuple]:
         """Get combined keys from both log records"""
@@ -161,55 +161,211 @@ class CrawlStatistics:
             subitem_keys = set(self._sub_item_log_record.keys())
         return counter_keys | subitem_keys
 
-    def _dump_all_namespaces(self) -> str:
-        """Generate report for all namespaces"""
-        all_keys = sorted(self._get_all_namespaces(), key=lambda x: (len(x), x))
-        return "\n\n".join([self._dump_single_namespace(key) for key in all_keys])
+    # def _dump_all_namespaces(self) -> str:
+    #     """Generate report for all namespaces"""
+    #     all_keys = sorted(self._get_all_namespaces(), key=lambda x: (len(x), x))
+    #     return "\n\n".join([self._dump_single_namespace(key) for key in all_keys])
+    #
+    # def _dump_single_namespace(
+    #         self,
+    #         namespace_key: Tuple,
+    #         include_children: bool = False
+    # ) -> str:
+    #     """Generate report for a single namespace (including children if requested)"""
+    #     # Collect matching keys
+    #     matching_keys = []
+    #     if include_children:
+    #         all_keys = self._get_all_namespaces()
+    #         matching_keys = sorted(
+    #             [k for k in all_keys if k[:len(namespace_key)] == namespace_key],
+    #             key=lambda x: (len(x), x)
+    #         )
+    #     else:
+    #         matching_keys = [namespace_key]
+    #
+    #     # Generate report sections
+    #     sections = []
+    #     for key in matching_keys:
+    #         counter_data = self.get_classified_counter(list(key))
+    #         subitem_data = self.get_sub_item_statistics(list(key))
+    #
+    #         # Skip empty namespaces
+    #         if not counter_data and not subitem_data:
+    #             continue
+    #
+    #         section = [
+    #             f"Namespace: {'.'.join(key)}",
+    #             "\nCounter Statistics:"
+    #         ]
+    #
+    #         # Format counters
+    #         for name, count in counter_data.items():
+    #             section.append(f"  {name}: {count}")
+    #
+    #         # Format subitems
+    #         if subitem_data:
+    #             section.append("\nSub-item Statistics:")
+    #             for status, items in subitem_data.items():
+    #                 section.append(f"  STATUS: {status} (Count: {len(items)})")
+    #                 for i, item in enumerate(items, 1):
+    #                     section.append(f"    {i}. {str(item)}")
+    #
+    #         sections.append("\n".join(section))
+    #
+    #     return "\n\n".join(sections) if sections else ""
 
-    def _dump_single_namespace(
-            self,
-            namespace_key: Tuple,
-            include_children: bool = False
-    ) -> str:
-        """Generate report for a single namespace (including children if requested)"""
-        # Collect matching keys
-        matching_keys = []
+    def get_child_namespaces(self, parent_namespace: List[str]) -> List[Tuple[str, ...]]:
+        """获取指定父命名空间下的所有直接子命名空间
+
+        Args:
+            parent_namespace: 父命名空间路径
+
+        Returns:
+            子命名空间元组列表（不含父路径前缀）
+        """
+        parent_key = tuple(parent_namespace)
+        all_keys = self._get_all_namespaces()
+
+        # 使用集合避免重复
+        children = set()
+        for key in all_keys:
+            # 跳过不是父命名空间直接子项的键
+            if len(key) <= len(parent_key) or key[:len(parent_key)] != parent_key:
+                continue
+
+            # 获取直接子项
+            direct_child = key[:len(parent_key) + 1]
+            children.add(direct_child)
+
+        # 按元组排序返回
+        return sorted(children, key=lambda x: (len(x), x))
+
+    def dump_counters(self,
+                      leveled_names: Union[List[str], None] = None,
+                      include_children: bool = True) -> str:
+        """生成格式化计数器统计信息
+
+        Args:
+            leveled_names:
+                - None: 所有命名空间
+                - List: 指定命名空间
+            include_children: 是否包含子命名空间
+
+        Returns:
+            格式化计数器统计信息
+        """
+        # 处理所有命名空间
+        if leveled_names is None:
+            all_keys = sorted(self._get_all_namespaces(), key=lambda x: (len(x), x))
+            return "\n\n".join([self._dump_counter_namespace(key) for key in all_keys])
+
+        # 处理单个命名空间（包括子空间）
+        return self._dump_counter_namespace(
+            tuple(leveled_names),
+            include_children=include_children
+        )
+
+    def _dump_counter_namespace(self,
+                                namespace_key: Tuple,
+                                include_children: bool = True,
+                                ident: int = 2) -> str:
+        """生成指定命名空间的计数器转储"""
         if include_children:
-            all_keys = self._get_all_namespaces()
-            matching_keys = sorted(
-                [k for k in all_keys if k[:len(namespace_key)] == namespace_key],
-                key=lambda x: (len(x), x)
-            )
+            # 获取所有匹配的子命名空间
+            matching_keys = self._get_child_namespaces_recursive(namespace_key)
         else:
             matching_keys = [namespace_key]
 
-        # Generate report sections
         sections = []
         for key in matching_keys:
             counter_data = self.get_classified_counter(list(key))
-            subitem_data = self.get_sub_item_statistics(list(key))
-
-            # Skip empty namespaces
-            if not counter_data and not subitem_data:
+            if not counter_data:
                 continue
 
-            section = [
-                f"Namespace: {'.'.join(key)}",
-                "\nCounter Statistics:"
-            ]
-
-            # Format counters
+            section = [f"Namespace: {'.'.join(key)}", f"{' ' * ident * 1}Counter Statistics:"]
             for name, count in counter_data.items():
-                section.append(f"  {name}: {count}")
-
-            # Format subitems
-            if subitem_data:
-                section.append("\nSub-item Statistics:")
-                for status, items in subitem_data.items():
-                    section.append(f"  STATUS: {status} (Count: {len(items)})")
-                    for i, item in enumerate(items, 1):
-                        section.append(f"    {i}. {str(item)}")
+                section.append(f"{' ' * ident * 2}{name}: {count}")
 
             sections.append("\n".join(section))
 
-        return "\n\n".join(sections) if sections else ""
+        return "\n\n".join(sections) if sections else f"No counter data for namespace: {'.'.join(namespace_key)}"
+
+    def dump_sub_items(self,
+                       leveled_names: Union[List[str], None] = None,
+                       include_children: bool = True,
+                       statuses: Optional[Iterable[str]] = None) -> str:
+        """生成格式化子项统计信息
+
+        Args:
+            leveled_names:
+                - None: 所有命名空间
+                - List: 指定命名空间
+            include_children: 是否包含子命名空间
+            statuses: 要包含的状态列表（None表示所有状态）
+
+        Returns:
+            格式化子项统计信息
+        """
+        # 处理所有命名空间
+        if leveled_names is None:
+            all_keys = sorted(self._get_all_namespaces(), key=lambda x: (len(x), x))
+            return "\n\n".join([
+                self._dump_sub_items_namespace(key, include_children=False, statuses=statuses)
+                for key in all_keys
+            ])
+
+        # 处理单个命名空间（包括子空间）
+        return self._dump_sub_items_namespace(
+            tuple(leveled_names),
+            include_children=include_children,
+            statuses=statuses
+        )
+
+    def _dump_sub_items_namespace(self,
+                                  namespace_key: Tuple,
+                                  include_children: bool = True,
+                                  statuses: Optional[Iterable[str]] = None,
+                                  ident: int = 2) -> str:
+        """生成指定命名空间的子项转储（支持状态过滤）"""
+        if include_children:
+            # 获取所有匹配的子命名空间
+            matching_keys = self._get_child_namespaces_recursive(namespace_key)
+        else:
+            matching_keys = [namespace_key]
+
+        sections = []
+        for key in matching_keys:
+            subitem_data = self.get_sub_item_statistics(list(key))
+            if not subitem_data:
+                continue
+
+            section = [f"Namespace: {'.'.join(key)}", f"{' ' * ident * 1}Sub-item Statistics:"]
+
+            # 应用状态过滤
+            if statuses is not None:
+                statuses = set(statuses)
+                filtered_data = {
+                    status: items
+                    for status, items in subitem_data.items()
+                    if status in statuses
+                }
+            else:
+                filtered_data = subitem_data
+
+            for status, items in filtered_data.items():
+                section.append(f"{' ' * ident * 2}{status} ({len(items)})")
+                for i, item in enumerate(items, 1):
+                    section.append(f"{' ' * ident * 3}{i}. {str(item)}")
+
+            sections.append("\n".join(section))
+
+        return "\n\n".join(sections) if sections else f"No sub-item data for namespace: {'.'.join(namespace_key)}"
+
+    # 辅助方法: 递归获取所有子命名空间
+    def _get_child_namespaces_recursive(self, parent_key: Tuple) -> List[Tuple]:
+        """获取指定父键的所有子命名空间（包括子子空间）"""
+        all_keys = self._get_all_namespaces()
+        return sorted(
+            [k for k in all_keys if k[:len(parent_key)] == parent_key],
+            key=lambda x: (len(x), x)
+        )
