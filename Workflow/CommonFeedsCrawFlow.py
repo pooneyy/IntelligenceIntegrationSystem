@@ -24,26 +24,17 @@ CRAWL_ERROR_FEED_PARSE = 'Feed parse error'
 CRAWL_ERROR_ARTICLE_FETCH = 'Article fetch error'
 
 
-class FetchFeedEntries(TypedDict):
-    link: str
-    title: str
-
-
-class FetchFeedResult(TypedDict):
-    entries: List[FetchFeedEntries]
-
-
 class FetchContentResult(TypedDict):
     content: str
 
 
 # Re-assign this function pointer to re-direct output for debug.
-intelligence_sink: Callable[[str, dict, int], dict] = post_collected_intelligence
+_intelligence_sink: Callable[[str, dict, int], dict] = post_collected_intelligence
 
 
 def set_intelligence_sink(func: Callable[[str, dict, int], dict] | None):
-    global intelligence_sink
-    intelligence_sink = func
+    global _intelligence_sink
+    _intelligence_sink = func
 
 
 def feeds_craw_flow(flow_name: str,
@@ -163,8 +154,8 @@ def feeds_craw_flow(flow_name: str,
                     'informant': article['link'],
                 }
 
-                if intelligence_sink:
-                    intelligence_sink(submit_ihub_url, collected_data, 10)
+                if _intelligence_sink:
+                    _intelligence_sink(submit_ihub_url, collected_data, 10)
 
                 statistics['success'] += 1
 

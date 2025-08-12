@@ -1187,7 +1187,43 @@ mongodb的记录中有RATE字段，内容为{ "评分维度": "评分" }。评�
 
 
 
+分析我的意图并帮我完善代码，注意注释文本都需要使用英文：
 
+
+class CrawlStatistics:
+    # TODO: Singleton with multi-thread protecting
+
+    def __init__(self):
+        self._counter_log_lock = threading.Lock()
+        self._counter_log_record = {}
+
+        self._sub_item_log_lock = threading.Lock()
+        self._sub_item_log_record = {}
+
+    def counter_log(self, leveled_names: List[str], counter_item_name: str, log_text: str):
+        with self._counter_log_lock:
+            # TODO: Create leveled item and +1
+            pass
+
+    def get_classified_counter(self, leveled_names: List[str]) -> dict:
+        # TODO: Return all { counter_item_name: count }
+        pass
+
+    def sub_item_log(self, leveled_names: List[str], sub_item, status: str):
+        with self._sub_item_log_lock:
+            # TODO: Create leveled item and set status
+            pass
+
+    def get_sub_item_statistics(self, leveled_names: List[str]):
+        # TODO: Return { status: subitem }
+        pass
+
+
+
+
+
+
+请理解为该类编写测试用例，请考虑各种情况，且准备足够的数据。注意：不要使用随机数据进行测试
 
 
 
