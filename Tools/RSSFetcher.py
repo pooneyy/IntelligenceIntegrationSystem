@@ -8,76 +8,115 @@ Complete implementation with:
 - Comprehensive error handling
 - Type annotations
 """
+import logging
+import datetime
 import traceback
-from venv import logger
+from multiprocessing.managers import Value
 
 import feedparser
-from bs4 import BeautifulSoup
-from typing import Optional, Dict, Any
 
-import Scraper.RequestsScraper as RequestsScraper
+from bs4 import BeautifulSoup
+from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, Field
+
 from Scraper import ScraperBase
+import Scraper.RequestsScraper as RequestsScraper
+
+
+logger = logging.getLogger(__name__)
+context = None
+
 
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 MINIMAL_WAIT_SEC = 2
 
 
-def parse_feed(content: str) -> dict:
-    """
-    解析RSS/Atom内容并标准化输出
+class RssMeta(BaseModel):
+    title: str = ''                     # The title of channel (maybe)
+    link: str = ''                      # Not the feed link. I have no idea.
+    description: str = ''               # Description of this feed
+    language: str = ''                  # Like: zh-cn
+    updated: object | None = None       # ?
 
-    :param content: RSS原始内容字符串
-    :return: 包含元数据和条目的字典，结构示例：
-        {
-            "meta": {...},
-            "entries": [...],
-            "errors": [...]  # 非致命错误集合
-        }
+
+class RssItem(BaseModel):
+    title: str                  # The title of article
+    link: str                   # The link of article
+    published: object | None    # Published time
+    authors: list               # Authors but in most case it's empty
+    description: str            # Description of this article
+    guid: str                   # In most case it's empty
+    categories: list            # In most case it's empty
+    media: object | None        # ......
+
+
+class FeedData(BaseModel):
+    meta: RssMeta
+    entries: List[RssItem]
+    errors: List[str]
+    fatal: bool
+
+
+def parse_feed(content: str) -> FeedData:
     """
-    result = {
-        "meta": {},
-        "entries": [],
-        "errors": []
-    }
+    Parses RSS/Atom content and outputs it in a standardized format.
+
+    :param content: The original RSS content string
+    :return: A dictionary containing metadata and entries. In FeedData.
+    """
+    errors = []
 
     try:
-        # 使用feedparser解析原始内容
         parsed = feedparser.parse(content)
 
-        # 解析状态检测
         if parsed.get("bozo", 0) == 1:
-            exc = parsed.get("bozo_exception", Exception("Unknown parsing error"))
-            result["errors"].append(f"XML解析错误: {str(exc)}")
-            print(f"Feed解析异常: {exc}")
+            exception = parsed.get("bozo_exception", Exception("Unknown parsing error"))
+            errors.append(str(exception))
+            logger.error(f'Feed XLM parse fail: {str(exception)}')
 
-        # 提取元数据
-        result["meta"] = {
-            "title": parsed.feed.get("title", ""),
-            "link": parsed.feed.get("link", ""),
-            "description": parsed.feed.get("description", ""),
-            "language": parsed.feed.get("language", "unk"),
-            "updated": parsed.feed.get("updated_parsed", None)
-        }
+        meta = RssMeta(
+            title = parsed.feed.get("title", ""),
+            link = parsed.feed.get("link", ""),
+            description = parsed.feed.get("description", ""),
+            language = parsed.feed.get("language", "zh-cn"),
+            updated = parsed.feed.get("updated_parsed", None)
+        )
 
-        # 处理条目
+        # Process article items
+        entries = []
         for entry in parsed.entries:
-            processed = {
-                "title": entry.get("title", "Untitled"),
-                "link": entry.get("link", ""),
-                "published": entry.get("published_parsed", entry.get("updated_parsed", None)),
-                "authors": [a["name"] for a in entry.get("authors", [])],
-                "description": sanitize_html(entry.get("description", "")),
-                "guid": entry.get("id", ""),
-                "categories": entry.get("tags", []),
-                "media": extract_media(entry)
-            }
-            result["entries"].append(processed)
+            item = RssItem(
+                title = entry.get("title", "Untitled"),
+                link = entry.get("link", ""),
+                published = entry.get("published_parsed", entry.get("updated_parsed", None)),
+                authors = [a["name"] for a in entry.get("authors", [])],
+                description = sanitize_html(entry.get("description", "")),
+                guid = entry.get("id", ""),
+                categories = entry.get("tags", []),
+                media = extract_media(entry)
+            )
+            entries.append(item)
+
+        feed_data = FeedData(
+            meta = meta,
+            entries = entries,
+            errors = errors,
+            fatal = False
+        )
+        return feed_data
 
     except Exception as e:
-        result["errors"].append(f"致命错误: {str(e)}")
-        logger.error(f"解析过程异常: {e}", exc_info=True)
+        error_text = f"Exception: {str(e)}"
+        errors.append(error_text)
+        logger.error(error_text, exc_info=True)
 
-    return result
+        feed_data = FeedData(
+            meta = RssMeta(),
+            entries = [],
+            errors = errors,
+            fatal = True
+        )
+        return feed_data
 
 
 def sanitize_html(raw: str) -> str:
@@ -112,7 +151,7 @@ def fetch_feed(
     scraper: ScraperBase = RequestsScraper,
     proxy: Optional[Dict[str, str]] = None,
     headless: bool = True
-) -> Dict[str, Any]:
+) -> FeedData:
     """
     Main entry point for fetching and parsing feeds
     :param scraper: The scraper to fetch feed.
@@ -124,31 +163,6 @@ def fetch_feed(
         }
     :param headless: Browser visibility mode.
     :return: Result dictionary with status details.
-        {
-            "url": "url",
-            "meta": {
-                        "title": "The title of channel (maybe)",
-                        "link": "Not the feed link. I have no idea.",
-                        "description": "",
-                        "language": "zh-cn",
-                        "updated": "",
-                    },
-            "entries": [
-                    {
-                        "title": "The title of article",
-                        "link": "The link of article",
-                        "published": "Published time",
-                        "authors": ["Authors but in most case is empty", ...],
-                        "description": "Description of this article",
-                        "guid": "In most case is empty",
-                        "categories": ["In most case is empty", ...],
-                        "media": ["", ...]
-                    }, ...
-                ],
-            "error": "Error description",
-            "status": "Fetch status",
-            ......
-        }
     """
     try:
         result = scraper.fetch_content(
@@ -158,14 +172,17 @@ def fetch_feed(
             parsed = parse_feed(result['content'])
             return parsed
         else:
-            return {
-                "url": url,
-                "error": "Empty content",
-                "status": "Fetch Failed"
-            }
+            raise ValueError('Emtpy feed content')
     except Exception as e:
-        traceback.print_exc()
-        return {"url": url, "errors": [str(e)], "status": "Fetch Failed"}
+        logger.error(f'Feed fetch fail: {str(e)}', exc_info=True)
+
+        feed_data = FeedData(
+            meta=RssMeta(),
+            entries=[],
+            errors=[str(e)],
+            fatal=True
+        )
+        return feed_data
 
 
 # ----------------------------------------------------------------------------------------------------------------------

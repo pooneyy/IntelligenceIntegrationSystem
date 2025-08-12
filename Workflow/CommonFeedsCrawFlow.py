@@ -10,13 +10,18 @@ from MyPythonUtility.easy_config import EasyConfig
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
-
+from Tools.RSSFetcher import FeedData
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+CRAWL_ERROR_FEED_FETCH = 'Feed fetch error'
+CRAWL_ERROR_FEED_PARSE = 'Feed parse error'
+CRAWL_ERROR_ARTICLE_FETCH = 'Article fetch error'
 
 
 class FetchFeedEntries(TypedDict):
@@ -47,7 +52,7 @@ def feeds_craw_flow(flow_name: str,
                     config: EasyConfig,
                     update_interval_s: int,
 
-                    fetch_feed: Callable[[str], FetchFeedResult],
+                    fetch_feed: Callable[[str], FeedData],
                     fetch_content: Callable[[str], FetchContentResult],
                     scrubbers: List[Callable[[str], str]]):
     """
@@ -95,9 +100,17 @@ def feeds_craw_flow(flow_name: str,
         }
 
         try:
+            # -------------------------------- Fetch and Parse feeds --------------------------------
+
             logger.info(f'{prefix} Process feed: {feed_name} : {feed_url}')
+
             result = fetch_feed(feed_url)
+            if result.fatal:
+                continue
+
             statistics['total'] = len(result['entries'])
+
+            # ------------------------------- Fetch and Parse articles ------------------------------
 
             for article in result['entries']:
                 statistics['index'] += 1
@@ -105,7 +118,6 @@ def feeds_craw_flow(flow_name: str,
 
                 if has_url(article_link):
                     statistics['skip'] += 1
-                    # logger.info(f"{prefix} |--Skip  article ({statistics['index']}/{statistics['total']}): {article_link}")
                     continue
 
                 statistics['current'] += 1
