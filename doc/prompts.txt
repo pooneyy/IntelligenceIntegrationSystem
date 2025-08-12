@@ -1222,8 +1222,34 @@ class CrawlStatistics:
 
 
 
+
+
+
 请理解为该类编写测试用例，请考虑各种情况，且准备足够的数据。注意：不要使用随机数据进行测试
 
+
+
+
+
+
+
+
+
+
+
+python的requests和playwright使用的proxy参数格式是不同的，一个是
+        {
+            "http": "socks5://user:password@proxy_host:port",
+            "https": "socks5://user:password@proxy_host:port"
+        }
+另一个是
+            {
+                "server": "proto://host:port",
+                "username": "",  # Explicit empty string if no auth
+                "password": ""   # Explicit empty string if no auth
+            }
+
+我希望对于一个给定的代理，无论是什么格式，先转换成一个中间格式，再用两个函数分别转成requests及playwright格式。这个函数需要考虑到常见的代理格式及异常和错误格式处理，可以打印错误信息，但不能抛出异常。所有注释及文本需要使用英文。
 
 
 
