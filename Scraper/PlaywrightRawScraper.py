@@ -14,7 +14,8 @@ from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List
 from playwright.sync_api import sync_playwright
 
-from Scraper.ScraperBase import parse_proxy, to_playwright, ScraperResult, ProxyConfig
+from Scraper.ScraperBase import ScraperResult, ProxyConfig
+from Tools.ProxyFormatParser import to_playwright_format, parse_to_intermediate
 
 DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
 
@@ -46,6 +47,9 @@ class BrowserManager:
     ):
         self.playwright = None
         self.browser = None
+
+        if proxy:
+            proxy = to_playwright_format(parse_to_intermediate(proxy))
         self.proxy = proxy
 
     def __enter__(self):
@@ -164,8 +168,6 @@ def fetch_content(
     :return: The same as base.
     """
     try:
-        if proxy:
-            proxy = to_playwright(parse_proxy(proxy))
         def handler(_, response):
             if not response:
                 return {'content': '', "errors": 'No response'}

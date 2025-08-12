@@ -122,7 +122,8 @@ def feeds_craw_flow(flow_name: str,
                     feed_statistics['skip'] += 1
                     continue
 
-                print(f"{prefix} --Fetch article ({feed_statistics['index']}/{feed_statistics['total']}): {article_link}")
+                print('.', end='', flush=True)
+                # print(f"{prefix} --Fetch article ({feed_statistics['index']}/{feed_statistics['total']}): {article_link}")
 
                 content = fetch_content(article_link)
 
