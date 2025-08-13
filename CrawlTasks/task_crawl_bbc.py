@@ -25,12 +25,6 @@ feed_list = {
     "Northern Ireland": "http://feeds.bbci.co.uk/news/northern_ireland/rss.xml",
     "Scotland": "http://feeds.bbci.co.uk/news/scotland/rss.xml",
     "Wales": "http://feeds.bbci.co.uk/news/wales/rss.xml",
-
-    "World": "http://feeds.bbci.co.uk/news/video_and_audio/world/rss.xml",
-    "UK": "http://feeds.bbci.co.uk/news/video_and_audio/uk/rss.xml",
-    "Business": "http://feeds.bbci.co.uk/news/video_and_audio/business/rss.xml",
-    "Politics": "http://feeds.bbci.co.uk/news/video_and_audio/politics/rss.xml",
-    "Technology": "http://feeds.bbci.co.uk/news/video_and_audio/technology/rss.xml"
 }
 
 
@@ -52,7 +46,7 @@ def start_task(stop_event):
                     partial(fetch_feed, scraper=Scraper.RequestsScraper, proxy=config.get('collector.global_site_proxy', {})),
                     partial(fetch_content, timeout_ms=APPLIED_NATIONAL_TIMEOUT_MS, proxy=config.get('collector.global_site_proxy', {}), format='lxml'),
                     [
-                        partial(html_content_converter, selector='div[data-cy="storyWrapper"]'),
+                        partial(html_content_converter, selector='main[id="main-content"]'),
                         partial(sanitize_unicode_string, max_length=10240 * 5)
                     ])
 

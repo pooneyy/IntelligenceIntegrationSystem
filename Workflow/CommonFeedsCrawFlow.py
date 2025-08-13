@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import urllib3
 import threading
-from typing import Callable, TypedDict, Dict, List
+from typing import Callable, TypedDict, Dict, List, Tuple
 
 from pydantic import UUID1
 
@@ -44,14 +44,14 @@ def set_intelligence_sink(func: Callable[[str, dict, int], dict] | None):
 
 def fetch_process_article(article_link: str,
                           fetch_content: Callable[[str], FetchContentResult],
-                          scrubbers: List[Callable[[str], str]]):
+                          scrubbers: List[Callable[[str], str]]) -> Tuple[str, str]:
     content = fetch_content(article_link)
 
     raw_html = content['content']
     if not raw_html:
         # logger.error(f'{prefix}   |--Got empty HTML content.')
         # craw_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
-        return ''
+        return '', 'fetch'
 
     # TODO: If an article always convert fail. Need a special treatment.
 
@@ -63,9 +63,9 @@ def fetch_process_article(article_link: str,
     if not text:
         # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
         # craw_statistics.sub_item_log(stat_name, article_link, 'scrub emtpy')
-        return ''
+        return '', 'scrub'
 
-    return text
+    return text, ''
 
 
 def feeds_craw_flow(flow_name: str,
@@ -148,9 +148,7 @@ def feeds_craw_flow(flow_name: str,
                     feed_statistics['skip'] += 1
                     continue
 
-                print('.', end='', flush=True)
-
-                text = fetch_process_article(article_link, fetch_content, scrubbers)
+                text, error_place = fetch_process_article(article_link, fetch_content, scrubbers)
 
                 # print(f"{prefix} --Fetch article ({feed_statistics['index']}/{feed_statistics['total']}): {article_link}")
 
@@ -172,12 +170,14 @@ def feeds_craw_flow(flow_name: str,
 
                 if not text:
                     # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
-                    craw_statistics.sub_item_log(stat_name, article_link, 'article emtpy')
+                    print('o', end='', flush=True)
+                    craw_statistics.sub_item_log(stat_name, article_link, error_place + ' emtpy')
                     continue
 
                 success, file_path = to_file_and_history(
                     article_link, text, article.title, feed_name, '.md')
                 if not success:
+                    print('x', end='', flush=True)
                     # logger.error(f'{prefix}   |--Save content {file_path} fail.')
                     craw_statistics.sub_item_log(stat_name, article_link, 'persists fail')
                     continue
@@ -200,7 +200,10 @@ def feeds_craw_flow(flow_name: str,
                 feed_statistics['success'] += 1
                 craw_statistics.sub_item_log(stat_name, article_link, 'success')
 
+                print('.', end='', flush=True)
+
         except Exception as e:
+            print('x', end='', flush=True)
             logger.error(f"{prefix} Process feed fail: {feed_url} - {str(e)}")
             craw_statistics.counter_log(stat_name, 'exception')
 
