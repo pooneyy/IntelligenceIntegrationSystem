@@ -151,7 +151,7 @@ def request_by_browser(
                     return handler(page, response)
                 except Exception as e:
                     print(f'request_by_browser gets exception: {str(e)}')
-                    print(traceback.format_exc())
+                    # print(traceback.format_exc())
                     return {'content': '', "errors": [str(e)]}
 
 

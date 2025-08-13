@@ -15,7 +15,7 @@ NormalizationForm: TypeAlias = Literal["NFC", "NFD", "NFKC", "NFKD"]
 
 def sanitize_unicode_string(
     text: str,
-    max_length: int = 2048,
+    max_length: int = 10240,
     normalize_form: NormalizationForm = 'NFKC',
     allow_emoji: bool = False
 ) -> Optional[str]:
@@ -42,7 +42,7 @@ def sanitize_unicode_string(
 
     # Defense against character bomb attacks
     if len(text) > max_length:
-        return None
+        text = text[:max_length]
 
     # Unicode normalization (NFKC handles variation selectors and compatibility chars)
     try:

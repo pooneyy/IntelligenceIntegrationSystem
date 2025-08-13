@@ -42,6 +42,32 @@ def set_intelligence_sink(func: Callable[[str, dict, int], dict] | None):
     _intelligence_sink = func
 
 
+def fetch_process_article(article_link: str,
+                          fetch_content: Callable[[str], FetchContentResult],
+                          scrubbers: List[Callable[[str], str]]):
+    content = fetch_content(article_link)
+
+    raw_html = content['content']
+    if not raw_html:
+        # logger.error(f'{prefix}   |--Got empty HTML content.')
+        # craw_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
+        return ''
+
+    # TODO: If an article always convert fail. Need a special treatment.
+
+    text = raw_html
+    for scrubber in scrubbers:
+        text = scrubber(text)
+        if not text:
+            break
+    if not text:
+        # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
+        # craw_statistics.sub_item_log(stat_name, article_link, 'scrub emtpy')
+        return ''
+
+    return text
+
+
 def feeds_craw_flow(flow_name: str,
                     feeds: Dict[str, str],
                     stop_event: threading.Event,
@@ -123,26 +149,30 @@ def feeds_craw_flow(flow_name: str,
                     continue
 
                 print('.', end='', flush=True)
+
+                text = fetch_process_article(article_link, fetch_content, scrubbers)
+
                 # print(f"{prefix} --Fetch article ({feed_statistics['index']}/{feed_statistics['total']}): {article_link}")
 
-                content = fetch_content(article_link)
+                # content = fetch_content(article_link)
+                #
+                # raw_html = content['content']
+                # if not raw_html:
+                #     # logger.error(f'{prefix}   |--Got empty HTML content.')
+                #     craw_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
+                #     continue
+                #
+                # # TODO: If an article always convert fail. Need a special treatment.
+                #
+                # text = raw_html
+                # for scrubber in scrubbers:
+                #     text = scrubber(text)
+                #     if not text:
+                #         break
 
-                raw_html = content['content']
-                if not raw_html:
-                    # logger.error(f'{prefix}   |--Got empty HTML content.')
-                    craw_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
-                    continue
-
-                # TODO: If an article always convert fail. Need a special treatment.
-
-                text = raw_html
-                for scrubber in scrubbers:
-                    text = scrubber(text)
-                    if not text:
-                        break
                 if not text:
                     # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
-                    craw_statistics.sub_item_log(stat_name, article_link, 'scrub emtpy')
+                    craw_statistics.sub_item_log(stat_name, article_link, 'article emtpy')
                     continue
 
                 success, file_path = to_file_and_history(

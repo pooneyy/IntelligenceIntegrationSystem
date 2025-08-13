@@ -3,8 +3,12 @@ import threading
 import traceback
 from functools import partial
 
+from GlobalConfig import APPLIED_NATIONAL_TIMEOUT_MS
+from MyPythonUtility.easy_config import EasyConfig
+from Scrubber.HTMLConvertor import html_content_converter
+from Scrubber.UnicodeSanitizer import sanitize_unicode_string
 from ServiceEngine import ServiceContext
-from Workflow.CommonFeedsCrawFlow import set_intelligence_sink
+from Workflow.CommonFeedsCrawFlow import set_intelligence_sink, fetch_process_article
 
 
 def drive_module(module):
@@ -18,18 +22,40 @@ def drive_module(module):
         module.start_task(stop_event)
 
 
+def fetch_by_request_scraper(url: str):
+    """
+    Includes: cbc
+    :param url:
+    :return:
+    """
+    from Scraper.RequestsScraper import fetch_content
+
+    config = EasyConfig()
+
+    text = fetch_process_article(
+        url,
+        partial(fetch_content, timeout_ms=APPLIED_NATIONAL_TIMEOUT_MS, proxy=config.get('collector.global_site_proxy', {}), format='lxml'),
+        [
+            partial(html_content_converter, selector='div[data-cy="storyWrapper"]'),
+            partial(sanitize_unicode_string, max_length=10240 * 5)
+        ])
+    print(text)
+
+
 def main():
     # from CrawlTasks import task_crawl_chinanews
     # drive_module(task_crawl_chinanews)
 
-    from CrawlTasks import task_crawl_people
-    drive_module(task_crawl_people)
+    # from CrawlTasks import task_crawl_people
+    # drive_module(task_crawl_people)
 
     # from CrawlTasks import task_crawl_voanews
     # drive_module(task_crawl_voanews)
 
     # from CrawlTasks import task_crawl_cbc
     # drive_module(task_crawl_cbc)
+
+    fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
 
 
 if __name__ == "__main__":
