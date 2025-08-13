@@ -370,6 +370,12 @@ class IntelligenceHub:
 
                 self._notice_data_in_processing(original_data)
 
+                if self._check_data_duplication(original_data, True):
+                    with self.lock:
+                        self.drop_counter += 1
+                    self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
+                    continue
+
                 retry = 0
                 result = None
                 # Add retry to get correct answer from AI
@@ -410,11 +416,13 @@ class IntelligenceHub:
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
 
+                # TODO: Not check drop here.
                 if not self._enqueue_processed_data(validated_data, True):
                     with self.lock:
                         self.drop_counter += 1
                     self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
 
+            # TODO: Use exception to handle drop.
             except Exception as e:
                 with self.lock:
                     self.error_counter += 1
@@ -553,6 +561,8 @@ class IntelligenceHub:
 
     def _enqueue_processed_data(self, data: dict, allow_empty_informant: bool) -> True or Error:
         try:
+            # TODO: Check data duplication on upper-stream.
+
             if self._check_data_duplication(data, allow_empty_informant):
                 error_msg = f"Duplicated message {data['UUID']}."
                 logger.info(error_msg)
@@ -580,7 +590,7 @@ class IntelligenceHub:
 
     def _check_data_duplication(self, data: dict, allow_empty_informant: bool) -> bool:
         _uuid = data['UUID']
-        informant = data['INFORMANT']
+        informant = data.get('INFORMANT', '')
 
         if not allow_empty_informant and not informant:
             logger.info(f"Message {data['UUID']} dropped because has no informant.")

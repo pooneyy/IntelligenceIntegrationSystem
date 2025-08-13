@@ -195,6 +195,7 @@ def feeds_craw_flow(flow_name: str,
                 )
 
                 if _intelligence_sink:
+                    # TODO: Cache submit fail items in memory.
                     _intelligence_sink(submit_ihub_url, collected_data, 10)
 
                 feed_statistics['success'] += 1

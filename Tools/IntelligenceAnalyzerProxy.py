@@ -21,7 +21,7 @@ class AIMessage(BaseModel):
     content: str
     title: str | None = None
     authors: List[str] = []
-    pub_time: str | None = None
+    pub_time: object | None = None
     informant: str | None = None
 
 
