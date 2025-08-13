@@ -55,7 +55,12 @@ def main():
     # from CrawlTasks import task_crawl_cbc
     # drive_module(task_crawl_cbc)
 
-    fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
+    from CrawlTasks import task_crawl_investing
+    drive_module(task_crawl_investing)
+
+    # fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
+
+    pass
 
 
 if __name__ == "__main__":
