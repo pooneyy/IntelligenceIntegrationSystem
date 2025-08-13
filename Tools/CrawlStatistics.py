@@ -1,4 +1,5 @@
 import threading
+from collections import deque
 from typing import Any, Dict, List, Tuple, Optional, Set, Union, Iterable
 
 
@@ -26,9 +27,20 @@ class CrawlStatistics:
         self._counter_log_record: Dict[Tuple, Dict[str, int]] = {}
 
         self._sub_item_log_lock = threading.Lock()
-        self._sub_item_log_record: Dict[Tuple, Dict[str, List[Any]]] = {}
+        self._sub_item_log_record: Dict[Tuple, Tuple[deque, Dict[str, List[Any]]]] = {}
+        self._max_sub_items = 100
 
         self._initialized = True  # Mark initialization complete
+
+    def set_sub_items_limit(self, max_items: int) -> None:
+        """Set global maximum number of sub-items allowed per namespace.
+
+        Args:
+            max_items: Maximum number of sub-items to keep per namespace
+        """
+        if max_items < 0:
+            raise ValueError("max_items must be non-negative")
+        self._max_sub_items = max_items
 
     def counter_log(self, leveled_names: List[str], counter_item_name: str, log_text: str = '') -> None:
         """Increment counter for a specific item in a hierarchical namespace.
@@ -62,41 +74,64 @@ class CrawlStatistics:
             return self._counter_log_record.get(key, {}).copy()
 
     def sub_item_log(self, leveled_names: List[str], sub_item: Any, status: str) -> None:
-        """Record sub-item status in a hierarchical namespace.
+        """Record sub-item status with automatic removal of oldest items when exceeding limit.
 
         Args:
             leveled_names: Hierarchical namespace path
-            sub_item: Item to track (e.g., URL, resource)
-            status: Current status of the item (e.g., 'success', 'failed')
+            sub_item: Item to track
+            status: Current status of the item
         """
         key = tuple(leveled_names)
 
-        with self._sub_item_log_lock:  # Ensure thread safety
-            # Get or create status dictionary
-            status_dict = self._sub_item_log_record.setdefault(key, {})
-            # Get or create status list
-            status_list = status_dict.setdefault(status, [])
-            # Add item to status list
-            status_list.append(sub_item)
+        with self._sub_item_log_lock:
+            # Get or create data structures for this namespace
+            if key not in self._sub_item_log_record:
+                data_queue = deque()
+                status_dict = {}
+                self._sub_item_log_record[key] = (data_queue, status_dict)
+            else:
+                data_queue, status_dict = self._sub_item_log_record[key]
+
+            # Add new item to both data structures
+            data_queue.append((status, sub_item))
+            if status not in status_dict:
+                status_dict[status] = []
+            status_dict[status].append(sub_item)
+
+            # Remove oldest items if exceeding limit
+            while len(data_queue) > self._max_sub_items:
+                old_status, old_item = data_queue.popleft()
+                if old_status in status_dict:
+                    try:
+                        # Remove first occurrence of this item in status list
+                        status_dict[old_status].remove(old_item)
+                    except ValueError:
+                        # Item not found (shouldn't happen normally)
+                        pass
+
+                    # Clean up empty status lists
+                    if not status_dict[old_status]:
+                        del status_dict[old_status]
 
     def get_sub_item_statistics(self, leveled_names: List[str]) -> Dict[str, List[Any]]:
-        """Retrieve sub-item statuses for a hierarchical namespace.
+        """Retrieve sub-item statuses with updated data structure handling.
 
         Args:
             leveled_names: Hierarchical namespace path
 
         Returns:
-            Copy of status dictionary with list copies to prevent modification
+            Copy of status dictionary with list copies
         """
         key = tuple(leveled_names)
 
-        with self._sub_item_log_lock:  # Ensure thread safety during read
-            # Return deep copy to avoid external modification
-            status_dict = self._sub_item_log_record.get(key, {})
-            return {
-                status: items.copy()  # Copy list to prevent external modification
-                for status, items in status_dict.items()
-            }
+        with self._sub_item_log_lock:
+            if key in self._sub_item_log_record:
+                _, status_dict = self._sub_item_log_record[key]
+                return {
+                    status: items.copy()
+                    for status, items in status_dict.items()
+                }
+            return {}
 
     def reset(self, leveled_names: Union[List[str], None] = None) -> None:
         """Reset statistics either completely or for specified namespace(s)

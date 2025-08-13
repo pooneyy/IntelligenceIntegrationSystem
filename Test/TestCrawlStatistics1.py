@@ -136,6 +136,7 @@ def test_subitem_integrity():
     print("=" * 50)
 
     stats = create_new_stats_instance()
+    stats.set_sub_items_limit(2000)
 
     # 使用单一固定路径确保完整性
     FIXED_PATH = ["subitem_integrity_test"]
@@ -172,6 +173,7 @@ def test_mixed_operations():
     print("=" * 50)
 
     stats = create_new_stats_instance()
+    stats.set_sub_items_limit(500000)
     operation_count = 5000  # 每个线程操作次数
 
     def worker():
