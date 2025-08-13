@@ -34,7 +34,7 @@ class FetchContentResult(TypedDict):
 
 
 # Re-assign this function pointer to re-direct output for debug.
-_intelligence_sink: Callable[[str, dict, int], dict] = post_collected_intelligence
+_intelligence_sink: Callable[[str, CollectedData, int], dict] | None = post_collected_intelligence
 
 
 def set_intelligence_sink(func: Callable[[str, dict, int], dict] | None):
@@ -214,7 +214,8 @@ def feeds_craw_flow(flow_name: str,
                     f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n")
 
         print('-' * 80)
-        print(craw_statistics.dump_sub_items(stat_name, statuses=['fetch emtpy', 'scrub emtpy', 'persists fail']))
+        print(craw_statistics.dump_sub_items(stat_name, statuses=[
+            'fetch emtpy', 'scrub emtpy', 'persists fail', 'exception']))
         print()
         print('=' * 100)
         print()

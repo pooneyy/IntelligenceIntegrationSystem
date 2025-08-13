@@ -4,7 +4,7 @@ import threading
 import requests
 from flask import Flask, request, jsonify
 
-from IntelligenceHub import IntelligenceHub
+from IntelligenceHub import IntelligenceHub, CollectedData
 from IntelligenceHubWebService import post_collected_intelligence
 from recycled.TestContent import CONTENT_TRUMP_GOT_FUCKED
 from prompts import ANALYSIS_PROMPT
@@ -205,14 +205,15 @@ def main():
     mock_processor.start()
 
     while True:
-        data = {
-            'UUID': str(uuid.uuid4()),
-            'Token': 'SleepySoft',
-            'source': 'IntelligenceHubTest',
-            'target': '',
-            'prompt': ANALYSIS_PROMPT,
-            'content': CONTENT_TRUMP_GOT_FUCKED,
-        }
+        data = CollectedData(
+            UUID=str(uuid.uuid4()),
+            token='SleepySoft',
+            source='IntelligenceHubTest',
+            target='',
+            prompt=ANALYSIS_PROMPT,
+
+            content=CONTENT_TRUMP_GOT_FUCKED,
+        )
         try:
             print('------------------------------------------------------------------------------')
             result = post_collected_intelligence('http://127.0.0.1:5000', data, timeout=5)

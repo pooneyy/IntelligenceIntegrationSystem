@@ -55,13 +55,9 @@ def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> di
     :param timeout: Timeout in second
     :return: Requests response or {'status': 'error', 'reason': 'error description'}
     """
-    if not data.get('UUID', ''):
-        data['UUID'] = str(uuid.uuid4())
-        logger.info(f"Generated new UUID: {data['UUID']}")
-    validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
-    if error_text:
-        return {'status': 'error', 'reason': error_text}
-    return common_post(f'{url}/collect', validated_data, timeout)
+    if not isinstance(data, CollectedData):
+        return {'status': 'error', 'reason': 'Data must be CollectedData format.'}
+    return common_post(f'{url}/collect', data.model_dump(exclude_unset=True, exclude_none=True), timeout)
 
 
 def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> dict:
@@ -72,10 +68,9 @@ def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> di
     :param timeout: Timeout in second
     :return: Requests response or {'status': 'error', 'reason': 'error description'}
     """
-    validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
-    if error_text:
-        return {'status': 'error', 'reason': error_text}
-    return common_post(f'{url}/processed', validated_data, timeout)
+    if not isinstance(data, ProcessedData):
+        return {'status': 'error', 'reason': 'Data must be ProcessedData format.'}
+    return common_post(f'{url}/processed', data.model_dump(exclude_unset=True, exclude_none=True), timeout)
 
 
 class WebServiceAccessManager:

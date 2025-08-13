@@ -323,7 +323,7 @@ class IntelligenceHub:
                            keywords: Optional[str] = None,
                            skip: Optional[str] = None,
                            limit: int = 100,
-                           ) -> List[dict]:
+                           ) -> Tuple[List[dict], int]:
         if db == 'cache':
             query_engine = IntelligenceQueryEngine(self.mongo_db_cache)
         else:
@@ -410,7 +410,10 @@ class IntelligenceHub:
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
 
-                self._enqueue_processed_data(validated_data, True)
+                if not self._enqueue_processed_data(validated_data, True):
+                    with self.lock:
+                        self.drop_counter += 1
+                    self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
 
             except Exception as e:
                 with self.lock:
