@@ -1279,90 +1279,116 @@ APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
 如果没有需要，不要对原有代码进行过多改动。所有注释和文本需要使用英文。
 
 
-    def query_intelligence(
-            self,
-            *,
-            period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
-            locations: Optional[Union[str, List[str]]] = None,
-            peoples: Optional[Union[str, List[str]]] = None,
-            organizations: Optional[Union[str, List[str]]] = None,
-            keywords: Optional[str] = None,
-            skip: Optional[int] = None,
-            limit: Optional[int] = None
-    ) -> Tuple[List[dict], int]:
-        """Execute intelligence query
 
-        Args:
-            period: UTC time range (start, end)
-            locations: Location ID(s) (str or str list)
-            peoples: Person ID(s) (str or str list)
-            organizations: Organization ID(s) (str or str list)
-            keywords: Full-text keywords
-            skip: Number of documents to skip
-            limit: Maximum number of results to return
 
-        Returns:
-            Tuple of
-                List of matching intelligence documents
-                All document count without specifying skip and limit.
+
+
+
+
+请分析该网页生成的模板，做以下更改：
+
+1. 归档时间：article['APPENDIX'][APPENDIX_TIME_ARCHIVED]。注意字符串和常量的区别，而且这个字段和它的父字段可能不存在。
+2. 最高分的分类及该类的评分：article['APPENDIX'][APPENDIX_MAX_RATE_CLASS],article['APPENDIX'][APPENDIX_MAX_RATE_SCORE]
+> 可以参考下面文章页面对评分的示例代码。
+3. 移除“IIS URL”
+注意美观和设计，所有注释和文本使用英文。
+
+```
+
+def generate_articles_table(articles):
+    """
+    生成文章列表的HTML部分，可以被多个页面复用
+
+    参数:
+    articles -- 文章字典列表 [{
+        "UUID": str,
+        "INFORMANT": str,  # 来源信息（可能是URL或文本）
+        "TIME": str (YYYY-MM-DD),
+        "EVENT_TITLE": str,
+        "EVENT_BRIEF": str
+    }]
+    """
+
+    # 转义所有文本内容防止XSS攻击
+    def escape_text(text):
+        return html.escape(str(text)) if text else ""
+
+    # 判断是否为有效URL
+    def is_valid_url(url):
+        return re.match(r'^https?://', url) if url else False
+
+    # 构建文章列表HTML
+    articles_html = ""
+    for article in articles:
+        uuid = escape_text(article["UUID"])
+        informant = escape_text(article.get("INFORMANT", ""))
+
+        # 生成情报详情URL（用于调试）
+        intel_url = f"/intelligence/{uuid}"
+
+        # 构建来源信息（可点击的URL或纯文本）
+        informant_html = (
+            f'<a href="{escape_text(informant)}" target="_blank" class="source-link">{informant}</a>'
+            if is_valid_url(informant)
+            else informant or 'Unknown Source'
+        )
+
+        articles_html += f"""
+        <div class="article-card">
+            <h3>
+                <a href="{intel_url}" target="_blank" class="article-title">
+                    {escape_text(article.get("EVENT_TITLE", "No Title"))}
+                </a>
+            </h3>
+            <div class="article-meta">
+                <span class="article-time">{escape_text(article.get("PUB_TIME") or 'NO Datetime')}</span>
+                <span class="article-source">来源: {informant_html}</span>
+            </div>
+            <p class="article-summary">{escape_text(article.get("EVENT_BRIEF", "No Brief"))}</p>
+
+            <!-- 调试信息区域 -->
+            <div class="debug-info">
+                <span class="debug-label">UUID:</span> {uuid} </br>
+                <span class="debug-label">IIS URL:</span>
+                <a href="{intel_url}" target="_blank" class="debug-link">{intel_url}</a>
+            </div>
+        </div>
         """
-        # Get specified database collection
-        collection = self.__mongo_db.collection
 
-        try:
-            # Build MongoDB query
-            query = self.build_intelligence_query(
-                period=period,
-                locations=locations,
-                peoples=peoples,
-                organizations=organizations,
-                keywords=keywords
-            )
+    return articles_html
+```
 
-            # Execute query and return results with limit
-            data = self.execute_query(collection, query, skip=skip, limit=limit)
-            total = collection.count_documents(query)
 
-            return data, total
+文章页面对评分的示例代码：
 
-        except pymongo.errors.PyMongoError as e:
-            logger.error(f"Intelligence query failed: {str(e)}")
-            return []
-        except Exception as e:
-            logger.error(f"Intelligence query error: {str(e)}", stack_info=True)
-            return []
-
-    def build_intelligence_query(
-            self,
-            period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
-            locations: Optional[Union[str, List[str]]] = None,
-            peoples: Optional[Union[str, List[str]]] = None,
-            organizations: Optional[Union[str, List[str]]] = None,
-            keywords: Optional[str] = None
-    ) -> dict:
-        query_conditions = []
-
-        if period:
-            query_conditions.append(self.build_time_condition(*period))
-
-        if locations:
-            query_conditions.append(self.build_list_condition("LOCATION", locations))
-
-        if peoples:
-            query_conditions.append(self.build_list_condition("PEOPLE", peoples))
-
-        if organizations:
-            query_conditions.append(self.build_list_condition("ORGANIZATION", organizations))
-
-        if keywords:
-            query_conditions.append(self.build_keyword_or_condition(keywords))
-
-        return {"$and": query_conditions} if query_conditions else {}
+```
+# Build rating table
+rating_table = ""
+if rates:
+    rating_table = '<div class="mt-4"><h5><i class="bi bi-graph-up"></i> Analysis & Evaluation</h5>'
+    rating_table += '<div class="table-responsive"><table class="table table-sm">'
+    rating_table += '<thead><tr><th>Dimension</th><th>Rating</th></tr></thead><tbody>'
+    for key, score in rates.items():
+        if isinstance(score, (int, float)) and 0 <= score <= 10:
+            rating_table += f'<tr><td>{key}</td><td>{create_rating_stars(score)}</td></tr>'
+    rating_table += '</tbody></table></div></div>'
 
 
 
+# Create rating stars display
+def create_rating_stars(score):
+    stars = ""
+    full_stars = int(score) // 2
+    half_star = (int(score) % 2 == 1)
+    empty_stars = 5 - full_stars - (1 if half_star else 0)
 
-
+    stars += ''.join(['<i class="bi bi-star-fill text-warning"></i> ' for _ in range(full_stars)])
+    if half_star:
+        stars += '<i class="bi bi-star-half text-warning"></i> '
+    stars += ''.join(['<i class="bi bi-star text-warning"></i> ' for _ in range(empty_stars)])
+    stars += f' <span class="ms-2 text-muted">{score}/10</span>'
+    return stars
+```
 
 
 
