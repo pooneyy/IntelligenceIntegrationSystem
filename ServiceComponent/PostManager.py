@@ -47,7 +47,7 @@ def generate_html_from_markdown(md_file_path: str) -> str:
         <head>
             <meta charset="utf-8">
             <title>{base_name}</title>
-            <link rel="stylesheet" href="/static/github-markdown.css" id="base-css">
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mvp.css@1.12/mvp.min.css" id="base-css">
             <style>
                 /* 马卡龙渐变背景 */
                 body {{
@@ -93,11 +93,11 @@ def generate_html_from_markdown(md_file_path: str) -> str:
             <div class="theme-selector">
                 <select id="cssSelector" onchange="changeTheme()">
                     <option value="">-- 选择样式 --</option>
-                    <option value="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-dark.min.css" selected>GitHub风格（暗色）</option>
+                    <option value="https://cdn.jsdelivr.net/npm/mvp.css@1.12/mvp.min.css" selected>MVP.css</option>
+                    <option value="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-dark.min.css">GitHub风格（暗色）</option>
                     <option value="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown.min.css">GitHub风格（亮色）</option>
                     <option value="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.min.css">Water.css（暗色）</option>
                     <option value="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">Pico.css（暗色）</option>
-                    <option value="/static/github-markdown.css">GitHub风格</option>
                     <option value="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">Water.css（轻量）</option>
                     <option value="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">Bootstrap 5</option>
                     <option value="https://cdn.jsdelivr.net/npm/milligram@1.4.1/dist/milligram.min.css">Milligram（极简）</option>
@@ -106,7 +106,6 @@ def generate_html_from_markdown(md_file_path: str) -> str:
                     <option value="https://cdn.jsdelivr.net/npm/sakura.css/css/sakura.css">Sakura（樱花）</option>
                     <option value="https://cdn.jsdelivr.net/npm/holiday.css@0.9.8">Holiday.css</option>
                     <option value="https://cdn.jsdelivr.net/npm/awsm.css@3.0.7/dist/awsm.min.css">awsm.css</option>
-                    <option value="https://cdn.jsdelivr.net/npm/mvp.css@1.12/mvp.min.css">MVP.css</option>
                     <option value="https://cdn.jsdelivr.net/npm/papercss@1.6.1/dist/paper.min.css">PaperCSS（手绘风）</option>
                     <option value="https://cdn.jsdelivr.net/npm/retro.css@1.2.0/dist/retro.css">Retro（复古）</option>
                 </select>
@@ -120,14 +119,8 @@ def generate_html_from_markdown(md_file_path: str) -> str:
                 function changeTheme() {{
                     const selectedUrl = document.getElementById("cssSelector").value;
                     if (selectedUrl) {{
-                        // 创建新link元素替换现有样式
-                        const newLink = document.createElement('link');
-                        newLink.rel = 'stylesheet';
-                        newLink.href = selectedUrl;
-
-                        // 替换页面中的样式表
-                        const existingLinks = document.querySelectorAll('link[rel="stylesheet"]');
-                        existingLinks[0].replaceWith(newLink);
+                        const baseCSS = document.getElementById("base-css"); // 通过 ID 获取元素
+                        baseCSS.href = selectedUrl; // 直接修改 href
                     }}
                 }}
             </script>
