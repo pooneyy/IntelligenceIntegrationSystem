@@ -77,6 +77,7 @@ APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
 APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
 APPENDIX_MAX_RATE_CLASS = '__MAX_RATE_CLASS__'
 APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
+APPENDIX_MAX_RATE_CLASS_EXCLUDE = '内容准确率'
 
 
 ARCHIVED_FLAG_DROP= 'D'
@@ -449,7 +450,7 @@ class IntelligenceHub:
                 if 'APPENDIX' not in data:
                     data['APPENDIX'] = {}
                 rate_dict = data.get('RATE', {'N/A': '0'})
-                numeric_rates = {k: int(v) for k, v in rate_dict.items()}
+                numeric_rates = {k: int(v) for k, v in rate_dict.items() if k != APPENDIX_MAX_RATE_CLASS_EXCLUDE}
                 if numeric_rates:
                     max_key, max_value = max(numeric_rates.items(), key=lambda x: x[1])
                 else:
