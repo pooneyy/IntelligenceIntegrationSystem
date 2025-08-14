@@ -142,6 +142,7 @@ class IntelligenceQueryEngine:
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
             keywords: Optional[str] = None,
+            threshold: Optional[float] = None,  # New threshold parameter
             skip: Optional[int] = None,
             limit: Optional[int] = None
     ) -> Tuple[List[dict], int]:
@@ -153,6 +154,7 @@ class IntelligenceQueryEngine:
             peoples: Person ID(s) (str or str list)
             organizations: Organization ID(s) (str or str list)
             keywords: Full-text keywords
+            threshold: Minimum score value for filtering APPENDIX_MAX_RATE_SCORE
             skip: Number of documents to skip
             limit: Maximum number of results to return
 
@@ -171,7 +173,8 @@ class IntelligenceQueryEngine:
                 locations=locations,
                 peoples=peoples,
                 organizations=organizations,
-                keywords=keywords
+                keywords=keywords,
+                threshold=threshold  # Pass threshold to query builder
             )
 
             # Execute query and return results with limit
@@ -182,10 +185,10 @@ class IntelligenceQueryEngine:
 
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Intelligence query failed: {str(e)}")
-            return []
+            return [], 0
         except Exception as e:
             logger.error(f"Intelligence query error: {str(e)}", stack_info=True)
-            return []
+            return [], 0
 
     def build_intelligence_query(
             self,
@@ -193,7 +196,8 @@ class IntelligenceQueryEngine:
             locations: Optional[Union[str, List[str]]] = None,
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
-            keywords: Optional[str] = None
+            keywords: Optional[str] = None,
+            threshold: Optional[float] = None  # New threshold parameter
     ) -> dict:
         query_conditions = []
 
@@ -211,6 +215,11 @@ class IntelligenceQueryEngine:
 
         if keywords:
             query_conditions.append(self.build_keyword_or_condition(keywords))
+
+        # Add threshold condition if provided
+        if threshold is not None:
+            score_field = f"APPENDIX.__MAX_RATE_SCORE__"
+            query_conditions.append({score_field: {"$gte": threshold}})
 
         return {"$and": query_conditions} if query_conditions else {}
 
@@ -362,6 +371,7 @@ class IntelligenceQueryEngine:
         # 平铺所有字段条件（无需二维列表）
         conditions = []
         for kw in cleaned_keywords:
+            conditions.append({"EVENT_TITLE": {"$regex": kw, "$options": "i"}})
             conditions.append({"EVENT_BRIEF": {"$regex": kw, "$options": "i"}})
             conditions.append({"EVENT_TEXT": {"$regex": kw, "$options": "i"}})
         return {"$or": conditions}  # 匹配任一条件

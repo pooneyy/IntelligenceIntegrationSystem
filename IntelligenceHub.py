@@ -321,6 +321,7 @@ class IntelligenceHub:
                            peoples:     Optional[List[str]] = None,
                            organizations: Optional[List[str]] = None,
                            keywords: Optional[str] = None,
+                           threshold: Optional[int] = 4,
                            skip: Optional[str] = None,
                            limit: int = 100,
                            ) -> Tuple[List[dict], int]:
@@ -330,7 +331,8 @@ class IntelligenceHub:
             query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result, total = query_engine.query_intelligence(
             period = period, locations = locations, peoples = peoples,
-            organizations = organizations, keywords = keywords, skip=skip, limit=limit)
+            organizations = organizations, keywords = keywords,
+            threshold=threshold, skip=skip, limit=limit)
         return result, total
 
     def get_intelligence_summary(self) -> Tuple[int, str]:

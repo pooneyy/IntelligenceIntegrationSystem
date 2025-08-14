@@ -1266,3 +1266,118 @@ python的requests和playwright使用的proxy参数格式是不同的，一个是
 
 
 
+
+
+
+
+
+
+APPENDIX_MAX_RATE_CLASS = '__MAX_RATE_CLASS__'
+APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
+
+分析以下代码，为该查询增加一个threshold参数，用以筛选'APPENDIX'字段下APPENDIX_MAX_RATE_SCORE（使用该变量，不要硬编码）大于threshold的记录。
+如果没有需要，不要对原有代码进行过多改动。所有注释和文本需要使用英文。
+
+
+    def query_intelligence(
+            self,
+            *,
+            period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+            locations: Optional[Union[str, List[str]]] = None,
+            peoples: Optional[Union[str, List[str]]] = None,
+            organizations: Optional[Union[str, List[str]]] = None,
+            keywords: Optional[str] = None,
+            skip: Optional[int] = None,
+            limit: Optional[int] = None
+    ) -> Tuple[List[dict], int]:
+        """Execute intelligence query
+
+        Args:
+            period: UTC time range (start, end)
+            locations: Location ID(s) (str or str list)
+            peoples: Person ID(s) (str or str list)
+            organizations: Organization ID(s) (str or str list)
+            keywords: Full-text keywords
+            skip: Number of documents to skip
+            limit: Maximum number of results to return
+
+        Returns:
+            Tuple of
+                List of matching intelligence documents
+                All document count without specifying skip and limit.
+        """
+        # Get specified database collection
+        collection = self.__mongo_db.collection
+
+        try:
+            # Build MongoDB query
+            query = self.build_intelligence_query(
+                period=period,
+                locations=locations,
+                peoples=peoples,
+                organizations=organizations,
+                keywords=keywords
+            )
+
+            # Execute query and return results with limit
+            data = self.execute_query(collection, query, skip=skip, limit=limit)
+            total = collection.count_documents(query)
+
+            return data, total
+
+        except pymongo.errors.PyMongoError as e:
+            logger.error(f"Intelligence query failed: {str(e)}")
+            return []
+        except Exception as e:
+            logger.error(f"Intelligence query error: {str(e)}", stack_info=True)
+            return []
+
+    def build_intelligence_query(
+            self,
+            period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+            locations: Optional[Union[str, List[str]]] = None,
+            peoples: Optional[Union[str, List[str]]] = None,
+            organizations: Optional[Union[str, List[str]]] = None,
+            keywords: Optional[str] = None
+    ) -> dict:
+        query_conditions = []
+
+        if period:
+            query_conditions.append(self.build_time_condition(*period))
+
+        if locations:
+            query_conditions.append(self.build_list_condition("LOCATION", locations))
+
+        if peoples:
+            query_conditions.append(self.build_list_condition("PEOPLE", peoples))
+
+        if organizations:
+            query_conditions.append(self.build_list_condition("ORGANIZATION", organizations))
+
+        if keywords:
+            query_conditions.append(self.build_keyword_or_condition(keywords))
+
+        return {"$and": query_conditions} if query_conditions else {}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
