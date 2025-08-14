@@ -96,6 +96,16 @@ class IntelligenceHub:
         def __bool__(self):
             return False
 
+    class Exception(Exception):
+        def __init__(self, name: str, message: str = '', *args, **kwargs):
+            self.name = name
+            self.msg = message
+            self.args = args
+            self.kwargs = kwargs
+
+        def __str__(self):
+            return f"[{self.name}]: {self.args}, {self.kwargs}"
+
     def __init__(self, *,
                  ref_url: str = 'http://locohost:8080',
                  db_vector: Optional[VectorDatabase] = None,
@@ -123,7 +133,7 @@ class IntelligenceHub:
 
         self.original_queue = queue.Queue()             # Original intelligence queue
         self.processed_queue = queue.Queue()            # Processed intelligence queue
-        self.processing_table = {}
+        # self.processing_table = {}
         self.archived_counter = 0
         self.drop_counter = 0
         self.error_counter = 0
@@ -256,7 +266,7 @@ class IntelligenceHub:
     def statistics(self):
         return {
             'original': self.original_queue.qsize(),
-            'processing': len(self.processing_table),
+            # 'processing': len(self.processing_table),
             'processed': self.processed_queue.qsize(),
             'archived': self.archived_counter,
             'dropped': self.drop_counter,
@@ -371,13 +381,15 @@ class IntelligenceHub:
                 if not original_uuid:
                     original_data['UUID'] = original_uuid = str(uuid.uuid4())
 
-                self._notice_data_in_processing(original_data)
+                # self._notice_data_in_processing(original_data)
 
                 if self._check_data_duplication(original_data, True):
-                    with self.lock:
-                        self.drop_counter += 1
-                    self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
-                    continue
+                    # with self.lock:
+                    #     self.drop_counter += 1
+                    # self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
+                    raise IntelligenceHub.Exception('drop', 'Article duplicated', uuid=original_data.get('UUID', ''))
+
+                # ---------------------------------- AI Analysis with Retry ----------------------------------
 
                 retry = 0
                 result = None
@@ -395,13 +407,15 @@ class IntelligenceHub:
                 if retry:
                     logger.info(f'Got AI match format answer after {retry} retires.')
 
-                # If this article has no value. Only return { UUID: xxxxx }
+                # ---------------------------------- Check Analysis Result ----------------------------------
+
+                # If this article has no value. No EVENT_TEXT field.
                 if 'EVENT_TEXT' not in result:
-                    with self.lock:
-                        self.drop_counter += 1
-                    logger.info(f"Valueless article dropped: {original_uuid}")
-                    self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_DROP)
-                    continue
+                    # with self.lock:
+                    #     self.drop_counter += 1
+                    # logger.info(f"Valueless article dropped: {original_uuid}")
+                    # self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_DROP)
+                    raise IntelligenceHub.Exception('drop', 'Article has no value', uuid=original_uuid)
 
                 # Just user original UUID and Informant. The value from AI can be a reference.
 
@@ -414,7 +428,9 @@ class IntelligenceHub:
 
                 validated_data, error_text = check_sanitize_dict(dict(result), ProcessedData)
                 if error_text:
-                    raise ValueError('AI analysis result validation fail.')
+                    raise IntelligenceHub.Exception('error', error_text)
+
+                # -------------------------- Fill extra data and enqueue for archive --------------------------
 
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
@@ -425,7 +441,11 @@ class IntelligenceHub:
                         self.drop_counter += 1
                     self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
 
-            # TODO: Use exception to handle drop.
+            except IntelligenceHub.Exception as e:
+                if e.name == 'drop':
+                    with self.lock:
+                        self.drop_counter += 1
+                    self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
             except Exception as e:
                 with self.lock:
                     self.error_counter += 1
@@ -433,7 +453,7 @@ class IntelligenceHub:
                 self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_ERROR)
             finally:
                 self.original_queue.task_done()
-                self._notice_data_quit_processing(original_data)
+                # self._notice_data_quit_processing(original_data)
 
     def _post_process_worker(self):
         while not self.shutdown_flag.is_set():
@@ -482,21 +502,21 @@ class IntelligenceHub:
 
     # ------------------------------------------------ Helpers ------------------------------------------------
 
-    def _notice_data_in_processing(self, data: dict):
-        with self.lock:
-            uuid_str = data['UUID']
-            if uuid_str in self.processing_table:
-                logger.warning(f'Found existing processing data {uuid_str}, maybe data has duplicated processing.')
-            else:
-                self.processing_table[uuid_str] = data
-
-    def _notice_data_quit_processing(self, data: dict):
-        with self.lock:
-            uuid_str = data['UUID']
-            if uuid_str not in self.processing_table:
-                logger.warning(f'No processing data {uuid_str}, maybe data processing notification missing.')
-            else:
-                del self.processing_table[uuid_str]
+    # def _notice_data_in_processing(self, data: dict):
+    #     with self.lock:
+    #         uuid_str = data['UUID']
+    #         if uuid_str in self.processing_table:
+    #             logger.warning(f'Found existing processing data {uuid_str}, maybe data has duplicated processing.')
+    #         else:
+    #             self.processing_table[uuid_str] = data
+    #
+    # def _notice_data_quit_processing(self, data: dict):
+    #     with self.lock:
+    #         uuid_str = data['UUID']
+    #         if uuid_str not in self.processing_table:
+    #             logger.warning(f'No processing data {uuid_str}, maybe data processing notification missing.')
+    #         else:
+    #             del self.processing_table[uuid_str]
 
     def _index_archived_data(self, data: dict):
         if self.vector_db_idx:
