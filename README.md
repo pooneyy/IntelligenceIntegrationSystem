@@ -37,16 +37,32 @@
 + [PlaywrightRenderedScraper.py](Scraper/PlaywrightRenderedScraper.py)：同是无头浏览器方案，但等待网页渲染完成，最慢，但成功率最高。
 + [Crawl4AI.py](Scraper/Crawl4AI.py)：未实现。
 
-#### IntelligenceHub
+### IntelligenceHub
 
-+ [IntelligenceHub.py](IntelligenceHub.py)（IHub）：程序的核心。所有的信息都由该组件收集、处理和归档，同时该组件还提供查询服务。
-+ [IntelligenceHubWebService.py](IntelligenceHubWebService.py)：为IHub提供网络服务，包括API、网页发布和鉴权。
-+ [IntelligenceHubLauncher.py](IntelligenceHubLauncher.py)：IHub的**启动**器，包括初始化所有子组件。
++ [IntelligenceHub.py](IntelligenceHub.py)（IHub）：程序的核心。所有的信息都会提交汇总至此，由该模块进行处理、分析、归档，并提供查询功能。
++ [IntelligenceHubWebService.py](IntelligenceHubWebService.py)：为IHub提供网络服务的模块，包括API、网页发布和鉴权。
++ [IntelligenceHubLauncher.py](IntelligenceHubLauncher.py)：IHub的**启动**器，包括初始化所有子组件，初始化IHub，启动WebService。
 
+> IHub的处理流程请参见：[IIS_Diagram.drawio](doc/IIS_Diagram.drawio)
 
+### 内容发布
 
-#### 发布
+如前所述，网络服务由[IntelligenceHubWebService.py](IntelligenceHubWebService.py)提供。包含以下内容：
 
++ 登录与鉴权
+    > 由 WebServiceAccessManager 进行管理。其中：
+    >  
+    > + API Token位于配置文件中：[config_example.json](config_example.json)
+    > + 登录与注销的页面分别为：'/login'，'/logout'
+
++ WebAPI
+    > '/api'接口：采用 [ArbitraryRPC.py](MyPythonUtility/ArbitraryRPC.py) ，不用额外编码或配置即可调用Stub的所有函数，同时支持任意层次的转发调用。
+    > 
+    > '/collect'接口：旧设计，未来可能会被弃用。
+    >
+    > 
+    >
+    > 
 
 ## 环境配置及部署运行
 

@@ -39,6 +39,7 @@ def default_article_list_render(articles, offset, count, total_count):
         <meta charset="UTF-8">
         <title>Intelligence Integration System (IIS)</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
         <style>
             body {{ 
                 font-family: 'Segoe UI', system-ui, sans-serif; 

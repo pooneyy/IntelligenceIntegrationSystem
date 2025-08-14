@@ -2,6 +2,8 @@ import re
 import html
 from typing import List
 
+from IntelligenceHub import APPENDIX_TIME_ARCHIVED, APPENDIX_MAX_RATE_CLASS, APPENDIX_MAX_RATE_SCORE
+
 article_table_style = """
 .article-list { 
     max-width: 1000px; 
@@ -157,11 +159,11 @@ def generate_articles_table(articles: List[dict]):
 
         # Safely get archived time from nested structure
         appendix = article.get('APPENDIX', {})
-        archived_time = escape_text(appendix.get('APPENDIX_TIME_ARCHIVED', ''))
+        archived_time = escape_text(appendix.get(APPENDIX_TIME_ARCHIVED, ''))
 
         # Safely get max rating information
-        max_rate_class = escape_text(appendix.get('APPENDIX_MAX_RATE_CLASS', ''))
-        max_rate_score = appendix.get('APPENDIX_MAX_RATE_SCORE')
+        max_rate_class = escape_text(appendix.get(APPENDIX_MAX_RATE_CLASS, ''))
+        max_rate_score = appendix.get(APPENDIX_MAX_RATE_SCORE)
         max_rate_display = ""
 
         # Generate rating display if valid data exists
@@ -210,9 +212,9 @@ def main():
             "EVENT_TITLE": "全球人工智能大会发布伦理新框架",
             "EVENT_BRIEF": "国际组织联合提出AI治理原则，强调透明性与问责机制。",
             "APPENDIX": {
-                "APPENDIX_TIME_ARCHIVED": "2025-08-12 14:30:00",
-                "APPENDIX_MAX_RATE_CLASS": "技术可行性",
-                "APPENDIX_MAX_RATE_SCORE": 8.5
+                APPENDIX_TIME_ARCHIVED: "2025-08-12 14:30:00",
+                APPENDIX_MAX_RATE_CLASS: "技术可行性",
+                APPENDIX_MAX_RATE_SCORE: 8.5
             }
         },
 
@@ -224,8 +226,8 @@ def main():
             "EVENT_TITLE": "量子计算突破：新型超导材料稳定性提升200%",
             "EVENT_BRIEF": "实验室成功验证新型材料在极端环境下的量子比特保持能力。",
             "APPENDIX": {
-                "APPENDIX_MAX_RATE_CLASS": "创新性",
-                "APPENDIX_MAX_RATE_SCORE": 9.0
+                APPENDIX_MAX_RATE_CLASS: "创新性",
+                APPENDIX_MAX_RATE_SCORE: 9.0
             }
         },
 
@@ -246,7 +248,7 @@ def main():
             "EVENT_TITLE": "央行数字货币试点扩展至跨境贸易",
             "EVENT_BRIEF": "首批试点银行完成多边央行数字货币桥接测试。",
             "APPENDIX": {
-                "APPENDIX_TIME_ARCHIVED": "2025-08-14 09:15:00"
+                APPENDIX_TIME_ARCHIVED: "2025-08-14 09:15:00"
             }
         }
     ]
@@ -256,10 +258,11 @@ def main():
         <!DOCTYPE html>
         <html>
         <head>
-            <meta charset="UTF-8">
-            <title>Intelligence Integration System (IIS)</title>
             <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
             <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+            
+            <meta charset="UTF-8">
+            <title>Intelligence Integration System (IIS)</title>
             <style>
                 body {{ 
                     font-family: 'Segoe UI', system-ui, sans-serif; 
