@@ -18,5 +18,5 @@ if __name__ == "__main__":
 
 
 """
-mongoimport --uri=mongodb://localhost:27017 --db=generic_db --collection=intelligence_archived --file=intelligence_archived_20250809_172812.json
+mongoimport --uri=mongodb://localhost:27017 --db=generic_db --collection=intelligence_archived --file=intelligence_archived.json
 """

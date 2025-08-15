@@ -302,6 +302,11 @@ class IntelligenceHub:
                 return IntelligenceHub.Error(error_list=[error_text])
             if not validated_data:
                 return IntelligenceHub.Error(error_list=['Empty data'])
+
+            if self._check_data_duplication(data, False):
+                error_msg = f"Duplicated message {data.get('UUID', '')}."
+                return IntelligenceHub.Error(error_list=[error_msg])
+
             return self._enqueue_processed_data(validated_data, False)
         except Exception as e:
             logger.error(f"Submit archived data API error: {str(e)}")
@@ -375,19 +380,15 @@ class IntelligenceHub:
             except queue.Empty:
                 continue
 
-            try:
-                # If there's no UUID...
-                original_uuid = str(original_data.get('UUID', '')).strip()
-                if not original_uuid:
-                    original_data['UUID'] = original_uuid = str(uuid.uuid4())
+            # If there's no UUID...
+            if not (original_uuid := str(original_data.get('UUID', '')).strip()):
+                original_data['UUID'] = original_uuid = str(uuid.uuid4())
 
-                # self._notice_data_in_processing(original_data)
+            try:
+                # ---------------------- Check Duplication First Avoiding Wasting Token ----------------------
 
                 if self._check_data_duplication(original_data, True):
-                    # with self.lock:
-                    #     self.drop_counter += 1
-                    # self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
-                    raise IntelligenceHub.Exception('drop', 'Article duplicated', uuid=original_data.get('UUID', ''))
+                    raise IntelligenceHub.Exception('drop', 'Article duplicated')
 
                 # ---------------------------------- AI Analysis with Retry ----------------------------------
 
@@ -407,50 +408,42 @@ class IntelligenceHub:
                 if retry:
                     logger.info(f'Got AI match format answer after {retry} retires.')
 
-                # ---------------------------------- Check Analysis Result ----------------------------------
+                # ----------------------- Check Analysis Result and Fill Other Fields ------------------------
 
                 # If this article has no value. No EVENT_TEXT field.
                 if 'EVENT_TEXT' not in result:
-                    # with self.lock:
-                    #     self.drop_counter += 1
-                    # logger.info(f"Valueless article dropped: {original_uuid}")
-                    # self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_DROP)
-                    raise IntelligenceHub.Exception('drop', 'Article has no value', uuid=original_uuid)
+                    raise IntelligenceHub.Exception('drop', 'Article has no value')
 
                 # Just user original UUID and Informant. The value from AI can be a reference.
 
                 result['UUID'] = original_uuid
-                original_informant = str(original_data.get('INFORMANT', '')).strip()
-                if original_informant:
+                if original_informant := str(original_data.get('INFORMANT', '')).strip():
                     result['INFORMANT'] = original_informant
-
-                #
 
                 validated_data, error_text = check_sanitize_dict(dict(result), ProcessedData)
                 if error_text:
-                    raise IntelligenceHub.Exception('error', error_text)
+                    raise ValueError(error_text)
 
-                # -------------------------- Fill extra data and enqueue for archive --------------------------
+                # -------------------------------- Fill Extra Data and Enqueue --------------------------------
 
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
 
-                # TODO: Not check drop here.
-                if not self._enqueue_processed_data(validated_data, True):
-                    with self.lock:
-                        self.drop_counter += 1
-                    self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
+                if self._enqueue_processed_data(validated_data, True):
+                    self.archived_counter += 1
+                else:
+                    self.error_counter += 1
 
             except IntelligenceHub.Exception as e:
                 if e.name == 'drop':
                     with self.lock:
                         self.drop_counter += 1
-                    self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_DROP)
+                    self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_DROP)
             except Exception as e:
                 with self.lock:
                     self.error_counter += 1
                 logger.error(f"Analysis error: {str(e)}")
-                self._mark_cache_data_archived_flag(original_data.get('UUID'), ARCHIVED_FLAG_ERROR)
+                self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_ERROR)
             finally:
                 self.original_queue.task_done()
                 # self._notice_data_quit_processing(original_data)
@@ -584,13 +577,6 @@ class IntelligenceHub:
 
     def _enqueue_processed_data(self, data: dict, allow_empty_informant: bool) -> True or Error:
         try:
-            # TODO: Check data duplication on upper-stream.
-
-            if self._check_data_duplication(data, allow_empty_informant):
-                error_msg = f"Duplicated message {data['UUID']}."
-                logger.info(error_msg)
-                return IntelligenceHub.Error(error_list=[error_msg])
-
             ts = datetime.datetime.now()
             article_time = data.get('PUB_TIME', None)
 
