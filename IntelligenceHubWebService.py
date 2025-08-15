@@ -8,43 +8,44 @@ from typing import List
 import requests
 import datetime
 import threading
-from requests import RequestException
 from werkzeug.serving import make_server
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort
 
 from GlobalConfig import *
+from Tools.CommonPost import common_post
 from MyPythonUtility.ArbitraryRPC import RPCService
-from MyPythonUtility.DictTools import check_sanitize_dict
-from ServiceComponent.ArticleListRender import default_article_list_render
-from ServiceComponent.ArticleQueryRender import render_query_page
-from ServiceComponent.ArticleRender import default_article_render
-from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
 from ServiceComponent.PostManager import generate_html_from_markdown
+from MyPythonUtility.DictTools import check_sanitize_dict
+from ServiceComponent.ArticleRender import default_article_render
+from ServiceComponent.ArticleQueryRender import render_query_page
+from ServiceComponent.ArticleListRender import default_article_list_render
+from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def common_post(url: str, data: dict, timeout: int) -> dict:
-    try:
-        response = requests.post(
-            url,
-            json=data,
-            headers={'X-Request-Source': 'IntelligenceHub'},
-            timeout=timeout
-        )
-
-        response.raise_for_status()
-        logger.info(f"Sent request to {url} successful UUID={data['UUID']}")
-        return response.json()
-
-    except RequestException as e:
-        logger.error(f"Sent request to {url} fail: {str(e)}")
-        return {"status": "error", "uuid": data.get('UUID'), "reason": str(e)}
-
-    except Exception as e:
-        logger.error(f"Sent request to {url} fail: {str(e)}")
-        return {"status": "error", "uuid": '', "reason": str(e)}
+# def common_post(url: str, data: dict, timeout: int) -> dict:
+#     try:
+#         response = requests.post(
+#             url,
+#             json=data,
+#             headers={'X-Request-Source': 'IntelligenceHub'},
+#             timeout=timeout
+#         )
+#
+#         response.raise_for_status()
+#         logger.info(f"Sent request to {url} successful UUID={data['UUID']}")
+#         return response.json()
+#
+#     except RequestException as e:
+#         logger.error(f"Sent request to {url} fail: {str(e)}")
+#         return {"status": "error", "uuid": data.get('UUID'), "reason": str(e)}
+#
+#     except Exception as e:
+#         logger.error(f"Sent request to {url} fail: {str(e)}")
+#         return {"status": "error", "uuid": '', "reason": str(e)}
 
 
 def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> dict:
@@ -57,7 +58,7 @@ def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> di
     """
     if not isinstance(data, CollectedData):
         return {'status': 'error', 'reason': 'Data must be CollectedData format.'}
-    return common_post(f'{url}/collect', data.model_dump(exclude_unset=True, exclude_none=True), timeout)
+    return common_post(f'{url}/collect', data.model_dump(exclude_unset=True), timeout)
 
 
 def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> dict:
@@ -70,7 +71,7 @@ def post_processed_intelligence(url: str, data: ProcessedData, timeout=10) -> di
     """
     if not isinstance(data, ProcessedData):
         return {'status': 'error', 'reason': 'Data must be ProcessedData format.'}
-    return common_post(f'{url}/processed', data.model_dump(exclude_unset=True, exclude_none=True), timeout)
+    return common_post(f'{url}/processed', data.model_dump(exclude_unset=True), timeout)
 
 
 class WebServiceAccessManager:
