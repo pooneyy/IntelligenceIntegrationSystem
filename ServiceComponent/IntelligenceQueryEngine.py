@@ -76,7 +76,7 @@ class IntelligenceQueryEngine:
             # Find the newest document as base reference
             newest_doc = collection.find_one(
                 filter={},
-                sort=[("PUB_TIME", pymongo.DESCENDING)]
+                # sort=[("PUB_TIME", pymongo.DESCENDING)]
             )
 
             base_uuid = newest_doc["UUID"] if newest_doc else None
@@ -107,7 +107,7 @@ class IntelligenceQueryEngine:
 
         collection = self.__mongo_db.collection
         sort_order = [
-            ("PUB_TIME", pymongo.DESCENDING),
+            # ("PUB_TIME", pymongo.DESCENDING),
             ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
         ]
 

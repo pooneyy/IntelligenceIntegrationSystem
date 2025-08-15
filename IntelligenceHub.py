@@ -428,9 +428,7 @@ class IntelligenceHub:
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
 
-                if self._enqueue_processed_data(validated_data, True):
-                    self.archived_counter += 1
-                else:
+                if not self._enqueue_processed_data(validated_data, True):
                     self.error_counter += 1
 
             except IntelligenceHub.Exception as e:
@@ -457,7 +455,8 @@ class IntelligenceHub:
                 except queue.Empty:
                     continue
 
-                # Record the max rate for easier filter
+                # ----------------------- Record the max rate for easier filter -----------------------
+
                 if 'APPENDIX' not in data:
                     data['APPENDIX'] = {}
                 rate_dict = data.get('RATE', {'N/A': '0'})
@@ -469,12 +468,14 @@ class IntelligenceHub:
                 data['APPENDIX'][APPENDIX_MAX_RATE_CLASS] = max_key
                 data['APPENDIX'][APPENDIX_MAX_RATE_SCORE] = max_value
 
+                # -------------------- Post Process: Archive, Indexing, To RSS, ... --------------------
+
                 try:
                     self._archive_processed_data(data)
-                    self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ARCHIVED)
-
                     with self.lock:
                         self.archived_counter += 1
+                    self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ARCHIVED)
+
                     logger.info(f"Message {data['UUID']} archived.")
 
                     self._index_archived_data(data)
@@ -550,6 +551,8 @@ class IntelligenceHub:
                 article_time = ts
 
             data['PUB_TIME'] = article_time
+            if 'APPENDIX' not in data:
+                data['APPENDIX'] = {}
             data['APPENDIX'][APPENDIX_TIME_ARCHIVED] = ts
 
             self.processed_queue.put(data)
