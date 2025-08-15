@@ -18,7 +18,6 @@ from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.RSSPublisher import RSSPublisher, RssItem
-from Tools.VectorDatabase import VectorDatabase
 from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
@@ -108,7 +107,7 @@ class IntelligenceHub:
 
     def __init__(self, *,
                  ref_url: str = 'http://locohost:8080',
-                 db_vector: Optional[VectorDatabase] = None,
+                 db_vector: Optional[object] = None,
                  db_cache: Optional[MongoDBStorage] = None,
                  db_archive: Optional[MongoDBStorage] = None,
                  ai_client: OpenAICompatibleAPI):

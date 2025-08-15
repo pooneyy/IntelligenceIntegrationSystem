@@ -5,7 +5,7 @@ from IntelligenceHub import IntelligenceHub
 from MyPythonUtility.easy_config import EasyConfig
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
-from Tools.VectorDatabase import VectorDatabase
+# from Tools.VectorDatabase import VectorDatabase
 from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
 
 
