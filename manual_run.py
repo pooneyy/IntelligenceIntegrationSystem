@@ -49,8 +49,8 @@ def main():
     # from CrawlTasks import task_crawl_people
     # drive_module(task_crawl_people)
 
-    # from CrawlTasks import task_crawl_voanews
-    # drive_module(task_crawl_voanews)
+    from CrawlTasks import task_crawl_voanews
+    drive_module(task_crawl_voanews)
 
     # from CrawlTasks import task_crawl_cbc
     # drive_module(task_crawl_cbc)
@@ -58,8 +58,8 @@ def main():
     # from CrawlTasks import task_crawl_investing
     # drive_module(task_crawl_investing)
 
-    from CrawlTasks import task_crawl_bbc
-    drive_module(task_crawl_bbc)
+    # from CrawlTasks import task_crawl_bbc
+    # drive_module(task_crawl_bbc)
 
     # fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
 
