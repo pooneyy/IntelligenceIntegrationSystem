@@ -174,7 +174,7 @@ class IntelligenceQueryEngine:
                 peoples=peoples,
                 organizations=organizations,
                 keywords=keywords,
-                threshold=threshold  # Pass threshold to query builder
+                threshold=threshold
             )
 
             # Execute query and return results with limit
@@ -424,7 +424,7 @@ class IntelligenceQueryEngine:
         """
         try:
             # Apply sorting by TIME field in descending order
-            cursor = collection.find(query).sort("PUB_TIME", pymongo.DESCENDING)
+            cursor = collection.find(query) # .sort("PUB_TIME", pymongo.DESCENDING)
 
             # Apply pagination parameters if provided
             if skip is not None and skip > 0:

@@ -266,21 +266,26 @@ class IntelligenceHubWebService:
             try:
                 offset = request.args.get('offset', default=0, type=int)
                 count = request.args.get('count', default=10, type=int)
+                threshold = request.args.get('threshold', default=6, type=int)
 
                 if count > 100:
                     count = 100
 
-                total_count, _ = self.intelligence_hub.get_intelligence_summary()
+                intelligences, total_count = self.intelligence_hub.query_intelligence(
+                    threshold = threshold, skip = offset, limit = count)
+                return default_article_list_render(intelligences, offset, count, total_count)
 
-                if offset < total_count:
-                    intelligences = self.intelligence_hub.get_paginated_intelligences(
-                        base_uuid=None,
-                        offset=offset,
-                        limit=count
-                    )
-                    return default_article_list_render(intelligences, offset, count, total_count)
-                else:
-                    return default_article_list_render([], offset, count, total_count)
+                # total_count, _ = self.intelligence_hub.get_intelligence_summary()
+                #
+                # if offset < total_count:
+                #     intelligences = self.intelligence_hub.get_paginated_intelligences(
+                #         base_uuid=None,
+                #         offset=offset,
+                #         limit=count
+                #     )
+                #     return default_article_list_render(intelligences, offset, count, total_count)
+                # else:
+                #     return default_article_list_render([], offset, count, total_count)
 
             except Exception as e:
                 logger.error(f'intelligences_list_api() error: {str(e)}', stack_info=True)

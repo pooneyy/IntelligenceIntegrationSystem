@@ -337,7 +337,7 @@ class IntelligenceHub:
                            organizations: Optional[List[str]] = None,
                            keywords: Optional[str] = None,
                            threshold: Optional[int] = 4,
-                           skip: Optional[str] = None,
+                           skip: Optional[int] = 0,
                            limit: int = 100,
                            ) -> Tuple[List[dict], int]:
         if db == 'cache':

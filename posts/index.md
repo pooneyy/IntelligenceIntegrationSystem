@@ -2,7 +2,7 @@
 
 ## IIS Links
 
-[Intelligence List](/intelligences?offset=0&count=20)
+[Intelligence List](/intelligences?offset=0&count=20&threshold=6)
 
 [Intelligence Query](/intelligences/query)
 
