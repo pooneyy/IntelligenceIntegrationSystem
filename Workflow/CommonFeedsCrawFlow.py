@@ -146,6 +146,7 @@ def feeds_craw_flow(flow_name: str,
 
                 if has_url(article_link):
                     feed_statistics['skip'] += 1
+                    print('*', end='', flush=True)
                     continue
 
                 text, error_place = fetch_process_article(article_link, fetch_content, scrubbers)

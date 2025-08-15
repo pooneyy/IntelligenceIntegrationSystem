@@ -76,7 +76,8 @@ class IntelligenceQueryEngine:
             # Find the newest document as base reference
             newest_doc = collection.find_one(
                 filter={},
-                # sort=[("PUB_TIME", pymongo.DESCENDING)]
+                # TODO: Temporary hardcoded.
+                sort=[("APPENDIX.__TIME_ARCHIVED__", pymongo.DESCENDING)]
             )
 
             base_uuid = newest_doc["UUID"] if newest_doc else None
@@ -107,7 +108,8 @@ class IntelligenceQueryEngine:
 
         collection = self.__mongo_db.collection
         sort_order = [
-            # ("PUB_TIME", pymongo.DESCENDING),
+            # TODO: Temporary hardcoded.
+            ("APPENDIX.__TIME_ARCHIVED__", pymongo.DESCENDING),
             ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
         ]
 
@@ -424,7 +426,8 @@ class IntelligenceQueryEngine:
         """
         try:
             # Apply sorting by TIME field in descending order
-            cursor = collection.find(query) # .sort("PUB_TIME", pymongo.DESCENDING)
+            # TODO: Temporary hardcoded.
+            cursor = collection.find(query).sort("APPENDIX.__TIME_ARCHIVED__", pymongo.DESCENDING)
 
             # Apply pagination parameters if provided
             if skip is not None and skip > 0:
