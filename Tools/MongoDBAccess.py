@@ -49,7 +49,7 @@ class MongoDBStorage:
     def __init__(self,
                  host: str = 'localhost',
                  port: int = 27017,
-                 db_name: str = 'generic_db',
+                 db_name: str = 'IntelligenceIntegrationSystem',
                  collection_name: str = 'data',
                  username: Optional[str] = None,
                  password: Optional[str] = None,
@@ -235,7 +235,7 @@ _global_db_access: Optional[MongoDBStorage] = None
 
 def init_global_db_access(  host: str = 'localhost',
                             port: int = 27017,
-                            db_name: str = 'generic_db',
+                            db_name: str = 'IntelligenceIntegrationSystem',
                             collection_name: str = 'data',
                             username: Optional[str] = None,
                             password: Optional[str] = None,

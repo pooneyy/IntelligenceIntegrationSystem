@@ -27,10 +27,10 @@ if __name__ == "__main__":
         }
     }
 
-    # 导出 generic_db 数据库中的 intelligence_archived 集合本月记录
+    # 导出 IntelligenceIntegrationSystem 数据库中的 intelligence_archived 集合本月记录
     export_mongodb_data(
         uri="mongodb://localhost:27017",  # 根据实际情况修改
-        db="generic_db",
+        db="IntelligenceIntegrationSystem",
         collection="intelligence_archived",
         output_file=output_file,
         query=date_query,
