@@ -266,7 +266,6 @@ class IntelligenceHub:
     def statistics(self):
         return {
             'original': self.original_queue.qsize(),
-            # 'processing': len(self.processing_table),
             'processed': self.processed_queue.qsize(),
             'archived': self.archived_counter,
             'dropped': self.drop_counter,
@@ -446,13 +445,12 @@ class IntelligenceHub:
                 self._mark_cache_data_archived_flag(original_uuid, ARCHIVED_FLAG_ERROR)
             finally:
                 self.original_queue.task_done()
-                # self._notice_data_quit_processing(original_data)
 
     def _post_process_worker(self):
         while not self.shutdown_flag.is_set():
             try:
                 try:
-                    data = self.processed_queue.get(timeout=1)
+                    data = self.processed_queue.get(block=True)
                     if not data:
                         self.processed_queue.task_done()
                         continue
@@ -494,22 +492,6 @@ class IntelligenceHub:
                 continue
 
     # ------------------------------------------------ Helpers ------------------------------------------------
-
-    # def _notice_data_in_processing(self, data: dict):
-    #     with self.lock:
-    #         uuid_str = data['UUID']
-    #         if uuid_str in self.processing_table:
-    #             logger.warning(f'Found existing processing data {uuid_str}, maybe data has duplicated processing.')
-    #         else:
-    #             self.processing_table[uuid_str] = data
-    #
-    # def _notice_data_quit_processing(self, data: dict):
-    #     with self.lock:
-    #         uuid_str = data['UUID']
-    #         if uuid_str not in self.processing_table:
-    #             logger.warning(f'No processing data {uuid_str}, maybe data processing notification missing.')
-    #         else:
-    #             del self.processing_table[uuid_str]
 
     def _index_archived_data(self, data: dict):
         if self.vector_db_idx:
@@ -557,24 +539,6 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
-    # def _validate_sanitize_processed_data(self, data: dict) -> dict or None:
-    #     try:
-    #         validated_data, error_text = check_sanitize_dict(dict(data), ProcessedData)
-    #         if error_text:
-    #             print('Processed data check fail - Drop.')
-    #             print('-------------------------------')
-    #             print(str(data))
-    #             print('-------------------------------')
-    #             with self.lock:
-    #                 self.drop_counter += 1
-    #             return None
-    #         return validated_data
-    #     except Exception as e:
-    #         logger.error(f"Check processed data got exception: {str(e)}")
-    #         with self.lock:
-    #             self.drop_counter += 1
-    #         return None
-
     def _enqueue_processed_data(self, data: dict, allow_empty_informant: bool) -> True or Error:
         try:
             ts = datetime.datetime.now()
@@ -586,7 +550,7 @@ class IntelligenceHub:
                 article_time = ts
 
             data['PUB_TIME'] = article_time
-            data[APPENDIX_TIME_ARCHIVED] = ts
+            data['APPENDIX'][APPENDIX_TIME_ARCHIVED] = ts
 
             self.processed_queue.put(data)
 
