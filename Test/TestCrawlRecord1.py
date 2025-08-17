@@ -1,10 +1,12 @@
 import gc
 import logging
+import random
 import unittest
 import os
 import shutil
 import stat
-from Tools.CrawlRecord import CrawlRecord, STATUS_SUCCESS, STATUS_ERROR, STATUS_NOT_EXIST
+from Tools.CrawlRecord import CrawlRecord, STATUS_SUCCESS, STATUS_ERROR, STATUS_NOT_EXIST, STATUS_IGNORED, \
+    STATUS_UNKNOWN
 
 
 class TestCrawlRecord(unittest.TestCase):
@@ -142,6 +144,69 @@ class TestCrawlRecord(unittest.TestCase):
         record = CrawlRecord(["test_dir", self.db_path])
         result = record.record_url_status(self.test_url, STATUS_SUCCESS)
         self.assertFalse(result)  # 应返回失败
+
+    def test_large_rw_and_reload(self):
+        # 构造2000条测试数据并随机更新状态/错误计数
+        total_records = 2000
+        test_urls = [f"https://example.com/page_{i}" for i in range(total_records)]
+
+        for url in test_urls:
+            # 随机生成状态（从预定义状态码中选择）
+            status = random.choice([
+                STATUS_SUCCESS,
+                STATUS_ERROR,
+                STATUS_IGNORED
+            ])
+            # 随机错误计数（0-5次）
+            error_count = random.randint(0, 5)
+
+            # 记录状态
+            self.record.record_url_status(url, status)
+            # 更新错误计数
+            for _ in range(error_count):
+                self.record.increment_error_count(url)
+
+        # 释放资源并强制垃圾回收
+        self.record.close()
+        self.record = None
+        gc.collect()
+
+        # 重新初始化CrawlRecord（应加载最后1000条）
+        self.record = CrawlRecord([self.db_dir, self.db_name], cache_size=1000)
+
+        # 验证缓存是否包含最后1000条数据
+        cached_urls = list(self.record.memory_cache.keys())
+        expected_latest_urls = test_urls[-1000:]
+
+        # 检查缓存数量
+        self.assertEqual(len(cached_urls), 1000)
+        # 检查缓存内容是否为最新数据
+        self.assertCountEqual(cached_urls, expected_latest_urls)
+
+        # 重复测试3次以验证稳定性
+        for i in range(3):
+            # 新增100条数据
+            new_urls = [f"https://example.com/new_{j + i * 100}" for j in range(100)]
+            for url in new_urls:
+                self.record.record_url_status(url, random.choice([
+                    STATUS_SUCCESS,
+                    STATUS_ERROR,
+                    STATUS_IGNORED
+                ]))
+
+            # 再次释放并重载
+            self.record.close()
+            self.record = None
+            gc.collect()
+            self.record = CrawlRecord([self.db_dir, self.db_name], cache_size=1000)
+
+            # 验证缓存仍为最新1000条
+            current_urls = list(self.record.memory_cache.keys())
+            test_urls += new_urls
+            expected_urls = test_urls[-1000:]
+            self.assertCountEqual(current_urls, expected_urls)
+
+        print('test_large_rw_and_reload done.')
 
 
 if __name__ == '__main__':

@@ -1363,3 +1363,22 @@ APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
 
 
 
+
+
+
+    def test_large_rw_and_reload(self):
+        # TODO: 构造2000条数据，随机更新状态和错误计数
+
+        # 释放并重新构造CrawlRecord
+        self.record.close()
+        self.record = None
+
+        gc.collect()
+
+        self.record = CrawlRecord([self.db_dir, self.db_name])
+
+        # TODO: 检查构造后载入的是否最后1000条
+
+        # TODO: 重复几次上述操作。
+
+

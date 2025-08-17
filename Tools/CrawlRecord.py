@@ -58,7 +58,10 @@ class CrawlRecord:
     def _init_db(self):
         """Initialize database schema"""
         try:
-            self.conn = sqlite3.connect(self.db_path)
+            self.conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False
+            )
             cursor = self.conn.cursor()
 
             # Create table with proper schema
@@ -108,6 +111,15 @@ class CrawlRecord:
             self.logger.error(f"Cache loading failed: {str(e)}")
         except Exception as e:
             self.logger.error(f"Cache loading exception: {str(e)}")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __del__(self):
+        self.close()
 
     def record_url_status(self, url, status, extra_info=None) -> bool:
         """
@@ -178,73 +190,75 @@ class CrawlRecord:
         :return: Status code (STATUS_NOT_EXIST if not found)
         """
         # Try memory cache first
-        if not from_db and url in self.memory_cache:
-            return self.memory_cache[url]['status']
+        with self.lock:
+            if url in self.memory_cache:
+                return self.memory_cache[url]['status']
+        if not from_db:
+            return STATUS_NOT_EXIST
 
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                SELECT status FROM crawl_records WHERE url = ?
-            ''', (url,))
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT status FROM crawl_records WHERE url = ?
+                ''', (url,))
 
-            result = cursor.fetchone()
-            if result:
-                status = result[0]
+                result = cursor.fetchone()
+                if result:
+                    status = result[0]
 
-                # Update memory cache
-                if url not in self.memory_cache:
-                    self._add_to_cache(url)
-
-                return status
-
-        except sqlite3.Error as e:
-            self.logger.error(f"Status query failed for {url}: {str(e)}")
-            return STATUS_DB_ERROR
-        except Exception as e:
-            self.logger.error(f"Status query exception for {url}: {str(e)}")
-            return STATUS_DB_ERROR
-
+                    # Update memory cache
+                    if url not in self.memory_cache:
+                        self._add_to_cache(url)
+                    return status
+            except sqlite3.Error as e:
+                self.logger.error(f"Status query failed for {url}: {str(e)}")
+                return STATUS_DB_ERROR
+            except Exception as e:
+                self.logger.error(f"Status query exception for {url}: {str(e)}")
+                return STATUS_DB_ERROR
         return STATUS_NOT_EXIST
 
     def increment_error_count(self, url) -> bool:
         """Increment error counter for URL"""
-        try:
-            cursor = self.conn.cursor()
-            timestamp = datetime.now().isoformat()
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                timestamp = datetime.now().isoformat()
 
-            # Try update existing record
-            cursor.execute('''
-                UPDATE crawl_records 
-                SET error_count = error_count + 1, 
-                    status = ?,
-                    updated_time = ?
-                WHERE url = ?
-            ''', (STATUS_ERROR, timestamp, url))
-
-            # Create new record if not exists
-            if cursor.rowcount == 0:
+                # Try update existing record
                 cursor.execute('''
-                    INSERT INTO crawl_records 
-                    (url, status, error_count, created_time, updated_time) 
-                    VALUES (?, ?, 1, ?, ?)
-                ''', (url, STATUS_ERROR, timestamp, timestamp))
+                    UPDATE crawl_records 
+                    SET error_count = error_count + 1, 
+                        status = ?,
+                        updated_time = ?
+                    WHERE url = ?
+                ''', (STATUS_ERROR, timestamp, url))
 
-            self.conn.commit()
+                # Create new record if not exists
+                if cursor.rowcount == 0:
+                    cursor.execute('''
+                        INSERT INTO crawl_records 
+                        (url, status, error_count, created_time, updated_time) 
+                        VALUES (?, ?, 1, ?, ?)
+                    ''', (url, STATUS_ERROR, timestamp, timestamp))
 
-            # Update memory cache
-            if url in self.memory_cache:
-                self.memory_cache[url]['error_count'] += 1
-                self.memory_cache[url]['status'] = STATUS_ERROR
-            else:
-                self._add_to_cache(url)
-            return True
+                self.conn.commit()
 
-        except sqlite3.Error as e:
-            self.logger.error(f"Error count increment failed for {url}: {str(e)}")
-            return False
-        except Exception as e:
-            self.logger.error(f"Error count increment exception for {url}: {str(e)}")
-            return False
+                # Update memory cache
+                if url in self.memory_cache:
+                    self.memory_cache[url]['error_count'] += 1
+                    self.memory_cache[url]['status'] = STATUS_ERROR
+                else:
+                    self._add_to_cache(url)
+                return True
+
+            except sqlite3.Error as e:
+                self.logger.error(f"Error count increment failed for {url}: {str(e)}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Error count increment exception for {url}: {str(e)}")
+                return False
 
     def get_error_count(self, url, from_db=False):
         """
@@ -260,6 +274,7 @@ class CrawlRecord:
 
         try:
             cursor = self.conn.cursor()
+            # cursor.execute('PRAGMA journal_mode=WAL;')
             cursor.execute('''
                 SELECT error_count FROM crawl_records WHERE url = ?
             ''', (url,))
@@ -344,6 +359,3 @@ class CrawlRecord:
         if self.conn:
             self.conn.close()
             self.conn = None
-
-    def __del__(self):
-        self.close()
