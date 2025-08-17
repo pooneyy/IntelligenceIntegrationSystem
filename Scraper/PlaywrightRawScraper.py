@@ -159,6 +159,7 @@ def fetch_content(
     url: str,
     timeout_ms: Optional[int] = DEFAULT_TIMEOUT_MS,
     proxy: Optional[ProxyConfig] = None,
+    **kwargs
 ) -> ScraperResult:
     """
     The same as base.
