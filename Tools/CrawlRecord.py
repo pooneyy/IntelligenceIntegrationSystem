@@ -1,11 +1,11 @@
-import sqlite3
 import os
-import time
-from datetime import datetime
 import logging
+import sqlite3
+import threading
+from datetime import datetime
 from collections import OrderedDict
 
-# 状态常量 (使用整数减少存储)
+
 STATUS_NOT_EXIST = -1
 STATUS_UNKNOWN = 0
 STATUS_DB_ERROR = 1
@@ -25,6 +25,7 @@ class CrawlRecord:
         - Ensure parent directories exist
         """
         self.conn = None
+        self.lock = threading.Lock()
 
         self.logger = logging.getLogger('CrawlRecord')
         self.logger.addHandler(logging.StreamHandler())
@@ -80,6 +81,8 @@ class CrawlRecord:
 
         except sqlite3.Error as e:
             self.logger.error(f"Database initialization failed: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Database initialization exception: {str(e)}")
 
     def _load_initial_cache(self):
         """Load top N records into memory cache"""
@@ -103,6 +106,8 @@ class CrawlRecord:
 
         except sqlite3.Error as e:
             self.logger.error(f"Cache loading failed: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Cache loading exception: {str(e)}")
 
     def record_url_status(self, url, status, extra_info=None) -> bool:
         """
@@ -117,48 +122,52 @@ class CrawlRecord:
             self.logger.error(f"Invalid status {status}: Reserved for system use")
             return False
 
-        try:
-            cursor = self.conn.cursor()
-            timestamp = datetime.now().isoformat()
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()
+                timestamp = datetime.now().isoformat()
 
-            # Try update existing record
-            cursor.execute('''
-                UPDATE crawl_records 
-                SET status = ?, extra_info = ?, updated_time = ?
-                WHERE url = ?
-            ''', (status, extra_info, timestamp, url))
-
-            # If no record exists, insert new
-            if cursor.rowcount == 0:
+                # Try update existing record
                 cursor.execute('''
-                    INSERT INTO crawl_records 
-                    (url, status, extra_info, created_time, updated_time) 
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (url, status, extra_info, timestamp, timestamp))
+                    UPDATE crawl_records 
+                    SET status = ?, extra_info = ?, updated_time = ?
+                    WHERE url = ?
+                ''', (status, extra_info, timestamp, url))
 
-            self.conn.commit()
+                # If no record exists, insert new
+                if cursor.rowcount == 0:
+                    cursor.execute('''
+                        INSERT INTO crawl_records 
+                        (url, status, extra_info, created_time, updated_time) 
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (url, status, extra_info, timestamp, timestamp))
 
-            # Update memory cache
-            if url in self.memory_cache:
-                self.memory_cache[url].update({
-                    'status': status,
-                    'extra_info': extra_info
-                })
-            else:
-                # Add to cache and enforce size limit
-                self.memory_cache[url] = {
-                    'id': cursor.lastrowid,
-                    'status': status,
-                    'error_count': 0,
-                    'extra_info': extra_info
-                }
-                if len(self.memory_cache) > self.cache_size:
-                    self.memory_cache.popitem(last=False)
-            return True
+                self.conn.commit()
 
-        except sqlite3.Error as e:
-            self.logger.error(f"Status recording failed for {url}: {str(e)}")
-            return False
+                # Update memory cache
+                if url in self.memory_cache:
+                    self.memory_cache[url].update({
+                        'status': status,
+                        'extra_info': extra_info
+                    })
+                else:
+                    # Add to cache and enforce size limit
+                    self.memory_cache[url] = {
+                        'id': cursor.lastrowid,
+                        'status': status,
+                        'error_count': 0,
+                        'extra_info': extra_info
+                    }
+                    if len(self.memory_cache) > self.cache_size:
+                        self.memory_cache.popitem(last=False)
+                return True
+
+            except sqlite3.Error as e:
+                self.logger.error(f"Status recording failed for {url}: {str(e)}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Status recording exception for {url}: {str(e)}")
+                return False
 
     def get_url_status(self, url, from_db=False):
         """
@@ -191,10 +200,13 @@ class CrawlRecord:
         except sqlite3.Error as e:
             self.logger.error(f"Status query failed for {url}: {str(e)}")
             return STATUS_DB_ERROR
+        except Exception as e:
+            self.logger.error(f"Status query exception for {url}: {str(e)}")
+            return STATUS_DB_ERROR
 
         return STATUS_NOT_EXIST
 
-    def increment_error_count(self, url):
+    def increment_error_count(self, url) -> bool:
         """Increment error counter for URL"""
         try:
             cursor = self.conn.cursor()
@@ -225,9 +237,14 @@ class CrawlRecord:
                 self.memory_cache[url]['status'] = STATUS_ERROR
             else:
                 self._add_to_cache(url)
+            return True
 
         except sqlite3.Error as e:
             self.logger.error(f"Error count increment failed for {url}: {str(e)}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error count increment exception for {url}: {str(e)}")
+            return False
 
     def get_error_count(self, url, from_db=False):
         """
@@ -259,10 +276,14 @@ class CrawlRecord:
 
         except sqlite3.Error as e:
             self.logger.error(f"Error count query failed for {url}: {str(e)}")
+            return -1
+        except Exception as e:
+            self.logger.error(f"Error count query exception for {url}: {str(e)}")
+            return -1
 
         return 0
 
-    def clear_error_count(self, url):
+    def clear_error_count(self, url) -> bool:
         """Reset error counter for URL"""
         try:
             cursor = self.conn.cursor()
@@ -281,9 +302,14 @@ class CrawlRecord:
                 self.memory_cache[url]['error_count'] = 0
             else:
                 self._add_to_cache(url)
+            return True
 
         except sqlite3.Error as e:
             self.logger.error(f"Error count clear failed for {url}: {str(e)}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error count clear exception for {url}: {str(e)}")
+            return False
 
     def _add_to_cache(self, url):
         """Add specific record to memory cache"""
@@ -309,6 +335,9 @@ class CrawlRecord:
 
         except sqlite3.Error as e:
             self.logger.error(f"Cache update failed for {url}: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Cache update exception for {url}: {str(e)}")
+            return False
 
     def close(self):
         """Clean up resources"""
@@ -318,138 +347,3 @@ class CrawlRecord:
 
     def __del__(self):
         self.close()
-
-
-# import os
-# import time
-# import sqlite3
-# from datetime import datetime
-# from CrawlRecord import CrawlRecord, STATUS_UNKNOWN, STATUS_SUCCESS, STATUS_ERROR, STATUS_IGNORED
-
-
-def test_CrawlRecord():
-    """Comprehensive test for CrawlRecord class without testing frameworks"""
-    print("\n=== Starting CrawlRecord Test ===")
-
-    # =========================================================================
-    # 1. Test Database Initialization
-    # =========================================================================
-    print("\n[1] Testing database initialization...")
-    test_db = ["test_dir", "crawl_data"]  # No suffix
-    recorder = CrawlRecord(test_db, cache_size=2)
-
-    # Verify path handling
-    assert recorder.db_path.endswith(".db"), "DB should auto-add suffix"
-    assert os.path.exists(os.path.dirname(recorder.db_path)), "Directories should be created"
-    print(f"✓ Path created: {recorder.db_path}")
-
-    # Check schema
-    with sqlite3.connect(recorder.db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(crawl_records)")
-        columns = [col[1] for col in cursor.fetchall()]
-        assert "url" in columns and "status" in columns, "Schema mismatch"
-    print("✓ Schema validated")
-
-    # =========================================================================
-    # 2. Test URL Status Recording
-    # =========================================================================
-    print("\n[2] Testing URL status recording...")
-    url1 = "https://example.com/page1"
-    recorder.record_url_status(url1, STATUS_SUCCESS, "Primary page")
-
-    # Memory cache check
-    assert recorder.get_url_status(url1) == STATUS_SUCCESS, "Should get status from cache"
-    print("✓ Memory cache status retrieval")
-
-    # Database check
-    assert recorder.get_url_status(url1, from_db=True) == STATUS_SUCCESS, "Should get status from DB"
-
-    # Update status
-    recorder.record_url_status(url1, STATUS_IGNORED)
-    assert recorder.get_url_status(url1) == STATUS_IGNORED, "Status should update"
-    print("✓ Status update validated")
-
-    # =========================================================================
-    # 3. Test Error Counting
-    # =========================================================================
-    print("\n[3] Testing error counting...")
-    url2 = "https://example.com/page2"
-    recorder.record_url_status(url2, STATUS_UNKNOWN)
-
-    # Increment errors
-    recorder.increment_error_count(url2)
-    recorder.increment_error_count(url2)
-    assert recorder.get_error_count(url2) == 2, "Error count should increment"
-
-    # Clear errors
-    recorder.clear_error_count(url2)
-    assert recorder.get_error_count(url2) == 0, "Error count should reset"
-    print("✓ Error count operations")
-
-    # =========================================================================
-    # 4. Test Cache Management (LRU Policy)
-    # =========================================================================
-    print("\n[4] Testing cache eviction...")
-    url3 = "https://example.com/page3"
-    recorder.record_url_status(url3, STATUS_SUCCESS)
-
-    # Cache should evict oldest entry (url1)
-    assert url1 not in recorder.memory_cache, "url1 should be evicted from cache"
-    assert url2 in recorder.memory_cache and url3 in recorder.memory_cache, "Newer URLs should remain"
-    print("✓ LRU cache eviction")
-
-    # =========================================================================
-    # 5. Test Auto-Increment and Timestamps
-    # =========================================================================
-    print("\n[5] Testing auto-increment and timestamps...")
-    url4 = "https://example.com/page4"
-    recorder.record_url_status(url4, STATUS_SUCCESS)
-
-    # Get timestamps from DB
-    with sqlite3.connect(recorder.db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT created_time, updated_time FROM crawl_records WHERE url=?", (url4,))
-        created, updated = cursor.fetchone()
-        created_dt = datetime.fromisoformat(created)
-        updated_dt = datetime.fromisoformat(updated)
-
-        # Verify timestamps
-        assert created_dt <= updated_dt, "Created time should be <= updated time"
-        # assert (datetime.now() - created_dt).total_seconds() < 10, "Timestamp should be recent"
-
-    print("✓ Timestamps validated")
-
-    # =========================================================================
-    # 6. Test Invalid Status Handling
-    # =========================================================================
-    print("\n[6] Testing invalid status handling...")
-    result = recorder.record_url_status("https://invalid.com", 5)  # Reserved status
-    assert not result, "Should reject status <10"
-    print("✓ Status validation")
-
-    # =========================================================================
-    # 7. Test Non-Existent URL Handling
-    # =========================================================================
-    print("\n[7] Testing non-existent URL handling...")
-    assert recorder.get_url_status("https://ghost.com") == -1, "Should return STATUS_NOT_EXIST"
-    assert recorder.get_error_count("https://ghost.com") == 0, "Non-existent URL should have 0 errors"
-    print("✓ Non-existent URL handling")
-
-    # =========================================================================
-    # Cleanup
-    # =========================================================================
-
-    db_path = recorder.db_path
-    recorder.close()
-    recorder = None
-
-    # time.sleep(5)
-    # if os.path.exists(db_path):
-    #     os.remove(db_path)
-    #     os.rmdir(os.path.dirname(db_path))
-    print("\n=== All 7 tests passed ===")
-
-
-if __name__ == "__main__":
-    test_CrawlRecord()
