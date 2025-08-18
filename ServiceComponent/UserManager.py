@@ -434,6 +434,39 @@ class UserManager:
                 if conn:
                     conn.close()
 
+    def delete_role(self, role_name: str) -> Tuple[bool, str]:
+        """删除角色及其关联的权限分配（级联删除user_role和role_permission）"""
+        with self.write_lock:
+            conn = None
+            try:
+                conn = self._get_conn()
+                cursor = conn.cursor()
+
+                # 获取角色ID
+                cursor.execute("SELECT id FROM role WHERE role_name = ?", (role_name,))
+                role = cursor.fetchone()
+
+                if not role:
+                    return False, "Role does not exist"
+
+                role_id = role[0]
+
+                # 执行删除（级联删除由外键约束自动处理）
+                cursor.execute("DELETE FROM role WHERE id = ?", (role_id,))
+                conn.commit()
+
+                return True, f"Role '{role_name}' deleted"
+            except sqlite3.IntegrityError as e:
+                # 这个错误实际上不太可能发生，因为外键约束应该处理级联删除
+                logger.error(f"delete_role integrity error: {str(e)}")
+                return False, "Database integrity constraint violation"
+            except Exception as e:
+                logger.error(f"delete_role failed: {str(e)}")
+                return False, f"Error deleting role: {str(e)}"
+            finally:
+                if conn:
+                    conn.close()
+
     # -------------------------------------------- Management - Permissions --------------------------------------------
 
     def get_all_permissions(self):
