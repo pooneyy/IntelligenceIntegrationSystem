@@ -12,6 +12,7 @@ from werkzeug.serving import make_server
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort
 
 from GlobalConfig import *
+from ServiceComponent.UserManager import UserManager
 from Tools.CommonPost import common_post
 from MyPythonUtility.ArbitraryRPC import RPCService
 from ServiceComponent.PostManager import generate_html_from_markdown
@@ -57,10 +58,12 @@ class WebServiceAccessManager:
                  rpc_api_tokens: List[str],
                  collector_tokens: List[str],
                  processor_tokens: List[str],
+                 user_manager: UserManager,
                  deny_on_empty_config: bool = False):
         self.rpc_api_tokens = rpc_api_tokens
         self.collector_tokens = collector_tokens
         self.processor_tokens = processor_tokens
+        self.user_manager = user_manager
         self.deny_on_empty_config = deny_on_empty_config
 
     def check_rpc_api_token(self, token: str) -> bool:
@@ -72,9 +75,11 @@ class WebServiceAccessManager:
     def check_processor_token(self, token: str) -> bool:
         return (not self.deny_on_empty_config) if not self.rpc_api_tokens else (token in self.processor_tokens)
 
-    def check_user_credential(self, username: str, password: str) -> int or None:
-        # TODO: Credential management
-        return 1 if username == 'sleepy' and password == 'SleepySoft' else None
+    def check_user_credential(self, username: str, password: str, client_ip) -> int or None:
+        if self.user_manager:
+            self.user_manager.authenticate(username, password, client_ip)
+        else:
+            return 1 if not self.deny_on_empty_config else None
 
     @staticmethod
     def login_required(f):
@@ -138,18 +143,24 @@ class IntelligenceHubWebService:
         @self.app.route('/login', methods=['GET', 'POST'])
         def login():
             if request.method == 'POST':
+                client_ip = (request.headers.get('X-Forwarded-For', '').split(',')[0].strip() or
+                             request.headers.get('X-Real-IP', '').strip() or
+                             request.remote_addr)
+
                 username = request.form['username']
                 password = request.form['password']
 
-                user_id = self.access_manager.check_user_credential(username, password)
+                user_id = self.access_manager.check_user_credential(username, password, client_ip)
 
                 if user_id:
                     session['logged_in'] = True
                     session['user_id'] = user_id
                     session['username'] = username
+                    session['login_ip'] = client_ip
                     session.permanent = True
                     return redirect(url_for('show_post', article='index'))
                 else:
+                    logger.info(f"Login fail - IP: {client_ip}, Username: {username}")
                     return "Invalid credentials", 401
             return render_template('login.html')
 
