@@ -15,6 +15,9 @@ DEFAULT_COLLECTOR_TOKEN = 'SleepySoft'
 DEFAULT_PROCESSOR_TOKEN = 'SleepySoft'
 
 
+DEFAULT_USER_DB_PATH = 'Authentication.db'
+
+
 USING_VPN = True
 USING_PROXY = False
 

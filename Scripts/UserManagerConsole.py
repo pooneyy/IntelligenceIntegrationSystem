@@ -1,6 +1,7 @@
 import sys
 from typing import List, Dict, Any, Callable
 
+from GlobalConfig import DEFAULT_USER_DB_PATH
 from ServiceComponent.UserManager import UserManager
 
 
@@ -563,5 +564,5 @@ class UserManagerConsole:
 if __name__ == "__main__":
     import os
 
-    console = UserManagerConsole("user_manager.db")
+    console = UserManagerConsole(f"../{DEFAULT_USER_DB_PATH}")
     console.run()

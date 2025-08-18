@@ -3,6 +3,7 @@ import time
 from GlobalConfig import *
 from IntelligenceHub import IntelligenceHub
 from MyPythonUtility.easy_config import EasyConfig
+from ServiceComponent.UserManager import UserManager
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 # from Tools.VectorDatabase import VectorDatabase
@@ -65,6 +66,7 @@ def main():
         rpc_api_tokens=rpc_api_tokens,
         collector_tokens=collector_tokens,
         processor_tokens=processor_tokens,
+        user_manager=UserManager(DEFAULT_USER_DB_PATH),
         deny_on_empty_config=True)
 
     hub_service = IntelligenceHubWebService(

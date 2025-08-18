@@ -77,7 +77,8 @@ class WebServiceAccessManager:
 
     def check_user_credential(self, username: str, password: str, client_ip) -> int or None:
         if self.user_manager:
-            self.user_manager.authenticate(username, password, client_ip)
+            result, _ = self.user_manager.authenticate(username, password, client_ip)
+            return result
         else:
             return 1 if not self.deny_on_empty_config else None
 
