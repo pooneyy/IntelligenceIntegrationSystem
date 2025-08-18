@@ -1382,3 +1382,70 @@ APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
         # TODO: 重复几次上述操作。
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+用python实现一个基于sqlite的用户权限管理系统。请仔细思考表需要哪些字段，以及为了安全考虑需要哪些特性。就我而言，需要保证代码满足以下要求：
+
+1. 密码不得存储明文
+2. 需要至少两张表：用户账号密码表和登录操作记录表
+3. 用户表至少需要以下字段：ID，用户名，密码，权限（数量未定，希望可扩展，你提供设计思路）
+4. 登录操作记录表表至少需要以下字段：ID，用户，用户主机（IP），尝试的错误密码，结果
+5. 考虑多线程保护
+6. 采用成熟的设计方案
+7. 目标是一个小型系统，可以保留扩展性，但不得过度设计
+8. Log及文本需要使用英文
+
+表设计参考如下（可自行选择删减、修改或扩展）：
+
+CREATE TABLE user_account (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,  -- bcrypt 哈希值
+    is_active INTEGER DEFAULT 1,  -- 1=激活, 0=禁用
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    permission_mask (尽可能多的位域)
+);
+
+
+CREATE TABLE login_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,              -- 可为空（用户不存在时）
+    username TEXT NOT NULL,       -- 记录输入的用户名
+    client_ip TEXT NOT NULL,
+    attempted_password_hash TEXT, -- SHA256(错误密码)
+    result TEXT CHECK(result IN ('SUCCESS', 'FAILURE')) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user_account(id)
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

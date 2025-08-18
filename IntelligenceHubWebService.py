@@ -26,28 +26,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-# def common_post(url: str, data: dict, timeout: int) -> dict:
-#     try:
-#         response = requests.post(
-#             url,
-#             json=data,
-#             headers={'X-Request-Source': 'IntelligenceHub'},
-#             timeout=timeout
-#         )
-#
-#         response.raise_for_status()
-#         logger.info(f"Sent request to {url} successful UUID={data['UUID']}")
-#         return response.json()
-#
-#     except RequestException as e:
-#         logger.error(f"Sent request to {url} fail: {str(e)}")
-#         return {"status": "error", "uuid": data.get('UUID'), "reason": str(e)}
-#
-#     except Exception as e:
-#         logger.error(f"Sent request to {url} fail: {str(e)}")
-#         return {"status": "error", "uuid": '', "reason": str(e)}
-
-
 def post_collected_intelligence(url: str, data: CollectedData, timeout=10) -> dict:
     """
     Post collected intelligence to IntelligenceHub (/collect).
