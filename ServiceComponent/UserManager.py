@@ -181,6 +181,45 @@ class UserManager:
 
     # ----------------------------------------------- Management - User ------------------------------------------------
 
+    def get_all_users(self):
+        """获取所有用户信息（包括角色）"""
+        with self.write_lock:
+            conn = None
+            try:
+                conn = self._get_conn()
+                cursor = conn.cursor()
+                # 查询用户基础信息
+                cursor.execute('''
+                    SELECT u.id, u.username, u.is_active, u.created_at, u.updated_at
+                    FROM user_account u
+                ''')
+                users = []
+                for row in cursor.fetchall():
+                    user = {
+                        'id': row[0],
+                        'username': row[1],
+                        'is_active': bool(row[2]),
+                        'created_at': row[3],
+                        'updated_at': row[4],
+                        'roles': []
+                    }
+                    # 查询对应用户的角色
+                    cursor.execute('''
+                        SELECT r.role_name 
+                        FROM user_role ur
+                        JOIN role r ON ur.role_id = r.id
+                        WHERE ur.user_id = ?
+                    ''', (user['id'],))
+                    user['roles'] = [role[0] for role in cursor.fetchall()]
+                    users.append(user)
+                return users
+            except Exception as e:
+                logger.error(f"get_all_users failed: {str(e)}")
+                return []
+            finally:
+                if conn:
+                    conn.close()
+
     def create_user(self, username: str, password: str, roles: list) -> Tuple[int, str]:
         result, reason = self._check_user_name(username)
         if not result:
@@ -288,6 +327,39 @@ class UserManager:
 
     # ----------------------------------------------- Management - Roles -----------------------------------------------
 
+    def get_all_roles(self):
+        """获取所有角色信息（包括权限）"""
+        with self.write_lock:
+            conn = None
+            try:
+                conn = self._get_conn()
+                cursor = conn.cursor()
+                # 查询角色基础信息
+                cursor.execute('SELECT id, role_name FROM role')
+                roles = []
+                for row in cursor.fetchall():
+                    role = {
+                        'id': row[0],
+                        'name': row[1],
+                        'permissions': []
+                    }
+                    # 查询角色对应的权限
+                    cursor.execute('''
+                        SELECT p.perm_name
+                        FROM role_permission rp
+                        JOIN permission p ON rp.perm_id = p.id
+                        WHERE rp.role_id = ?
+                    ''', (role['id'],))
+                    role['permissions'] = [perm[0] for perm in cursor.fetchall()]
+                    roles.append(role)
+                return roles
+            except Exception as e:
+                logger.error(f"get_all_roles failed: {str(e)}")
+                return []
+            finally:
+                if conn:
+                    conn.close()
+
     def assign_roles(self, user_id: int, roles: list):
         """为用户分配角色（覆盖原有角色）"""
         with self.write_lock:
@@ -364,6 +436,22 @@ class UserManager:
 
     # -------------------------------------------- Management - Permissions --------------------------------------------
 
+    def get_all_permissions(self):
+        """获取所有权限信息"""
+        with self.write_lock:
+            conn = None
+            try:
+                conn = self._get_conn()
+                cursor = conn.cursor()
+                cursor.execute('SELECT id, perm_name FROM permission')
+                return [{'id': row[0], 'name': row[1]} for row in cursor.fetchall()]
+            except Exception as e:
+                logger.error(f"get_all_permissions failed: {str(e)}")
+                return []
+            finally:
+                if conn:
+                    conn.close()
+
     def create_permission(self, perm_name: str):
         """创建新权限项"""
         with self.write_lock:
@@ -397,6 +485,87 @@ class UserManager:
             finally:
                 if conn:
                     conn.close()
+
+    # ------------------------------------------------------ Logs ------------------------------------------------------
+
+    def get_login_logs(self, username=None, result=None, start_time=None, end_time=None,
+                       client_ip=None, page=1, per_page=20):
+        """
+        获取登录日志（支持分页和条件过滤）
+        :param username: 按用户名过滤
+        :param result: 按登录结果过滤（'SUCCESS'/'FAILURE'）
+        :param start_time: 开始时间（格式：YYYY-MM-DD HH:MM:SS）
+        :param end_time: 结束时间（格式：YYYY-MM-DD HH:MM:SS）
+        :param client_ip: 按客户端IP过滤
+        :param page: 页码（从1开始）
+        :param per_page: 每页记录数
+        :return: 登录日志列表
+        """
+        # 参数校验与安全限制
+        page = max(1, page)
+        per_page = max(1, min(100, per_page))  # 限制每页最多100条
+
+        conn = None
+        try:
+            conn = self._get_conn()
+            cursor = conn.cursor()
+
+            # 构建基础查询
+            base_query = """
+                SELECT id, user_id, username, client_ip, 
+                       attempted_password_hash, result, created_at
+                FROM login_log
+                WHERE 1=1
+            """
+            conditions = []
+            params = []
+
+            # 添加过滤条件
+            if username:
+                conditions.append("username = ?")
+                params.append(username)
+            if result in ('SUCCESS', 'FAILURE'):
+                conditions.append("result = ?")
+                params.append(result)
+            if client_ip:
+                conditions.append("client_ip = ?")
+                params.append(client_ip)
+            if start_time:
+                conditions.append("created_at >= ?")
+                params.append(start_time)
+            if end_time:
+                conditions.append("created_at <= ?")
+                params.append(end_time)
+
+            # 组合查询条件
+            if conditions:
+                base_query += " AND " + " AND ".join(conditions)
+
+            # 添加排序和分页
+            base_query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            params.append(per_page)
+            params.append((page - 1) * per_page)
+
+            # 执行查询
+            cursor.execute(base_query, params)
+            logs = []
+            for row in cursor.fetchall():
+                logs.append({
+                    'id': row[0],
+                    'user_id': row[1],
+                    'username': row[2],
+                    'client_ip': row[3],
+                    'attempted_password_hash': row[4],
+                    'result': row[5],
+                    'timestamp': row[6]
+                })
+            return logs
+        except Exception as e:
+            logger.error(f"get_login_logs failed: {str(e)}")
+            return []
+        finally:
+            if conn:
+                conn.close()
 
     # ---------------------------------------------------- Helpers -----------------------------------------------------
 
