@@ -1,12 +1,9 @@
 import time
 import logging
-from uuid import uuid4
-
 import urllib3
 import threading
+from uuid import uuid4
 from typing import Callable, TypedDict, Dict, List, Tuple
-
-from pydantic import UUID1
 
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
 from IntelligenceHub import CollectedData
@@ -14,6 +11,7 @@ from MyPythonUtility.easy_config import EasyConfig
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
+from Tools.CrawlRecord import CrawlRecord
 from Tools.CrawlStatistics import CrawlStatistics
 from Tools.RSSFetcher import FeedData
 
@@ -109,7 +107,9 @@ def feeds_craw_flow(flow_name: str,
     print(f'{prefix} submit token: {token}.')
     print(f'{prefix} submit URL: {submit_ihub_url}.')
 
-    craw_statistics = CrawlStatistics()
+    # Use both for compatibility.
+    # crawl_record = CrawlRecord(['crawl_record', 'flow_name'])
+    crawl_statistics = CrawlStatistics()
 
     for feed_name, feed_url in feeds.items():
         if stop_event.is_set():
@@ -131,10 +131,10 @@ def feeds_craw_flow(flow_name: str,
 
             result = fetch_feed(feed_url)
             if result.fatal:
-                craw_statistics.counter_log(stat_name, 'fail', '\n'.join(result.errors))
+                crawl_statistics.counter_log(stat_name, 'fail', '\n'.join(result.errors))
                 continue
             else:
-                craw_statistics.counter_log(stat_name, 'success')
+                crawl_statistics.counter_log(stat_name, 'success')
 
             feed_statistics['total'] = len(result.entries)
 
@@ -158,7 +158,7 @@ def feeds_craw_flow(flow_name: str,
                 # raw_html = content['content']
                 # if not raw_html:
                 #     # logger.error(f'{prefix}   |--Got empty HTML content.')
-                #     craw_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
+                #     crawl_statistics.sub_item_log(stat_name, article_link, 'fetch emtpy')
                 #     continue
                 #
                 # # TODO: If an article always convert fail. Need a special treatment.
@@ -172,7 +172,7 @@ def feeds_craw_flow(flow_name: str,
                 if not text:
                     # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
                     print('o', end='', flush=True)
-                    craw_statistics.sub_item_log(stat_name, article_link, error_place + ' emtpy')
+                    crawl_statistics.sub_item_log(stat_name, article_link, error_place + ' emtpy')
                     continue
 
                 success, file_path = to_file_and_history(
@@ -180,7 +180,7 @@ def feeds_craw_flow(flow_name: str,
                 if not success:
                     print('x', end='', flush=True)
                     # logger.error(f'{prefix}   |--Save content {file_path} fail.')
-                    craw_statistics.sub_item_log(stat_name, article_link, 'persists fail')
+                    crawl_statistics.sub_item_log(stat_name, article_link, 'persists fail')
                     continue
 
                 # Post to IHub
@@ -200,14 +200,14 @@ def feeds_craw_flow(flow_name: str,
                     _intelligence_sink(submit_ihub_url, collected_data, 10)
 
                 feed_statistics['success'] += 1
-                craw_statistics.sub_item_log(stat_name, article_link, 'success')
+                crawl_statistics.sub_item_log(stat_name, article_link, 'success')
 
                 print('.', end='', flush=True)
 
         except Exception as e:
             print('x', end='', flush=True)
             logger.error(f"{prefix} Process feed fail: {feed_url} - {str(e)}")
-            craw_statistics.counter_log(stat_name, 'exception')
+            crawl_statistics.counter_log(stat_name, 'exception')
 
         print(f"{prefix} Feed: {feed_name} finished.\n"
                     f"     Total: {feed_statistics['total']}\n"
@@ -216,13 +216,13 @@ def feeds_craw_flow(flow_name: str,
                     f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n")
 
         print('-' * 80)
-        print(craw_statistics.dump_sub_items(stat_name, statuses=[
+        print(crawl_statistics.dump_sub_items(stat_name, statuses=[
             'fetch emtpy', 'scrub emtpy', 'persists fail', 'exception']))
         print()
         print('=' * 100)
         print()
 
-    craw_statistics.dump_counters(['flow_name'])
+    crawl_statistics.dump_counters(['flow_name'])
 
     print(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
 

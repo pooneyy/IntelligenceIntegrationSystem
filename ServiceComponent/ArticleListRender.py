@@ -26,6 +26,7 @@ def default_article_list_render(articles, offset, count, total_count):
     if has_prev or has_next:
         pagination_html = f"""
         <div class="pagination">
+            {f'<a href="/intelligences?offset=0&count={count}" class="page-btn head">1</a>' if has_prev else ''}
             {f'<a href="/intelligences?offset={prev_offset}&count={count}" class="page-btn prev">Prev</a>' if has_prev else ''}
             <span class="page-info">{offset // count + 1} / {(total_count + count - 1) // count}</span>
             {f'<a href="/intelligences?offset={next_offset}&count={count}" class="page-btn next">Next</a>' if has_next else ''}
