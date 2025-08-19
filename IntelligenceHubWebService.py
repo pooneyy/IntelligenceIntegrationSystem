@@ -19,8 +19,7 @@ from ServiceComponent.PostManager import generate_html_from_markdown
 from ServiceComponent.ArticleRender import default_article_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleListRender import default_article_list_render
-from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData
-
+from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData, APPENDIX_TIME_ARCHIVED
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -372,6 +371,10 @@ class IntelligenceHubWebService:
         print(f'Handle error in IntelligenceHubWebService: {error}')
 
     def _articles_to_rss_items(self, articles: dict | List[dict]) -> List[FeedItem]:
+        # Using a fixed default time, combined with a unique UUID,
+        # prevents RSS readers from mistakenly identifying article duplicates.
+        default_date = datetime.datetime(1970, 1, 1)
+
         if not isinstance(articles, list):
             articles = [articles]
         try:
@@ -379,10 +382,11 @@ class IntelligenceHubWebService:
             for doc in articles:
                 if 'EVENT_BRIEF' in doc and 'UUID' in doc:
                     rss_item = FeedItem(
+                        guid=doc['UUID'],
                         title=doc.get('EVENT_TITLE', doc['EVENT_BRIEF']),
                         link=f"/intelligence/{doc['UUID']}",
                         description=doc['EVENT_BRIEF'],
-                        pub_date=datetime.datetime.now())
+                        pub_date=doc.get('APPENDIX', {}).get(APPENDIX_TIME_ARCHIVED, default_date))
                     rss_items.append(rss_item)
                 else:
                     logger.warning(f'Warning: archived data field missing.')

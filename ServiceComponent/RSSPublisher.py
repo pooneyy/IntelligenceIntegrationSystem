@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class FeedItem(BaseModel):
+    guid: str
     title: str
     link: str
     description: str | None = None
@@ -32,6 +33,7 @@ class RSSPublisher:
                 title=item.title,
                 link=self.join_url(self.base_url, item.link),
                 description=item.description,
+                guid=PyRSS2Gen.Guid(item.guid),
                 pubDate=item.pub_date
             ) for item in feed_items
         ]
