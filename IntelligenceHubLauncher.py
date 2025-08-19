@@ -2,10 +2,11 @@ import time
 
 from GlobalConfig import *
 from IntelligenceHub import IntelligenceHub
-from MyPythonUtility.easy_config import EasyConfig
-from ServiceComponent.UserManager import UserManager
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
+from MyPythonUtility.easy_config import EasyConfig
+from ServiceComponent.UserManager import UserManager
+from ServiceComponent.RSSPublisher import RSSPublisher
 # from Tools.VectorDatabase import VectorDatabase
 from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
 
@@ -62,6 +63,8 @@ def main():
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens', [])
     processor_tokens = config.get('intelligence_hub_web_service.processor.tokens', [])
 
+    rss_base_url = config.get('intelligence_hub_web_service.rss.host_prefix', 'http://127.0.0.1:5000')
+
     access_manager = WebServiceAccessManager(
         rpc_api_tokens=rpc_api_tokens,
         collector_tokens=collector_tokens,
@@ -73,7 +76,8 @@ def main():
         serve_ip=listen_ip,
         serve_port=listen_port,
         intelligence_hub = hub,
-        access_manager=access_manager
+        access_manager=access_manager,
+        rss_publisher=RSSPublisher(rss_base_url)
     )
     hub_service.startup()
 

@@ -17,7 +17,6 @@ from prompts import ANALYSIS_PROMPT
 from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
-from Tools.RSSPublisher import RSSPublisher, RssItem
 from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
@@ -139,13 +138,13 @@ class IntelligenceHub:
 
         # --------------- Components ----------------
 
-        self.rss_publisher = RSSPublisher()
+        # self.rss_publisher = RSSPublisher()
 
         # ----------------- Database -----------------
 
         self._load_vector_db()
         self._load_unarchived_data()
-        self._load_rss_publish_data()
+        # self._load_rss_publish_data()
 
         # ----------------- Threads -----------------
 
@@ -193,25 +192,25 @@ class IntelligenceHub:
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Database operation failed: {str(e)}")
 
-    def _load_rss_publish_data(self):
-        try:
-            cursor = self.mongo_db_archive.collection.find().limit(50)
-            rss_items = []
-
-            for doc in cursor:
-                if 'EVENT_BRIEF' in doc and 'UUID' in doc:
-                    rss_item = RssItem(
-                        title=doc['EVENT_BRIEF'],
-                        link=f"{self.reference_url}/intelligence/{doc['UUID']}",
-                        description=doc['EVENT_BRIEF'],
-                        pub_date=datetime.datetime.now())
-                    rss_items.append(rss_item)
-                else:
-                    logger.warning(f'Warning: archived data field missing.')
-
-            self.rss_publisher.add_items(rss_items)
-        except pymongo.errors.PyMongoError as e:
-            logger.error(f"Database operation failed: {str(e)}")
+    # def _load_rss_publish_data(self):
+    #     try:
+    #         cursor = self.mongo_db_archive.collection.find().limit(50)
+    #         rss_items = []
+    #
+    #         for doc in cursor:
+    #             if 'EVENT_BRIEF' in doc and 'UUID' in doc:
+    #                 rss_item = RssItem(
+    #                     title=doc['EVENT_BRIEF'],
+    #                     link=f"{self.reference_url}/intelligence/{doc['UUID']}",
+    #                     description=doc['EVENT_BRIEF'],
+    #                     pub_date=datetime.datetime.now())
+    #                 rss_items.append(rss_item)
+    #             else:
+    #                 logger.warning(f'Warning: archived data field missing.')
+    #
+    #         self.rss_publisher.add_items(rss_items)
+    #     except pymongo.errors.PyMongoError as e:
+    #         logger.error(f"Database operation failed: {str(e)}")
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
@@ -312,16 +311,16 @@ class IntelligenceHub:
 
     # -------------------------------------- Gets and Queries --------------------------------------
 
-    def get_rssfeed(self) -> str or Error:
-        try:
-            feed_xml = self.rss_publisher.generate_feed(
-                'IIS',
-                f'http://sleepysoft.org/intelligence',
-                'IIS Processed Intelligence')
-            return feed_xml
-        except Exception as e:
-            logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
-            return IntelligenceHub.Error(e, [str(e)])
+    # def get_rssfeed(self) -> str or Error:
+    #     try:
+    #         feed_xml = self.rss_publisher.generate_feed(
+    #             'IIS',
+    #             f'http://sleepysoft.org/intelligence',
+    #             'IIS Processed Intelligence')
+    #         return feed_xml
+    #     except Exception as e:
+    #         logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
+    #         return IntelligenceHub.Error(e, [str(e)])
 
     def get_intelligence(self, _uuid: str) -> dict:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
@@ -478,7 +477,7 @@ class IntelligenceHub:
                     logger.info(f"Message {data['UUID']} archived.")
 
                     self._index_archived_data(data)
-                    self._publish_article_to_rss(data)
+                    # self._publish_article_to_rss(data)
 
                     # TODO: Call post processor plugins
                 except Exception as e:
@@ -513,11 +512,11 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
 
-    def _publish_article_to_rss(self, data: dict):
-        self.rss_publisher.add_item(title=data.get('EVENT_TITLE', '') or data.get('EVENT_BRIEF', ''),
-                                    link=f"{self.reference_url}/intelligence/{data['UUID']}",
-                                    description=data.get('EVENT_BRIEF', ''),
-                                    pub_date=datetime.datetime.now())
+    # def _publish_article_to_rss(self, data: dict):
+    #     self.rss_publisher.add_item(title=data.get('EVENT_TITLE', '') or data.get('EVENT_BRIEF', ''),
+    #                                 link=f"{self.reference_url}/intelligence/{data['UUID']}",
+    #                                 description=data.get('EVENT_BRIEF', ''),
+    #                                 pub_date=datetime.datetime.now())
 
     def _mark_cache_data_archived_flag(self, _uuid: str, archived: bool or str):
         """

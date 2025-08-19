@@ -5,7 +5,6 @@ import logging
 from functools import wraps
 from typing import List
 
-import requests
 import datetime
 import threading
 from werkzeug.serving import make_server
@@ -15,8 +14,8 @@ from GlobalConfig import *
 from ServiceComponent.UserManager import UserManager
 from Tools.CommonPost import common_post
 from MyPythonUtility.ArbitraryRPC import RPCService
+from ServiceComponent.RSSPublisher import RSSPublisher, FeedItem
 from ServiceComponent.PostManager import generate_html_from_markdown
-from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.ArticleRender import default_article_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleListRender import default_article_list_render
@@ -97,7 +96,8 @@ class IntelligenceHubWebService:
                  serve_ip: str = '0.0.0.0',
                  serve_port: int = DEFAULT_IHUB_PORT,
                  intelligence_hub: IntelligenceHub,
-                 access_manager: WebServiceAccessManager):
+                 access_manager: WebServiceAccessManager,
+                 rss_publisher: RSSPublisher):
 
         # ---------------- Parameters ----------------
 
@@ -105,6 +105,7 @@ class IntelligenceHubWebService:
         self.serve_port = serve_port
         self.intelligence_hub = intelligence_hub
         self.access_manager = access_manager
+        self.rss_publisher = rss_publisher
 
         # ---------------- Web Service ----------------
 
@@ -242,11 +243,25 @@ class IntelligenceHubWebService:
         # ---------------------------------------------------- Pages ---------------------------------------------------
 
         @self.app.route('/rssfeed.xml', methods=['GET'])
-        @WebServiceAccessManager.login_required
         def rssfeed_api():
             try:
-                feed_xml = self.intelligence_hub.get_rssfeed()
-                return feed_xml
+                count = request.args.get('count', default=100, type=int)
+                threshold = request.args.get('threshold', default=6, type=int)
+
+                intelligences, _ = self.intelligence_hub.query_intelligence(
+                    threshold = threshold, skip = 0, limit = count)
+
+                try:
+                    rss_items = self._articles_to_rss_items(intelligences)
+                    feed_xml = self.rss_publisher.generate_feed(
+                        'IIS',
+                        '/intelligence',
+                        'IIS Processed Intelligence',
+                        rss_items)
+                    return feed_xml
+                except Exception as e:
+                    logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
+                    return 'Error'
             except Exception as e:
                 logger.error(f'rssfeed_api() error: {str(e)}', stack_info=True)
                 return 'Error'
@@ -329,7 +344,6 @@ class IntelligenceHubWebService:
                 return ''
 
         @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
-        @WebServiceAccessManager.login_required
         def intelligence_viewer_api(intelligence_uuid: str):
             try:
                 intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)
@@ -356,3 +370,23 @@ class IntelligenceHubWebService:
 
     def handle_error(self, error: str):
         print(f'Handle error in IntelligenceHubWebService: {error}')
+
+    def _articles_to_rss_items(self, articles: dict | List[dict]) -> List[FeedItem]:
+        if not isinstance(articles, list):
+            articles = [articles]
+        try:
+            rss_items = []
+            for doc in articles:
+                if 'EVENT_BRIEF' in doc and 'UUID' in doc:
+                    rss_item = FeedItem(
+                        title=doc.get('EVENT_TITLE', doc['EVENT_BRIEF']),
+                        link=f"/intelligence/{doc['UUID']}",
+                        description=doc['EVENT_BRIEF'],
+                        pub_date=datetime.datetime.now())
+                    rss_items.append(rss_item)
+                else:
+                    logger.warning(f'Warning: archived data field missing.')
+            return rss_items
+        except Exception as e:
+            logger.error(f"Article to rss items failed: {str(e)}")
+            return []
