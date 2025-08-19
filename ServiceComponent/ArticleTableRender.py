@@ -4,6 +4,7 @@ from typing import List
 
 from IntelligenceHub import APPENDIX_TIME_ARCHIVED, APPENDIX_MAX_RATE_CLASS, APPENDIX_MAX_RATE_SCORE
 
+
 article_table_style = """
 .article-list { 
     max-width: 1000px; 
@@ -101,6 +102,34 @@ article_table_style = """
 """
 
 
+article_table_color_gradient_script = """
+<script>
+function updateTimeBackgrounds() {
+    const now = new Date().getTime();
+    const twelveHours = 12 * 60 * 60 * 1000;  // 12小时毫秒数
+
+    document.querySelectorAll('.archived-time').forEach(el => {
+        const archivedTime = new Date(el.dataset.archived).getTime();
+        const timeDiff = now - archivedTime;
+
+        // 计算颜色比例（0-12小时）
+        let ratio = Math.min(1, Math.max(0, timeDiff / twelveHours));
+
+        // 起始色：橙色 (#FFA500)，终止色：浅蓝色 (#E3F2FD)
+        const r = Math.round(255 - ratio * (255 - 227));
+        const g = Math.round(165 - ratio * (165 - 242));
+        const b = Math.round(0 - ratio * (0 - 253));
+
+        el.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+    });
+}
+
+document.addEventListener('DOMContentLoaded', updateTimeBackgrounds);
+setInterval(updateTimeBackgrounds, 60000);
+</script>
+"""
+
+
 def generate_articles_table(articles: List[dict]):
     """
     Generate HTML for articles list that can be reused across pages
@@ -175,6 +204,14 @@ def generate_articles_table(articles: List[dict]):
             </div>
             """
 
+        archived_html = ""
+        if archived_time:
+            archived_html = f"""
+            <span class="article-time archived-time" data-archived="{archived_time}">
+                Archived: {archived_time}
+            </span>
+            """
+
         articles_html += f"""
         <div class="article-card">
             <h3>
@@ -183,7 +220,7 @@ def generate_articles_table(articles: List[dict]):
                 </a>
             </h3>
             <div class="article-meta">
-                {f'<span class="article-time">Archived: {archived_time}</span>' if archived_time else ''}
+                {archived_html}
                 <span class="article-time">Publish: {escape_text(article.get("PUB_TIME") or 'No Datetime')}</span>
                 <span class="article-source">Source: {informant_html}</span>
             </div>
