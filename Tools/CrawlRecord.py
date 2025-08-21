@@ -129,8 +129,11 @@ class CrawlRecord:
         :param status: Status code (must be >=10 or 0)
         :param extra_info: Additional metadata (optional)
         """
+        if not url:
+            return False
+
         # Validate status input
-        if status < 10:
+        if status < STATUS_ERROR:
             self.logger.error(f"Invalid status {status}: Reserved for system use")
             return False
 
@@ -189,6 +192,9 @@ class CrawlRecord:
         :param from_db: Force database lookup
         :return: Status code (STATUS_NOT_EXIST if not found)
         """
+        if not url:
+            return False
+
         # Try memory cache first
         with self.lock:
             if url in self.memory_cache:
@@ -221,6 +227,9 @@ class CrawlRecord:
 
     def increment_error_count(self, url) -> bool:
         """Increment error counter for URL"""
+        if not url:
+            return False
+
         with self.lock:
             try:
                 cursor = self.conn.cursor()
@@ -260,7 +269,7 @@ class CrawlRecord:
                 self.logger.error(f"Error count increment exception for {url}: {str(e)}")
                 return False
 
-    def get_error_count(self, url, from_db=False):
+    def get_error_count(self, url, from_db=False) -> int:
         """
         Get current error count for URL
 
@@ -268,9 +277,15 @@ class CrawlRecord:
         :param from_db: Force database lookup
         :return: Error count (0 if not found)
         """
+        if not url:
+            return False
+
         # Try memory cache first
-        if not from_db and url in self.memory_cache:
-            return self.memory_cache[url]['error_count']
+        with self.lock:
+            if url in self.memory_cache:
+                return self.memory_cache[url]['error_count']
+        if not from_db:
+            return -1
 
         try:
             cursor = self.conn.cursor()
@@ -300,6 +315,8 @@ class CrawlRecord:
 
     def clear_error_count(self, url) -> bool:
         """Reset error counter for URL"""
+        if not url:
+            return False
         try:
             cursor = self.conn.cursor()
             timestamp = datetime.now().isoformat()

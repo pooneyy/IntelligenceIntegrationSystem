@@ -69,7 +69,10 @@ def drop_cached_content(url: str):
 def fetch_process_article(article_link: str,
                           fetch_content: Callable[[str], FetchContentResult],
                           scrubbers: List[Callable[[str], str]]) -> Tuple[str, str]:
-    content = fetch_content(article_link)
+    try:
+        content = fetch_content(article_link)
+    except Exception:
+        return '', 'fetch'
 
     raw_html = content['content']
     if not raw_html:
@@ -153,26 +156,28 @@ def feeds_craw_flow(flow_name: str,
             'skip': 0,
         }
 
+        # ----------------------------------- Fetch and Parse feeds -----------------------------------
+
+        print()
+        print('=' * 100)
+        print(f'{prefix} Process feed: {feed_name} : {feed_url}')
+
         try:
-            # ----------------------------------- Fetch and Parse feeds -----------------------------------
-
-            print()
-            print('=' * 100)
-            print(f'{prefix} Process feed: {feed_name} : {feed_url}')
-
             result = fetch_feed(feed_url)
             if result.fatal:
-                crawl_record.increment_error_count(feed_url)
-                crawl_statistics.counter_log(stat_name, 'fail', '\n'.join(result.errors))
-                continue
-            else:
-                crawl_statistics.counter_log(stat_name, 'success')
-
+                raise ProcessError(error_text = '\n'.join(result.errors))
             feed_statistics['total'] = len(result.entries)
+            crawl_statistics.counter_log(stat_name, 'success')
+        except Exception as e:
+            logger.error(f"{prefix} Process feed fail: {feed_url} - {str(e)}")
+            crawl_record.increment_error_count(feed_url)
+            crawl_statistics.counter_log(stat_name, 'exception')
+            continue
 
-            # ----------------------------------- Process Articles in Feed ----------------------------------
+        # ----------------------------------- Process Articles in Feed ----------------------------------
 
-            for article in result.entries:
+        for article in result.entries:
+            try:
                 feed_statistics['index'] += 1
                 article_link = article.link
 
@@ -212,7 +217,7 @@ def feeds_craw_flow(flow_name: str,
 
                     if not text:
                         # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
-                        raise ProcessIgnore(error_place)
+                        raise ProcessIgnore('empty when ' + error_place)
 
                     # --------------------------------- Record and Persists ---------------------------------
 
@@ -221,7 +226,7 @@ def feeds_craw_flow(flow_name: str,
                     # TODO: Actually, with CrawlRecord, we don't need this.
                     if not success:
                         # logger.error(f'{prefix}   |--Save content {file_path} fail.')
-                        raise ProcessProblem('persists_error')
+                        raise ProcessProblem('persists_error', article_link)
 
                     # Post to IHub
                     collected_data = CollectedData(
@@ -239,6 +244,7 @@ def feeds_craw_flow(flow_name: str,
                     result = _intelligence_sink(submit_ihub_url, collected_data, 10)
                     if result.get('status', 'success') == 'error':
                         if not cached_data:
+                            print(f'Cached: {article_link}')
                             cache_content(article_link, collected_data)
                         raise ProcessProblem('commit_error')
                     else:
@@ -249,43 +255,39 @@ def feeds_craw_flow(flow_name: str,
                 crawl_record.record_url_status(article_link, STATUS_SUCCESS)
                 crawl_statistics.sub_item_log(stat_name, article_link, 'success')
 
-        except ProcessSkip as e:
-            feed_statistics['skip'] += 1
-            print('*', end='', flush=True)
+            except ProcessSkip:
+                feed_statistics['skip'] += 1
+                print('*', end='', flush=True)
 
-        except ProcessIgnore as e:
-            feed_statistics['skip'] += 1
-            print('o', end='', flush=True)
-            crawl_record.record_url_status(e.item, STATUS_IGNORED)
-            crawl_statistics.sub_item_log(stat_name, e.item, e.reason + ' emtpy')
+            except ProcessIgnore as e:
+                feed_statistics['skip'] += 1
+                print('o', end='', flush=True)
+                crawl_record.record_url_status(e.item, STATUS_IGNORED)
+                crawl_statistics.sub_item_log(stat_name, e.item, e.reason)
 
-        except ProcessProblem as e:
-            if e.problem == 'db_error':
-                # DB error, not content error, just ignore and retry at next loop.
-                logger.error('Crawl record DB Error.')
-            elif e.problem in ['fetch_error', 'persists_error', 'commit_error']:
-                # If just commit error, just retry with cache.
-                # Persists error, actually once we're starting use CrawRecord. We don't need this anymore
-                print('x', end='', flush=True)
-                logger.error(e.problem)
-                if e.problem != 'commit_error':
-                    crawl_record.increment_error_count(e.item)
-                crawl_statistics.sub_item_log(stat_name, e.item, e.problem)
-            else:
-                pass
-
-        except Exception as e:
-            print('x', end='', flush=True)
-            logger.error(f"{prefix} Process feed fail: {feed_url} - {str(e)}")
-            crawl_statistics.counter_log(stat_name, 'exception')
+            except ProcessProblem as e:
+                if e.problem == 'db_error':
+                    # DB error, not content error, just ignore and retry at next loop.
+                    logger.error('Crawl record DB Error.')
+                elif e.problem in ['fetch_error', 'persists_error', 'commit_error']:
+                    # If just commit error, just retry with cache.
+                    # Persists error, actually once we're starting use CrawRecord. We don't need this anymore
+                    print('x', end='', flush=True)
+                    logger.error(e.problem)
+                    if e.problem != 'commit_error':
+                        crawl_record.increment_error_count(e.item)
+                    crawl_statistics.sub_item_log(stat_name, e.item, e.problem)
+                else:
+                    pass
 
         # ---------------------------------------- Log feed statistics ----------------------------------------
 
         print(f"{prefix} Feed: {feed_name} finished.\n"
-                    f"     Total: {feed_statistics['total']}\n"
-                    f"     Success: {feed_statistics['success']}\n"
-                    f"     Skip: {feed_statistics['skip']}\n"
-                    f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n")
+              f"     Total: {feed_statistics['total']}\n"
+              f"     Success: {feed_statistics['success']}\n"
+              f"     Skip: {feed_statistics['skip']}\n"
+              f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n"
+              f"     Cached Items: {len(_uncommit_content_cache)}")
 
         print('-' * 80)
         print(crawl_statistics.dump_sub_items(stat_name, statuses=[
@@ -297,16 +299,13 @@ def feeds_craw_flow(flow_name: str,
     # ----------------------------------------- Log all feeds counter -----------------------------------------
 
     crawl_statistics.dump_counters(['flow_name'])
-
     print(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
 
     # ------------------------------------------ Delay and Wait for Next Loop ------------------------------------------
 
     # Wait for next loop and check event per 5s.
-    # noinspection PyTypeChecker
-    for _ in range(update_interval_s // 5):
-        if stop_event.is_set():
-            break
-        time.sleep(5)
-
-
+    remaining = update_interval_s
+    while remaining > 0 and not stop_event.is_set():
+        sleep_time = min(5, remaining)
+        time.sleep(sleep_time)
+        remaining -= sleep_time
