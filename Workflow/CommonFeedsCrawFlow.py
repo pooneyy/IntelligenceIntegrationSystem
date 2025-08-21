@@ -11,7 +11,7 @@ from MyPythonUtility.easy_config import EasyConfig
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
-from Tools.CrawlRecord import CrawlRecord, STATUS_ERROR, STATUS_SUCCESS, STATUS_DB_ERROR, STATUS_UNKNOWN
+from Tools.CrawlRecord import CrawlRecord, STATUS_ERROR, STATUS_SUCCESS, STATUS_DB_ERROR, STATUS_UNKNOWN, STATUS_IGNORED
 from Tools.CrawlStatistics import CrawlStatistics
 from Tools.ProcessCotrolException import ProcessSkip, ProcessError, ProcessTerminate, ProcessProblem, ProcessIgnore
 from Tools.RSSFetcher import FeedData
@@ -182,7 +182,7 @@ def feeds_craw_flow(flow_name: str,
                 if url_status >= STATUS_SUCCESS:
                     raise ProcessSkip('already exists', article_link)
                 elif url_status <= STATUS_UNKNOWN:
-                    pass        # <- Can continue running here
+                    pass        # <- Process going on here
                 elif url_status == STATUS_ERROR:
                     url_error_count = crawl_record.get_error_count(article_link, from_db=False)
                     if url_error_count < 0:
@@ -190,8 +190,8 @@ def feeds_craw_flow(flow_name: str,
                     if url_error_count >= CRAWL_ERROR_THRESHOLD:
                         raise ProcessSkip('max retry exceed', article_link)
                     else:
-                        pass    # <- Can continue running here
-                else:
+                        pass    # <- Process going on here
+                else:   # STATUS_DB_ERROR
                     raise ProcessProblem('db_error', article_link)
 
                 # Also keep this check to make it compatible
@@ -206,23 +206,21 @@ def feeds_craw_flow(flow_name: str,
                 else:
                     text, error_place = fetch_process_article(article_link, fetch_content, scrubbers)
 
+                    # TODO: How to detect it's fetch issue or the empty content is work as design?
                     if error_place == 'fetch':
-                        pass
+                        raise ProcessProblem('fetch_error', article_link)
 
                     if not text:
                         # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
-                        crawl_statistics.sub_item_log(stat_name, article_link, error_place + ' emtpy')
-                        raise ProcessIgnore('fetch content empty')
+                        raise ProcessIgnore(error_place)
 
                     # --------------------------------- Record and Persists ---------------------------------
 
                     success, file_path = to_file_and_history(
                         article_link, text, article.title, feed_name, '.md')
-                    # Actually, with CrawlRecord, we don't need this.
+                    # TODO: Actually, with CrawlRecord, we don't need this.
                     if not success:
                         # logger.error(f'{prefix}   |--Save content {file_path} fail.')
-                        print('x', end='', flush=True)
-                        crawl_statistics.sub_item_log(stat_name, article_link, 'persists fail')
                         raise ProcessProblem('persists_error')
 
                     # Post to IHub
@@ -239,17 +237,17 @@ def feeds_craw_flow(flow_name: str,
 
                 if _intelligence_sink:
                     result = _intelligence_sink(submit_ihub_url, collected_data, 10)
-                    if result.get('status', 'success') == 'error' and not cached_data:
-                        cache_content(article_link, collected_data)
+                    if result.get('status', 'success') == 'error':
+                        if not cached_data:
+                            cache_content(article_link, collected_data)
                         raise ProcessProblem('commit_error')
                     else:
                         drop_cached_content(submit_ihub_url)
 
                 feed_statistics['success'] += 1
+                print('.', end='', flush=True)
                 crawl_record.record_url_status(article_link, STATUS_SUCCESS)
                 crawl_statistics.sub_item_log(stat_name, article_link, 'success')
-
-                print('.', end='', flush=True)
 
         except ProcessSkip as e:
             feed_statistics['skip'] += 1
@@ -258,19 +256,21 @@ def feeds_craw_flow(flow_name: str,
         except ProcessIgnore as e:
             feed_statistics['skip'] += 1
             print('o', end='', flush=True)
+            crawl_record.record_url_status(e.item, STATUS_IGNORED)
+            crawl_statistics.sub_item_log(stat_name, e.item, e.reason + ' emtpy')
 
         except ProcessProblem as e:
             if e.problem == 'db_error':
-                # DB error, not content error, just ignore and retry at nex loop.
+                # DB error, not content error, just ignore and retry at next loop.
                 logger.error('Crawl record DB Error.')
-
-            elif e.problem == 'persists_error':
+            elif e.problem in ['fetch_error', 'persists_error', 'commit_error']:
+                # If just commit error, just retry with cache.
                 # Persists error, actually once we're starting use CrawRecord. We don't need this anymore
-                logger.error('Record and persists error.')
-
-            elif e.problem == 'commit_error':
-                # Commit error. Maybe the IHub is not ready yet. Data cached, just continue.
-                logger.error('Record and persists error.')
+                print('x', end='', flush=True)
+                logger.error(e.problem)
+                if e.problem != 'commit_error':
+                    crawl_record.increment_error_count(e.item)
+                crawl_statistics.sub_item_log(stat_name, e.item, e.problem)
             else:
                 pass
 
