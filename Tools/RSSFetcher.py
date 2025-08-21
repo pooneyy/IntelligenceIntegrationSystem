@@ -85,11 +85,15 @@ def parse_feed(content: str) -> FeedData:
         # Process article items
         entries = []
         for entry in parsed.entries:
+            authors = []
+            for author_data in entry.get("authors", []):
+                if author := author_data.get("name", '').strip():
+                    authors.append(author)
             item = RssItem(
                 title = entry.get("title", "Untitled"),
                 link = entry.get("link", ""),
                 published = entry.get("published_parsed", entry.get("updated_parsed", None)),
-                authors = [a["name"] for a in entry.get("authors", [])],
+                authors = authors,
                 description = sanitize_html(entry.get("description", "")),
                 guid = entry.get("id", ""),
                 categories = entry.get("tags", []),

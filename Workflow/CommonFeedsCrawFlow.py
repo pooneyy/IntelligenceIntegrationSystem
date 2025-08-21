@@ -160,7 +160,7 @@ def feeds_craw_flow(flow_name: str,
 
         print()
         print('=' * 100)
-        print(f'{prefix} Process feed: {feed_name} : {feed_url}')
+        print(f'{prefix} Process feed: [{feed_name}] - {feed_url}')
 
         try:
             result = fetch_feed(feed_url)
@@ -208,6 +208,9 @@ def feeds_craw_flow(flow_name: str,
                 cached_data = get_cached_content(article_link)
                 if cached_data:
                     collected_data = cached_data
+                    # TODO: Workaround, compatible with to_file_and_history() mechanism.
+                    text = collected_data.get('content', '')
+                    print(f'[cache] Get data from cache: {article_link}')
                 else:
                     text, error_place = fetch_process_article(article_link, fetch_content, scrubbers)
 
@@ -220,13 +223,6 @@ def feeds_craw_flow(flow_name: str,
                         raise ProcessIgnore('empty when ' + error_place)
 
                     # --------------------------------- Record and Persists ---------------------------------
-
-                    success, file_path = to_file_and_history(
-                        article_link, text, article.title, feed_name, '.md')
-                    # TODO: Actually, with CrawlRecord, we don't need this.
-                    if not success:
-                        # logger.error(f'{prefix}   |--Save content {file_path} fail.')
-                        raise ProcessProblem('persists_error', article_link)
 
                     # Post to IHub
                     collected_data = CollectedData(
@@ -244,11 +240,21 @@ def feeds_craw_flow(flow_name: str,
                     result = _intelligence_sink(submit_ihub_url, collected_data, 10)
                     if result.get('status', 'success') == 'error':
                         if not cached_data:
-                            print(f'Cached: {article_link}')
                             cache_content(article_link, collected_data)
+                            print(f'[cache] Cache item: {article_link}')
                         raise ProcessProblem('commit_error')
                     else:
                         drop_cached_content(submit_ihub_url)
+                        print(f'[cache] Submitted and remove item: {article_link}')
+
+                if text:
+                    success, file_path = to_file_and_history(
+                        article_link, text, article.title, feed_name, '.md')
+                    # TODO: Actually, with CrawlRecord, we don't need this.
+                    if not success:
+                        # logger.error(f'{prefix}   |--Save content {file_path} fail.')
+                        # raise ProcessProblem('persists_error', article_link)
+                        pass
 
                 feed_statistics['success'] += 1
                 print('.', end='', flush=True)
@@ -287,7 +293,8 @@ def feeds_craw_flow(flow_name: str,
               f"     Success: {feed_statistics['success']}\n"
               f"     Skip: {feed_statistics['skip']}\n"
               f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n"
-              f"     Cached Items: {len(_uncommit_content_cache)}")
+              f"     -----------------------\n"
+              f"     Total Cached Items: {len(_uncommit_content_cache)}")
 
         print('-' * 80)
         print(crawl_statistics.dump_sub_items(stat_name, statuses=[

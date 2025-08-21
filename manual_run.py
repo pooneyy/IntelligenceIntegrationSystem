@@ -58,11 +58,11 @@ def main():
     # from CrawlTasks import task_crawl_investing
     # drive_module(task_crawl_investing)
 
-    # from CrawlTasks import task_crawl_bbc
-    # drive_module(task_crawl_bbc)
+    from CrawlTasks import task_crawl_bbc
+    drive_module(task_crawl_bbc)
 
-    from CrawlTasks import task_crawl_rfi
-    drive_module(task_crawl_rfi)
+    # from CrawlTasks import task_crawl_rfi
+    # drive_module(task_crawl_rfi)
 
     # from CrawlTasks import task_crawl_dw
     # drive_module(task_crawl_dw)
