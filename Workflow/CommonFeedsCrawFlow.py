@@ -209,7 +209,7 @@ def feeds_craw_flow(flow_name: str,
                 if cached_data:
                     collected_data = cached_data
                     # TODO: Workaround, compatible with to_file_and_history() mechanism.
-                    text = collected_data.get('content', '')
+                    text = collected_data.content
                     print(f'[cache] Get data from cache: {article_link}')
                 else:
                     text, error_place = fetch_process_article(article_link, fetch_content, scrubbers)
@@ -244,8 +244,9 @@ def feeds_craw_flow(flow_name: str,
                             print(f'[cache] Cache item: {article_link}')
                         raise ProcessProblem('commit_error')
                     else:
-                        drop_cached_content(submit_ihub_url)
-                        print(f'[cache] Submitted and remove item: {article_link}')
+                        if cached_data:
+                            drop_cached_content(submit_ihub_url)
+                            print(f'[cache] Submitted and remove item: {article_link}')
 
                 if text:
                     success, file_path = to_file_and_history(
