@@ -67,8 +67,11 @@ def main():
     # from CrawlTasks import task_crawl_dw
     # drive_module(task_crawl_dw)
 
-    from CrawlTasks import task_crawl_abc
-    drive_module(task_crawl_abc)
+    # from CrawlTasks import task_crawl_abc
+    # drive_module(task_crawl_abc)
+
+    from CrawlTasks import task_crawl_aljazeera
+    drive_module(task_crawl_aljazeera)
 
     # fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
 
