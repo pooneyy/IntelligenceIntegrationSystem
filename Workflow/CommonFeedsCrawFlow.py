@@ -50,7 +50,8 @@ _uncommit_content_cache = { }
 
 def cache_content(url: str, content: any):
     with _lock:
-        _uncommit_content_cache[url] = content
+        if url not in _uncommit_content_cache:
+            _uncommit_content_cache[url] = content
 
 
 def get_cached_content(url: str) -> any:
@@ -205,6 +206,7 @@ def feeds_craw_flow(flow_name: str,
 
                 # ------------------------------- Fetch and Parse articles ------------------------------
 
+                # TODO: Use a loop to process cached data.
                 cached_data = get_cached_content(article_link)
                 if cached_data:
                     collected_data = cached_data
