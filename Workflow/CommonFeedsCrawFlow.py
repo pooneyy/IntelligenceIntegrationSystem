@@ -245,7 +245,7 @@ def feeds_craw_flow(flow_name: str,
                         raise ProcessProblem('commit_error')
                     else:
                         if cached_data:
-                            drop_cached_content(submit_ihub_url)
+                            drop_cached_content(article_link)
                             print(f'[cache] Submitted and remove item: {article_link}')
 
                 if text:
