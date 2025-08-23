@@ -12,7 +12,7 @@ from Workflow.CommonFeedsCrawFlow import set_intelligence_sink, fetch_process_ar
 
 
 def drive_module(module):
-    set_intelligence_sink(None)
+    # set_intelligence_sink(None)
 
     stop_event = threading.Event()
     service_context = ServiceContext()
