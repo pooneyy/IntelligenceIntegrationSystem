@@ -285,8 +285,7 @@ class IntelligenceHub:
             del validated_data['token']
             validated_data[APPENDIX_TIME_GOT] = time.time()
 
-            # Attention: Just for test.
-            # self.original_queue.put(validated_data)
+            self.original_queue.put(validated_data)
 
             return True
         except Exception as e:
