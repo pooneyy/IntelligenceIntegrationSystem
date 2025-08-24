@@ -140,7 +140,7 @@ def feeds_craw_flow(flow_name: str,
     print(f'{prefix} submit to URL: {submit_ihub_url}.')
 
     crawl_record = CrawlRecord(
-        ['crawl_record', 'flow_name'])
+        ['crawl_record', flow_name])
     crawl_statistics = CrawlStatistics()
 
     # ------------------------------------------------------------------------------------------------------------------
