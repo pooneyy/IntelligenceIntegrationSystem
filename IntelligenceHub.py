@@ -454,6 +454,60 @@ class IntelligenceHub:
 
     # ------------------------------------------------ Helpers ------------------------------------------------
 
+    # ---------------------------- Before Process ----------------------------
+
+    def _check_data_duplication(self, data: dict, allow_empty_informant: bool) -> bool:
+        _uuid = data.get('UUID', '')
+        informant = data.get('INFORMANT', '')
+
+        if not _uuid.strip():
+            raise ValueError('No valid uuid.')
+
+        if not allow_empty_informant and not informant:
+            raise ValueError('No valid informant.')
+
+        conditions = { 'UUID': _uuid, 'INFORMANT': informant } if informant else { 'UUID': _uuid }
+
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        exists_record = query_engine.common_query(conditions=conditions, operator="$or")
+
+        return bool(exists_record)
+
+    def _enqueue_collected_data(self, data: dict) -> True or Error:
+        del data['token']
+        data[APPENDIX_TIME_GOT] = time.time()
+
+        self._cache_original_data(data)
+        self.original_queue.put(data)
+
+        return True
+
+    def _enqueue_processed_data(self, data: dict) -> True or Error:
+        try:
+            ts = datetime.datetime.now()
+            article_time = data.get('PUB_TIME', None)
+
+            if article_time and isinstance(article_time, str):
+                article_time = time_str_to_datetime(article_time)
+            if not isinstance(article_time, datetime.datetime) or article_time > ts:
+                article_time = ts
+
+            data['PUB_TIME'] = article_time
+            if 'APPENDIX' not in data:
+                data['APPENDIX'] = {}
+            data['APPENDIX'][APPENDIX_TIME_ARCHIVED] = ts
+
+            self.processed_queue.put(data)
+
+            return True
+
+        except Exception as e:
+            self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ERROR)
+            logger.error(f"Enqueue archived data error: {str(e)}")
+            return IntelligenceHub.Error(e, [str(e)])
+
+    # ---------------------------- Archive Related ----------------------------
+
     def _index_archived_data(self, data: dict):
         if self.vector_db_idx:
             self.vector_db_idx.add_text(data['UUID'], data['EVENT_TEXT'])
@@ -494,52 +548,6 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
-    def _enqueue_collected_data(self, data: dict) -> True or Error:
-        del data['token']
-        data[APPENDIX_TIME_GOT] = time.time()
 
-        self._cache_original_data(data)
-        self.original_queue.put(data)
-
-        return True
-
-    def _enqueue_processed_data(self, data: dict) -> True or Error:
-        try:
-            ts = datetime.datetime.now()
-            article_time = data.get('PUB_TIME', None)
-
-            if article_time and isinstance(article_time, str):
-                article_time = time_str_to_datetime(article_time)
-            if not isinstance(article_time, datetime.datetime) or article_time > ts:
-                article_time = ts
-
-            data['PUB_TIME'] = article_time
-            if 'APPENDIX' not in data:
-                data['APPENDIX'] = {}
-            data['APPENDIX'][APPENDIX_TIME_ARCHIVED] = ts
-
-            self.processed_queue.put(data)
-
-            return True
-
-        except Exception as e:
-            self._mark_cache_data_archived_flag(data['UUID'], ARCHIVED_FLAG_ERROR)
-            logger.error(f"Enqueue archived data error: {str(e)}")
-            return IntelligenceHub.Error(e, [str(e)])
-
-    def _check_data_duplication(self, data: dict, allow_empty_informant: bool) -> bool:
-        _uuid = data.get('UUID', '')
-        informant = data.get('INFORMANT', '')
-
-        if not _uuid.strip():
-            raise ValueError('No valid uuid.')
-
-        if not allow_empty_informant and not informant:
-            raise ValueError('No valid informant.')
-
-        conditions = { 'UUID': _uuid, 'INFORMANT': informant } if informant else { 'UUID': _uuid }
-
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        exists_record = query_engine.common_query(conditions=conditions, operator="$or")
-
-        return bool(exists_record)
+    def _aggressive_intelligence(self):
+        pass
