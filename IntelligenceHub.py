@@ -192,26 +192,6 @@ class IntelligenceHub:
         except pymongo.errors.PyMongoError as e:
             logger.error(f"Database operation failed: {str(e)}")
 
-    # def _load_rss_publish_data(self):
-    #     try:
-    #         cursor = self.mongo_db_archive.collection.find().limit(50)
-    #         rss_items = []
-    #
-    #         for doc in cursor:
-    #             if 'EVENT_BRIEF' in doc and 'UUID' in doc:
-    #                 rss_item = RssItem(
-    #                     title=doc['EVENT_BRIEF'],
-    #                     link=f"{self.reference_url}/intelligence/{doc['UUID']}",
-    #                     description=doc['EVENT_BRIEF'],
-    #                     pub_date=datetime.datetime.now())
-    #                 rss_items.append(rss_item)
-    #             else:
-    #                 logger.warning(f'Warning: archived data field missing.')
-    #
-    #         self.rss_publisher.add_items(rss_items)
-    #     except pymongo.errors.PyMongoError as e:
-    #         logger.error(f"Database operation failed: {str(e)}")
-
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
     def startup(self):
@@ -276,51 +256,33 @@ class IntelligenceHub:
 
     def submit_collected_data(self, data: dict) -> True or Error:
         try:
+            if self._check_data_duplication(data, False):
+                return IntelligenceHub.Error(error_list=[f"Collected message duplicated {data.get('UUID', '')}."])
+
             validated_data, error_text = check_sanitize_dict(dict(data), CollectedData)
-            if error_text:
-                return IntelligenceHub.Error(error_list=[error_text])
 
-            self._cache_original_data(validated_data)
+            return IntelligenceHub.Error(error_list=[error_text]) \
+                if error_text else self._enqueue_collected_data(validated_data)
 
-            del validated_data['token']
-            validated_data[APPENDIX_TIME_GOT] = time.time()
-
-            self.original_queue.put(validated_data)
-
-            return True
         except Exception as e:
-            logger.error(f"Collection API fail: {str(e)}")
+            logger.error(f"Submit collected data API exception: {str(e)}")
             return IntelligenceHub.Error(e, [str(e)])
 
     def submit_archived_data(self, data: dict) -> True or Error:
         try:
-            validated_data, error_text = check_sanitize_dict(dict(data), ArchivedData)
-            if error_text:
-                return IntelligenceHub.Error(error_list=[error_text])
-            if not validated_data:
-                return IntelligenceHub.Error(error_list=['Empty data'])
-
             if self._check_data_duplication(data, False):
-                error_msg = f"Duplicated message {data.get('UUID', '')}."
-                return IntelligenceHub.Error(error_list=[error_msg])
+                return IntelligenceHub.Error(error_list=[f"Archived message duplicated {data.get('UUID', '')}."])
 
-            return self._enqueue_processed_data(validated_data, False)
+            validated_data, error_text = check_sanitize_dict(dict(data), ArchivedData)
+
+            return IntelligenceHub.Error(error_list=[error_text]) \
+                if error_text else self._enqueue_processed_data(validated_data)
+
         except Exception as e:
-            logger.error(f"Submit archived data API error: {str(e)}")
+            logger.error(f"Submit archived data API exception: {str(e)}")
             return IntelligenceHub.Error(e, [str(e)])
 
     # -------------------------------------- Gets and Queries --------------------------------------
-
-    # def get_rssfeed(self) -> str or Error:
-    #     try:
-    #         feed_xml = self.rss_publisher.generate_feed(
-    #             'IIS',
-    #             f'http://sleepysoft.org/intelligence',
-    #             'IIS Processed Intelligence')
-    #         return feed_xml
-    #     except Exception as e:
-    #         logger.error(f"Rss Feed API error: {str(e)}", stack_info=True)
-    #         return IntelligenceHub.Error(e, [str(e)])
 
     def get_intelligence(self, _uuid: str) -> dict:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
@@ -512,12 +474,6 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
 
-    # def _publish_article_to_rss(self, data: dict):
-    #     self.rss_publisher.add_item(title=data.get('EVENT_TITLE', '') or data.get('EVENT_BRIEF', ''),
-    #                                 link=f"{self.reference_url}/intelligence/{data['UUID']}",
-    #                                 description=data.get('EVENT_BRIEF', ''),
-    #                                 pub_date=datetime.datetime.now())
-
     def _mark_cache_data_archived_flag(self, _uuid: str, archived: bool or str):
         """
         20250530: Extend the archived parameter as str. It can be the following values:
@@ -538,7 +494,16 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
-    def _enqueue_processed_data(self, data: dict, allow_empty_informant: bool) -> True or Error:
+    def _enqueue_collected_data(self, data: dict) -> True or Error:
+        del data['token']
+        data[APPENDIX_TIME_GOT] = time.time()
+
+        self._cache_original_data(data)
+        self.original_queue.put(data)
+
+        return True
+
+    def _enqueue_processed_data(self, data: dict) -> True or Error:
         try:
             ts = datetime.datetime.now()
             article_time = data.get('PUB_TIME', None)
@@ -563,14 +528,16 @@ class IntelligenceHub:
             return IntelligenceHub.Error(e, [str(e)])
 
     def _check_data_duplication(self, data: dict, allow_empty_informant: bool) -> bool:
-        _uuid = data['UUID']
+        _uuid = data.get('UUID', '')
         informant = data.get('INFORMANT', '')
 
+        if not _uuid.strip():
+            raise ValueError('No valid uuid.')
+
         if not allow_empty_informant and not informant:
-            logger.info(f"Message {data['UUID']} dropped because has no informant.")
             raise ValueError('No valid informant.')
 
-        conditions = { 'UUID': _uuid, 'INFORMANT': informant } if informant else { 'UUID': _uuid}
+        conditions = { 'UUID': _uuid, 'INFORMANT': informant } if informant else { 'UUID': _uuid }
 
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         exists_record = query_engine.common_query(conditions=conditions, operator="$or")
