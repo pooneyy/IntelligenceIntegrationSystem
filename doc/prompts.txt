@@ -1486,6 +1486,92 @@ CREATE TABLE login_log (
 
 
 
+请帮我实现下面的IntelligenceCache类，用以缓存指定时间段内的情报数据以加速查询。
+其中load_cache()用过IntelligenceQueryEngine查询数据库中的记录，相关的上下文如下。
+注意cache中存储的是dict，即ArchivedData需要转换为dict后存储。
+此外涉及到插入和检索数据时注意列表顺序为降序，即时间最接近当前的项处于列表前部。
+
+```
+class ProcessedData(BaseModel):
+    UUID: str = Field(..., min_length=1)
+    INFORMANT: str = Field(..., min_length=1)
+    PUB_TIME: str | datetime.datetime | None = None
+
+    TIME: list | None = Field(default_factory=list)
+    LOCATION: list | None = Field(default_factory=list)
+    PEOPLE: list | None = Field(default_factory=list)
+    ORGANIZATION: list | None = Field(default_factory=list)
+    EVENT_TITLE: str | None = Field(..., min_length=1)
+    EVENT_BRIEF: str | None = Field(..., min_length=1)
+    EVENT_TEXT: str | None = None
+
+    RATE: dict | None = {}
+    IMPACT: str | None = None
+    TIPS: str | None = None
+
+
+class ArchivedDataExtraFields(BaseModel):
+    RAW_DATA: dict | None
+    SUBMITTER: str | None
+    APPENDIX: dict | None
+
+
+class ArchivedData(ProcessedData, ArchivedDataExtraFields):
+    pass
+
+
+APPENDIX_TIME_ARCHIVED  = '__TIME_ARCHIVED__'
+
+
+def build_intelligence_query(
+        self,
+        period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+        locations: Optional[Union[str, List[str]]] = None,
+        peoples: Optional[Union[str, List[str]]] = None,
+        organizations: Optional[Union[str, List[str]]] = None,
+        keywords: Optional[str] = None,
+        threshold: Optional[float] = None  # New threshold parameter
+) -> dict:
+```
+
+请根据我给出的代码框架与注释，仔细分析并实现我的需求。注意所有的的注释文本必须使用英文，如果上下文不足，请指出来。
+
+```
+class IntelligenceCache:
+    def __init__(self, db_archive: MongoDBStorage, cache_period: datetime.timedelta):
+        self.db_archive = db_archive
+        self.cache_period = cache_period
+
+        self.lock = threading.Lock()
+        self.cache = []     # Sorted by data['APPENDIX'][APPENDIX_TIME_ARCHIVED]
+
+    def encache(self, data: ArchivedData):
+        # TODO: Insert into self.cache by data['APPENDIX'][APPENDIX_TIME_ARCHIVED] descending.
+        pass
+
+    def load_cache(self) -> bool:
+        query_engine = IntelligenceQueryEngine(self.db_archive)
+        query_engine.query_intelligence()
+
+    def get_cached_data(self, filter_func: Optional[callable], map_function: Optional[callable]) -> list:
+        # TODO: Just pseudocode code.
+        original_data = self.cache if not filter_func else filter(filter_func, self.cache)
+        mapped_data = map(map_function, original_data)
+        return mapped_data
+
+    def _check_drop_out_of_period(self):
+        # TODO: while now - self.cache[-1] > self.cache_period, drop.
+        pass
+```
+
+
+
+
+
+
+
+
+
 
 
 

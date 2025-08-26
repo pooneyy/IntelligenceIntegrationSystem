@@ -1,87 +1,27 @@
 import time
+import uuid
 import queue
 import logging
-import uuid
-
 import pymongo
-import datetime
 import threading
 
 from attr import dataclass
-from pydantic import BaseModel, Field
-from typing import List, Tuple, Optional
+from typing import Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
-from Tools.DateTimeUtility import time_str_to_datetime
 from prompts import ANALYSIS_PROMPT
-from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
+from Tools.DateTimeUtility import time_str_to_datetime
+from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from MyPythonUtility.DictTools import check_sanitize_dict
+from ServiceComponent.IntelligenceHubDefines import *
+from ServiceComponent.IntelligenceCache import IntelligenceCache
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-class CollectedData(BaseModel):
-    UUID: str = Field(..., min_length=1)    # [MUST]: The UUID to identify a message.
-    token: str = Field(..., min_length=1)   # [MUST]: The token to identify the legal end point.
-    source: str | None = None               # (Optional): Message source. If it requires reply.
-    target: str | None = None               # (Optional): Message source. If it requires reply.
-    prompt: str | None = None               # (Optional): The prompt to ask LLM to process this message.
-
-    title: str | None = None                # [MUST]: The content to be processed.
-    authors: List[str] | None = []          # (Optional): Article authors.
-    content: str                            # [MUST]: The content to be processed.
-    pub_time: object | None = None          # (Optional): Content publish time. Can be time.struct_time, datetime, str, ...
-    informant: str | None = None            # (Optional): The source of message (like URL).
-
-
-class ProcessedData(BaseModel):
-    UUID: str = Field(..., min_length=1)
-    INFORMANT: str = Field(..., min_length=1)
-    PUB_TIME: str | datetime.datetime | None = None
-
-    TIME: list | None = Field(default_factory=list)
-    LOCATION: list | None = Field(default_factory=list)
-    PEOPLE: list | None = Field(default_factory=list)
-    ORGANIZATION: list | None = Field(default_factory=list)
-    EVENT_TITLE: str | None = Field(..., min_length=1)
-    EVENT_BRIEF: str | None = Field(..., min_length=1)
-    EVENT_TEXT: str | None = None
-
-    RATE: dict | None = {}
-    IMPACT: str | None = None
-    TIPS: str | None = None
-
-
-class ArchivedDataExtraFields(BaseModel):
-    RAW_DATA: dict | None
-    SUBMITTER: str | None
-    APPENDIX: dict | None
-
-
-class ArchivedData(ProcessedData, ArchivedDataExtraFields):
-    pass
-
-
-APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
-APPENDIX_TIME_POST      = '__TIME_POST__'           # Timestamp of post to processor
-APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from processor
-APPENDIX_TIME_ARCHIVED  = '__TIME_ARCHIVED__'
-APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
-APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
-APPENDIX_MAX_RATE_CLASS = '__MAX_RATE_CLASS__'
-APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
-APPENDIX_MAX_RATE_CLASS_EXCLUDE = '内容准确率'
-
-
-ARCHIVED_FLAG_DROP= 'D'
-ARCHIVED_FLAG_ERROR = 'E'
-ARCHIVED_FLAG_RETRY = 'R'
-ARCHIVED_FLAG_ARCHIVED= 'A'
 
 
 class IntelligenceHub:
@@ -131,20 +71,19 @@ class IntelligenceHub:
 
         self.original_queue = queue.Queue()             # Original intelligence queue
         self.processed_queue = queue.Queue()            # Processed intelligence queue
-        # self.processing_table = {}
         self.archived_counter = 0
         self.drop_counter = 0
         self.error_counter = 0
 
         # --------------- Components ----------------
 
-        # self.rss_publisher = RSSPublisher()
+        self.intelligence_cache = IntelligenceCache(self.mongo_db_cache, datetime.timedelta(days=1))
 
-        # ----------------- Database -----------------
+        # ------------------ Loads ------------------
 
         self._load_vector_db()
         self._load_unarchived_data()
-        # self._load_rss_publish_data()
+        self.intelligence_cache.load_cache()
 
         # ----------------- Threads -----------------
 
