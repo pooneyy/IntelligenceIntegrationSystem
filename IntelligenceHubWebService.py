@@ -280,18 +280,6 @@ class IntelligenceHubWebService:
                     threshold = threshold, skip = offset, limit = count)
                 return default_article_list_render(intelligences, offset, count, total_count)
 
-                # total_count, _ = self.intelligence_hub.get_intelligence_summary()
-                #
-                # if offset < total_count:
-                #     intelligences = self.intelligence_hub.get_paginated_intelligences(
-                #         base_uuid=None,
-                #         offset=offset,
-                #         limit=count
-                #     )
-                #     return default_article_list_render(intelligences, offset, count, total_count)
-                # else:
-                #     return default_article_list_render([], offset, count, total_count)
-
             except Exception as e:
                 logger.error(f'intelligences_list_api() error: {str(e)}', stack_info=True)
                 return jsonify({"error": "Server error"}), 500

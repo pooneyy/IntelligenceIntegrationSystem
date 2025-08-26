@@ -140,6 +140,7 @@ class IntelligenceQueryEngine:
             self,
             *,
             period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+            archive_period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
             locations: Optional[Union[str, List[str]]] = None,
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
@@ -151,14 +152,15 @@ class IntelligenceQueryEngine:
         """Execute intelligence query
 
         Args:
-            period: UTC time range (start, end)
-            locations: Location ID(s) (str or str list)
-            peoples: Person ID(s) (str or str list)
-            organizations: Organization ID(s) (str or str list)
-            keywords: Full-text keywords
+            period: Article mentioned time. UTC time range (start, end)
+            archive_period: Archive time. UTC time range (start, end)
+            locations: Article mentioned location(s) (str or str list)
+            peoples: Article mentioned person (s) (str or str list)
+            organizations: Article mentioned organization (s) (str or str list)
+            keywords: Keywords in raw article.
             threshold: Minimum score value for filtering APPENDIX_MAX_RATE_SCORE
-            skip: Number of documents to skip
-            limit: Maximum number of results to return
+            skip: Number of documents to skip (offset / page * item_per_page)
+            limit: Maximum number of results to return (item_per_page)
 
         Returns:
             Tuple of
@@ -172,6 +174,7 @@ class IntelligenceQueryEngine:
             # Build MongoDB query
             query = self.build_intelligence_query(
                 period=period,
+                archive_period=archive_period,
                 locations=locations,
                 peoples=peoples,
                 organizations=organizations,
@@ -195,6 +198,7 @@ class IntelligenceQueryEngine:
     def build_intelligence_query(
             self,
             period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+            archive_period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
             locations: Optional[Union[str, List[str]]] = None,
             peoples: Optional[Union[str, List[str]]] = None,
             organizations: Optional[Union[str, List[str]]] = None,
@@ -204,7 +208,10 @@ class IntelligenceQueryEngine:
         query_conditions = []
 
         if period:
-            query_conditions.append(self.build_time_condition(*period))
+            query_conditions.append(self.build_time_condition("PUB_TIME", *period))
+
+        if archive_period:
+            query_conditions.append(self.build_time_condition("APPENDIX.__TIME_ARCHIVED__", *archive_period))
 
         if locations:
             query_conditions.append(self.build_list_condition("LOCATION", locations))
@@ -356,12 +363,12 @@ class IntelligenceQueryEngine:
 
         return doc
 
-    def build_time_condition(self, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
+    def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
         # 转换为UTC时间并格式化为ISO字符串
         utc_start = start_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         utc_end = end_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        return {"PUB_TIME": {"$gte": utc_start, "$lte": utc_end}}
+        return {key: {"$gte": utc_start, "$lte": utc_end}}
 
     def build_list_condition(self, field: str, values: Union[str, List[str]]) -> dict:
         """构建列表字段查询条件"""
@@ -376,6 +383,9 @@ class IntelligenceQueryEngine:
             conditions.append({"EVENT_TITLE": {"$regex": kw, "$options": "i"}})
             conditions.append({"EVENT_BRIEF": {"$regex": kw, "$options": "i"}})
             conditions.append({"EVENT_TEXT": {"$regex": kw, "$options": "i"}})
+            conditions.append({"RAW_DATA.EVENT_TITLE": {"$regex": kw, "$options": "i"}})
+            conditions.append({"RAW_DATA.EVENT_BRIEF": {"$regex": kw, "$options": "i"}})
+            conditions.append({"RAW_DATA.EVENT_TEXT": {"$regex": kw, "$options": "i"}})
         return {"$or": conditions}  # 匹配任一条件
 
     def build_keyword_and_condition(self, keywords: str) -> dict:

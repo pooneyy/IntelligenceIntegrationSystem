@@ -63,14 +63,15 @@ class IntelligenceCache:
             query_engine = IntelligenceQueryEngine(self.db_archive)
 
             # Execute query and process results
-            results = query_engine.query_intelligence(period=(start_time, end_time))
-
-            with self.lock:
-                self.cache = sorted(
+            results = query_engine.query_intelligence(archive_period=(start_time, end_time))
+            results_sorted = sorted(
                     results,
                     key=lambda item: item['APPENDIX'][APPENDIX_TIME_ARCHIVED],
                     reverse=True
                 )
+
+            with self.lock:
+                self.cache = results_sorted
 
                 return True
 
