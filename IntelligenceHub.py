@@ -464,6 +464,7 @@ class IntelligenceHub:
         try:
             if self.mongo_db_archive:
                 self.mongo_db_archive.insert(data)
+                self.intelligence_cache.encache(data)
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
 
@@ -487,6 +488,8 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
+    def _get_cached_data_brief(self):
+        self.intelligence_cache.get_cached_data()
 
     def _aggressive_intelligence(self):
         pass

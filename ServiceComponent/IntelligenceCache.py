@@ -2,7 +2,7 @@ import datetime
 import threading
 from typing import Optional, Callable
 
-from ServiceComponent.IntelligenceHubDefines import ArchivedData, APPENDIX_TIME_ARCHIVED
+from ServiceComponent.IntelligenceHubDefines import APPENDIX_TIME_ARCHIVED
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
 
@@ -14,23 +14,25 @@ class IntelligenceCache:
         self.lock = threading.Lock()
         self.cache = []  # Sorted by data['APPENDIX'][APPENDIX_TIME_ARCHIVED] in descending order
 
-    def encache(self, data: ArchivedData):
+    def encache(self, data: dict) -> bool:
         """
         Insert data into cache in descending order based on APPENDIX_TIME_ARCHIVED.
 
         Args:
             data: ArchivedData object to be cached
-        """
-        # Convert ArchivedData to dict
-        data_dict = data.model_dump()
 
+        Returns:
+            bool: True if successfully cached else False
+        """
         with self.lock:
             # Get the archive time from appendix
-            archive_time = data_dict['APPENDIX'][APPENDIX_TIME_ARCHIVED]
+            archive_time = data.get('APPENDIX', {}).get(APPENDIX_TIME_ARCHIVED, None)
+            if not archive_time:
+                return False
 
             if not self.cache:
-                self.cache.insert(0, data_dict)
-                return
+                self.cache.insert(0, data)
+                return False
 
             # Find the correct position to insert (maintain descending order)
             for i, cached_item in enumerate(self.cache):
@@ -45,7 +47,9 @@ class IntelligenceCache:
                 insert_index = len(self.cache)
 
             # Insert at the found position
-            self.cache.insert(insert_index, data_dict)
+            self.cache.insert(insert_index, data)
+
+            return True
 
     def load_cache(self) -> bool:
         """
