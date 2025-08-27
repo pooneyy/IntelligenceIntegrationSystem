@@ -9,15 +9,15 @@ from attr import dataclass
 from typing import Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
-from prompts import ANALYSIS_PROMPT
+from prompts import ANALYSIS_PROMPT, AGGRESSIVE_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.DateTimeUtility import time_str_to_datetime
-from Tools.IntelligenceAnalyzerProxy import analyze_with_ai
 from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.IntelligenceHubDefines import *
 from ServiceComponent.IntelligenceCache import IntelligenceCache
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
+from ServiceComponent.IntelligenceAnalyzerProxy import analyze_with_ai, aggressive_with_ai
 
 
 logger = logging.getLogger(__name__)
@@ -322,12 +322,23 @@ class IntelligenceHub:
                 if error_text:
                     raise ValueError(error_text)
 
+                # --------------------------------- AI Aggressive with Retry ---------------------------------
+
+                history_data_brief = self._get_cached_data_brief()
+                aggressive_result = aggressive_with_ai(self.open_ai_client, AGGRESSIVE_PROMPT, result, history_data_brief)
+
+                if not aggressive_result:
+                    # dict is ordered in python 3.7+
+                    related_intelligence_uuid = next(iter(aggressive_result))
+                    if aggressive_result[related_intelligence_uuid] > 1:
+                        validated_data['APPENDIX'][APPENDIX_PARENT_ITEM] = related_intelligence_uuid
+
                 # -------------------------------- Fill Extra Data and Enqueue --------------------------------
 
                 validated_data['RAW_DATA'] = original_data
                 validated_data['SUBMITTER'] = 'Analysis Thread'
 
-                if not self._enqueue_processed_data(validated_data, True):
+                if not self._enqueue_processed_data(validated_data):
                     self.error_counter += 1
 
             except IntelligenceHub.Exception as e:
@@ -488,8 +499,15 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Cache original data fail: {str(e)}')
 
-    def _get_cached_data_brief(self):
-        self.intelligence_cache.get_cached_data()
+    def _get_cached_data_brief(self, threshold: int = 6) -> List[dict]:
+        return self.intelligence_cache.get_cached_data(
+            filter_func=lambda data: data.get('APPENDIX', {}).get(APPENDIX_MAX_RATE_SCORE, 0) >= threshold,
+            map_function=lambda data: {
+                'UUID': data['UUID'],
+                'EVENT_TITLE': data['EVENT_TITLE'],
+                'EVENT_BRIEF': data['EVENT_BRIEF'],
+            }
+        )
 
-    def _aggressive_intelligence(self):
+    def _aggressive_intelligence(self, article: dict):
         pass

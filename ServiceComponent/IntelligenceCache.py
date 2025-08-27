@@ -96,23 +96,35 @@ class IntelligenceCache:
 
     def get_cached_data(self,
                         filter_func: Optional[Callable[[dict], bool]] = None,
-                        map_function: Optional[Callable[[dict], any]] = None) -> list:
+                        map_function: Optional[Callable[[dict], any]] = None,
+                        limit: Optional[int] = 0) -> list:
         """
         Retrieve data from cache with optional filtering and mapping.
 
         Args:
             filter_func: Function to filter cached items
             map_function: Function to transform cached items
+            limit: Data limit (0 means no limit)
 
         Returns:
             list: Processed cached data
         """
         with self.lock:
-            # Apply filtering if provided
+            # Handle limit = 0 (no limit) or negative values
+            if limit is None or limit <= 0:
+                limit = None
+
+            # Apply filtering with early termination if limit is set
             if filter_func:
-                filtered_data = [item for item in self.cache if filter_func(item)]
+                filtered_data = []
+                for item in self.cache:
+                    if filter_func(item):
+                        filtered_data.append(item)
+                        if limit is not None and len(filtered_data) >= limit:
+                            break
             else:
-                filtered_data = self.cache
+                # If no filter, just take the first 'limit' items
+                filtered_data = self.cache[:limit] if limit is not None else self.cache
 
             # Apply mapping if provided
             if map_function:

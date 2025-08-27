@@ -8,6 +8,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, ValidationError
 
+from MyPythonUtility.DictTools import dict_list_to_markdown
 from prompts import ANALYSIS_PROMPT
 from Tools.OpenAIClient import OpenAICompatibleAPI
 
@@ -36,6 +37,41 @@ def extract_pure_response(text: str):
 
 def extract_pure_json_text(text: str):
     return text.strip().removeprefix('```json').removesuffix('```').strip()
+
+
+def record_conversation(folder: str, messages: list, response: dict):
+    folder_path = os.path.join('conversation', folder)
+    os.makedirs(folder_path, exist_ok=True)
+    file_path = os.path.join(folder_path, f"conversation_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.txt")
+
+    with open(file_path, 'wt', encoding='utf-8') as f:
+        f.write("[system]\n\n")
+        f.write(messages[0]['content'])
+
+        f.write("\n\n")
+        f.write("[user]\n\n")
+        f.write(messages[1]['content'])
+
+        f.write("\n\n")
+        f.write("[reply]\n\n")
+        if isinstance(response, Dict) and "choices" in response:
+            f.write(response["choices"][0]["message"]["content"])
+        else:
+            f.write('<None>')
+
+
+def parse_ai_response(response: dict):
+    if isinstance(response, Dict) and "choices" in response:
+        ai_output = response["choices"][0]["message"]["content"]
+        ai_answer = extract_pure_response(ai_output)
+        ai_json = extract_pure_json_text(ai_answer)
+        try:
+            parsed_output = json.loads(ai_json)
+            return parsed_output
+        except json.JSONDecodeError:
+            return {'error': "Cannot parse AI response to JSON."}
+    else:
+        return {'error': "Invalid AI response."}
 
 
 def analyze_with_ai(
@@ -76,48 +112,52 @@ def analyze_with_ai(
 
     start = time.time()
 
-    # 调用 OpenAI API 的聊天接口
     response = api_client.create_chat_completion_sync(
         messages=messages,
-        temperature=0,      # 确保输出结果的确定性
-        max_tokens=3000     # 最大 token 数，根据需要调整
+        temperature=0,
+        max_tokens=5000
     )
 
     elapsed = time.time() - start
     print(f"AI response spends {elapsed} s")
 
-    # -------------------------- For Debug --------------------------
+    record_conversation('analysis', messages, response)
+    return parse_ai_response(response)
 
-    os.makedirs('conversion', exist_ok=True)
-    file_path = f"conversion/conversion_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.txt"
-    with open(file_path, 'wt', encoding='utf-8') as f:
-        f.write("[system]\n\n")
-        f.write(messages[0]['content'])
 
-        f.write("\n\n")
-        f.write("[user]\n\n")
-        f.write(messages[1]['content'])
+def aggressive_with_ai(
+        api_client: OpenAICompatibleAPI,
+        prompt: str,
+        new_data: Dict[str, Any],
+        history_data: List[Dict[str, str]]
+) -> Dict:
+    new_data_text = \
+        f"{new_data['EVENT_TITLE']}\n\n"\
+        f"{new_data['EVENT_BRIEF']}\n\n"\
+        f"{new_data['EVENT_TEXT']}\n\n"
+    history_data_md_table = dict_list_to_markdown(history_data)
 
-        f.write("\n\n")
-        f.write("[reply]\n\n")
-        if isinstance(response, Dict) and "choices" in response:
-            f.write(response["choices"][0]["message"]["content"])
-        else:
-            f.write('<None>')
+    user_message = \
+        f"# 情情报\n\n {new_data_text}"\
+        f"# 历史情报\n\n {history_data_md_table}"
 
-    # ------------------------------------------------------------------
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": user_message}]
 
-    if isinstance(response, Dict) and "choices" in response:
-        ai_output = response["choices"][0]["message"]["content"]
-        ai_answer = extract_pure_response(ai_output)
-        ai_json = extract_pure_json_text(ai_answer)
-        try:
-            parsed_output = json.loads(ai_json)
-            return parsed_output
-        except json.JSONDecodeError:
-            return {'error': "Cannot parse AI response to JSON."}
-    else:
-        return {'error': "Invalid AI response."}
+    start = time.time()
+
+    response = api_client.create_chat_completion_sync(
+        messages=messages,
+        temperature=0,
+        max_tokens=5000
+    )
+
+    elapsed = time.time() - start
+    print(f"AI response spends {elapsed} s")
+
+    record_conversation('aggressive', messages, response)
+    return parse_ai_response(response)
 
 
 NEWS_TEXT = """An industry group representing companies including Netflix argued on Friday that streamers should not have rules around Canadian content imposed on them. Netflix was also scheduled to appear at a hearing this week, but then cancelled its appearance. (Richard Drew/The Associated Press)

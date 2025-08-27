@@ -1569,6 +1569,8 @@ class IntelligenceCache:
 
 
 
+我希望使用pymongo向“UUID”字段为某值的mongodb record中的APPENDIX.__PARENT_ITEM__列表中增加一项，更新语句应该怎么构造？
+
 
 
 
