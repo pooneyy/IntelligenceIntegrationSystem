@@ -331,6 +331,7 @@ class IntelligenceHub:
                     # dict is ordered in python 3.7+
                     related_intelligence_uuid = next(iter(aggressive_result))
                     if aggressive_result[related_intelligence_uuid] > 1:
+                        self._add_item_link(related_intelligence_uuid, validated_data['UUID'])
                         validated_data['APPENDIX'][APPENDIX_PARENT_ITEM] = related_intelligence_uuid
 
                 # -------------------------------- Fill Extra Data and Enqueue --------------------------------
@@ -491,13 +492,23 @@ class IntelligenceHub:
         """
         try:
             if isinstance(archived, bool):
-                archived = 'T' if archived else 'F'
+                archived = ARCHIVED_FLAG_ARCHIVED if archived else ARCHIVED_FLAG_DROP
             if self.mongo_db_cache:
                 self.mongo_db_cache.update({
                     'UUID': _uuid},
                     {f'APPENDIX.{APPENDIX_ARCHIVED_FLAG}': archived})
         except Exception as e:
-            logger.error(f'Cache original data fail: {str(e)}')
+            logger.error(f'Mark archived data flag fail: {str(e)}')
+
+    def _add_item_link(self, parent_item_uuid: str, child_item_uuid):
+        try:
+            if self.mongo_db_archive:
+                self.mongo_db_archive.update({
+                    'UUID': parent_item_uuid},
+                    {"$push": {"APPENDIX.__PARENT_ITEM__": child_item_uuid}}
+                )
+        except Exception as e:
+            logger.error(f'Add item link fail: {str(e)}')
 
     def _get_cached_data_brief(self, threshold: int = 6) -> List[dict]:
         return self.intelligence_cache.get_cached_data(
