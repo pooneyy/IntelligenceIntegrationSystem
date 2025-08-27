@@ -2,14 +2,16 @@ import datetime
 import threading
 from typing import Optional, Callable
 
-from ServiceComponent.IntelligenceHubDefines import APPENDIX_TIME_ARCHIVED
+from ServiceComponent.IntelligenceHubDefines import APPENDIX_TIME_ARCHIVED, APPENDIX_MAX_RATE_SCORE
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 
 
 class IntelligenceCache:
-    def __init__(self, db_archive, cache_period: datetime.timedelta):
+    def __init__(self, db_archive, threshold: int, count_limit: int, period_limit: Optional[datetime.timedelta]):
+        self.threshold = threshold
         self.db_archive = db_archive
-        self.cache_period = cache_period
+        self.count_limit = count_limit
+        self.period_limit = period_limit
 
         self.lock = threading.Lock()
         self.cache = []  # Sorted by data['APPENDIX'][APPENDIX_TIME_ARCHIVED] in descending order
@@ -30,9 +32,12 @@ class IntelligenceCache:
             if not archive_time:
                 return False
 
+            if data.get('APPENDIX', {}).get(APPENDIX_MAX_RATE_SCORE, 10) < self.threshold:
+                return False
+
             if not self.cache:
                 self.cache.insert(0, data)
-                return False
+                return True
 
             # Find the correct position to insert (maintain descending order)
             for i, cached_item in enumerate(self.cache):
@@ -48,6 +53,7 @@ class IntelligenceCache:
 
             # Insert at the found position
             self.cache.insert(insert_index, data)
+            self._check_drop_out_of_period(self.cache)
 
             return True
 
@@ -59,20 +65,25 @@ class IntelligenceCache:
             bool: True if loading was successful, False otherwise
         """
         try:
-            # Calculate time range for query
-            end_time = datetime.datetime.now()
-            start_time = end_time - self.cache_period
-
             # Create query engine and build query
             query_engine = IntelligenceQueryEngine(self.db_archive)
 
-            # Execute query and process results
-            results = query_engine.query_intelligence(archive_period=(start_time, end_time))
+            if self.count_limit:
+                results, count = query_engine.query_intelligence(threshold = self.threshold, skip = 0, limit = self.count_limit)
+            else:
+                # Calculate time range for query
+                end_time = datetime.datetime.now()
+                start_time = end_time - self.period_limit
+
+                # Execute query and process results
+                results, count = query_engine.query_intelligence(archive_period=(start_time, end_time))
+
             results_sorted = sorted(
                     results,
                     key=lambda item: item['APPENDIX'][APPENDIX_TIME_ARCHIVED],
                     reverse=True
                 )
+            self._check_drop_out_of_period(results_sorted)
 
             with self.lock:
                 self.cache = results_sorted
@@ -111,20 +122,25 @@ class IntelligenceCache:
 
             return result
 
-    def _check_drop_out_of_period(self):
+    def _check_drop_out_of_period(self, cache_queue: list):
         """
-        Remove expired data from cache based on cache_period.
+        Remove expired data from cache based on period_limit.
         """
-        current_time = datetime.datetime.now()
-        cutoff_time = current_time - self.cache_period
+        if self.period_limit:
+            current_time = datetime.datetime.now()
+            cutoff_time = current_time - self.period_limit
+        else:
+            cutoff_time = None
 
-        with self.lock:
-            # Remove items from the end until we reach data within the cache period
-            while self.cache:
-                oldest_item = self.cache[-1]
+        # Remove items from the end until we reach data within the cache period
+        while cache_queue:
+            if self.count_limit and len(cache_queue) > self.count_limit:
+                cache_queue.pop()
+                continue
+            if cutoff_time:
+                oldest_item = cache_queue[-1]
                 oldest_time = oldest_item['APPENDIX'][APPENDIX_TIME_ARCHIVED]
-
                 if oldest_time < cutoff_time:
-                    self.cache.pop()
-                else:
-                    break
+                    cache_queue.pop()
+                    continue
+            break

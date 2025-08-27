@@ -77,7 +77,7 @@ class IntelligenceHub:
 
         # --------------- Components ----------------
 
-        self.intelligence_cache = IntelligenceCache(self.mongo_db_cache, datetime.timedelta(days=1))
+        self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, datetime.timedelta(days=1))
 
         # ------------------ Loads ------------------
 
