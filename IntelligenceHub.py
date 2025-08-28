@@ -409,7 +409,7 @@ class IntelligenceHub:
 
     def _check_data_duplication(self, data: dict, allow_empty_informant: bool) -> bool:
         _uuid = data.get('UUID', '')
-        informant = data.get('INFORMANT', '')
+        informant = data.get('informant', '')
 
         if not _uuid.strip():
             raise ValueError('No valid uuid.')
