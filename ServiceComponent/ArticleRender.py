@@ -1,6 +1,7 @@
 import datetime
 
 from Tools.DateTimeUtility import any_time_to_time_str
+from ServiceComponent.IntelligenceHubDefines import APPENDIX_MANUAL_RATING
 
 
 RATING_SCRIPT = """
@@ -90,7 +91,7 @@ def create_rating_stars(score):
 
 def gen_rating_table(article_dict: dict) -> str:
     rates = article_dict.get('RATE', {})
-    manual_ratings = article_dict.get('MANUAL_RATING', {})
+    manual_ratings = article_dict.get('APPENDIX', { }).get(APPENDIX_MANUAL_RATING, { })
 
     rating_table = ""
     if rates:

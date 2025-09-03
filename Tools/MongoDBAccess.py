@@ -194,13 +194,14 @@ class MongoDBStorage:
         except PyMongoError as e:
             self._handle_error(e)
 
-    def update(self, filter_query: Dict[str, Any], update_data: Dict[str, Any], **kwargs) -> Tuple[int, int]:
+    def update(self, filter_query: Dict[str, Any], update_data: Dict[str, Any], operation: str = '$set', **kwargs) -> Tuple[int, int]:
         """
         Update documents matching the query criteria with specified fields.
 
         Args:
             filter_query (Dict[str, Any]): Query criteria for document selection
             update_data (Dict[str, Any]): Fields to update or add with new values
+            operation (str): MongoDB operator, can be $set, $push, etc...
             **kwargs: Additional parameters for update_many operation
 
         Returns:
@@ -213,12 +214,13 @@ class MongoDBStorage:
         try:
             result = self.collection.update_many(
                 filter_query,
-                {'$set': update_data},
+                {operation: update_data},
                 **kwargs
             )
             return result.matched_count, result.modified_count
         except PyMongoError as e:
             self._handle_error(e)
+            return -1, -1
 
     def _handle_error(self, error: PyMongoError) -> None:
         """Centralized error handling with resource cleanup."""

@@ -260,6 +260,18 @@ class IntelligenceHub:
         result = query_engine.get_paginated_intelligences(base_uuid, offset, limit)
         return result
 
+    # ---------------------------------------------------- Updates -----------------------------------------------------
+
+    def submit_intelligence_manual_rating(self, _uuid: str, rating: dict):
+        if not isinstance(rating, dict):
+            return IntelligenceHub.Error(error_list=['Invalid rating'])
+
+        self.mongo_db_archive.update({
+            'UUID': _uuid},
+            {f"APPENDIX.{APPENDIX_MANUAL_RATING}": rating})
+
+        return True
+
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
     def _ai_analysis_thread(self):

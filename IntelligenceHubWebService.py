@@ -243,12 +243,10 @@ class IntelligenceHubWebService:
         def submit_rating():
             try:
                 data = request.get_json()
-                uuid = data.get('uuid')
+                _uuid = data.get('uuid')
                 ratings = data.get('ratings')
 
-                # 这里实现你的评分存储逻辑
-                # 可以将评分保存到数据库、文件或其他存储系统
-                print(f"Received ratings for UUID {uuid}: {ratings}")
+                self.intelligence_hub.submit_intelligence_manual_rating(_uuid, ratings)
 
                 return jsonify({'status': 'success', 'message': 'Ratings saved'})
             except Exception as e:
