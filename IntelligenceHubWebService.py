@@ -239,6 +239,21 @@ class IntelligenceHubWebService:
                 logger.error(f'collect_api() fail: {str(e)}')
                 return jsonify({'resp': 'error', 'uuid': ''})
 
+        @self.app.route('/manual_rate', methods=['POST'])
+        def submit_rating():
+            try:
+                data = request.get_json()
+                uuid = data.get('uuid')
+                ratings = data.get('ratings')
+
+                # 这里实现你的评分存储逻辑
+                # 可以将评分保存到数据库、文件或其他存储系统
+                print(f"Received ratings for UUID {uuid}: {ratings}")
+
+                return jsonify({'status': 'success', 'message': 'Ratings saved'})
+            except Exception as e:
+                return jsonify({'status': 'error', 'message': str(e)}), 500
+
         # ---------------------------------------------------- Pages ---------------------------------------------------
 
         @self.app.route('/rssfeed.xml', methods=['GET'])

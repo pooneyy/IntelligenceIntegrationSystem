@@ -3,7 +3,144 @@ import datetime
 from Tools.DateTimeUtility import any_time_to_time_str
 
 
-def default_article_render(article_dict):
+RATING_SCRIPT = """
+<script>
+$(document).ready(function() {
+    // 初始化所有评分控件
+    $('.rating').rating({
+        theme: 'krajee-svg',
+        filledStar: '<i class="bi bi-star-fill"></i>',
+        emptyStar: '<i class="bi bi-star"></i>',
+        // 更多配置选项
+        hoverOnClear: false,
+        starCaptions: {
+            0.5: '半星',
+            1: '一星',
+            1.5: '一星半',
+            2: '二星',
+            2.5: '二星半',
+            3: '三星',
+            3.5: '三星半',
+            4: '四星',
+            4.5: '四星半',
+            5: '五星'
+        }
+    });
+
+    // 提交评分处理
+    $('#submit-rating').click(function() {
+        const ratings = {};
+        const uuid = '{uuid_val}';  // 从模板变量获取UUID
+        
+        // 收集所有评分
+        $('input.rating').each(function() {
+            const dimension = this.id.replace('rating-', '');
+            const score = $(this).val();
+            ratings[dimension] = score;
+        });
+
+        // 发送评分数据到服务器
+        $.ajax({
+            url: '/manual_rate',  // 需要你实现这个API端点
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                uuid: uuid,
+                ratings: ratings,
+                timestamp: new Date().toISOString()
+            }),
+            success: function(response) {
+                // 使用Bootstrap的Toast提示代替alert
+                showNotification('Ratings submitted successfully!', 'success');
+            },
+            error: function(xhr, status, error) {
+                showNotification('Error submitting ratings: ' + error, 'danger');
+            }
+        });
+    });
+
+    // 显示通知的函数
+    function showNotification(message, type) {
+        // 创建Bootstrap Toast通知
+        const toastHtml = `
+            <div class="toast align-items-center text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `;
+        
+        $('#toast-container').html(toastHtml);
+        $('.toast').toast('show');
+    }
+});
+</script>
+
+<!-- 添加Toast容器 -->
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+"""
+
+
+# Create rating stars display
+def create_rating_stars(score):
+    stars = ""
+    full_stars = int(score) // 2
+    half_star = (int(score) % 2 == 1)
+    empty_stars = 5 - full_stars - (1 if half_star else 0)
+
+    stars += ''.join(['<i class="bi bi-star-fill text-warning"></i> ' for _ in range(full_stars)])
+    if half_star:
+        stars += '<i class="bi bi-star-half text-warning"></i> '
+    stars += ''.join(['<i class="bi bi-star text-warning"></i> ' for _ in range(empty_stars)])
+    stars += f' <span class="ms-2 text-muted">{score}/10</span>'
+    return stars
+
+
+def gen_rating_table(article_dict: dict) -> str:
+    rates = article_dict.get('RATE', {})
+    manual_ratings = article_dict.get('MANUAL_RATING', {})
+
+    rating_table = ""
+    if rates:
+        rating_table = '<div class="mt-4"><h5><i class="bi bi-graph-up"></i> Analysis & Evaluation</h5>'
+        rating_table += '<div class="table-responsive"><table class="table table-sm">'
+        rating_table += '<thead><tr><th>Dimension</th><th>Rating</th><th>Manual Rating</th></tr></thead><tbody>'
+
+        for key, score in rates.items():
+            if isinstance(score, (int, float)) and 0 <= score <= 10:
+                # 获取手动评分值，如果没有则使用默认评分
+                manual_score = manual_ratings.get(key, score)
+
+                rating_table += f'''
+                <tr>
+                    <td>{key}</td>
+                    <td>{create_rating_stars(score)}</td>
+                    <td>
+                        <input id="rating-{key}" type="number" class="rating" 
+                               value="{manual_score}" min="0" max="10" step="0.5" 
+                               data-size="sm" data-show-clear="false" data-show-caption="false"
+                               data-theme="krajee-svg">
+                    </td>
+                </tr>
+                '''
+
+        rating_table += '</tbody></table>'
+        rating_table += f'''
+            <div class="mt-3">
+                <button id="submit-rating" class="btn btn-primary btn-sm float-end">
+                    <i class="bi bi-check-circle"></i> Submit Manual Ratings
+                </button>
+            </div>
+        </div></div>
+        '''
+
+    return rating_table
+
+
+def default_article_render(article_dict: dict):
     """
     Renders article dictionary data into a formatted HTML page
 
@@ -31,30 +168,8 @@ def default_article_render(article_dict):
     pub_time_display = any_time_to_time_str(pub_time)
     formatted_times = [any_time_to_time_str(item) for item in event_times]
 
-    # Create rating stars display
-    def create_rating_stars(score):
-        stars = ""
-        full_stars = int(score) // 2
-        half_star = (int(score) % 2 == 1)
-        empty_stars = 5 - full_stars - (1 if half_star else 0)
-
-        stars += ''.join(['<i class="bi bi-star-fill text-warning"></i> ' for _ in range(full_stars)])
-        if half_star:
-            stars += '<i class="bi bi-star-half text-warning"></i> '
-        stars += ''.join(['<i class="bi bi-star text-warning"></i> ' for _ in range(empty_stars)])
-        stars += f' <span class="ms-2 text-muted">{score}/10</span>'
-        return stars
-
     # Build rating table
-    rating_table = ""
-    if rates:
-        rating_table = '<div class="mt-4"><h5><i class="bi bi-graph-up"></i> Analysis & Evaluation</h5>'
-        rating_table += '<div class="table-responsive"><table class="table table-sm">'
-        rating_table += '<thead><tr><th>Dimension</th><th>Rating</th></tr></thead><tbody>'
-        for key, score in rates.items():
-            if isinstance(score, (int, float)) and 0 <= score <= 10:
-                rating_table += f'<tr><td>{key}</td><td>{create_rating_stars(score)}</td></tr>'
-        rating_table += '</tbody></table></div></div>'
+    rating_table = gen_rating_table(article_dict)
 
     # Build HTML
     html_content = f"""
@@ -64,8 +179,13 @@ def default_article_render(article_dict):
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{title}</title>
+        
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+        <!-- 星级评分插件CSS -->
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/css/star-rating.min.css" media="all" rel="stylesheet" type="text/css" />
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/themes/krajee-svg/theme.css" media="all" rel="stylesheet" type="text/css" />
+
         <style>
             .article-header {{
                 background: linear-gradient(to right, #1a2980, #26d0ce);
@@ -206,8 +326,14 @@ def default_article_render(article_dict):
                 </div>
             </div>
         </footer>
-
+        
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <!-- 星级评分插件JS -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/js/star-rating.min.js" type="text/javascript"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/themes/krajee-svg/theme.js" type="text/javascript"></script>
+
+        {RATING_SCRIPT.replace('{uuid_val}', uuid_val)}
     </body>
     </html>
     """

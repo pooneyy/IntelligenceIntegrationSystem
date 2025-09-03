@@ -1588,3 +1588,14 @@ class IntelligenceCache:
 
 
 
+
+我会给出一个python生成内网页的模板，其中“Analysis & Evaluation”部分会展示各个维度的评分。
+我希望在“Rating”后面增加一列“Manual Rating”，可以让用户通过点击和滑动星星的方式调整各维度的评分，再提供一个按钮提交评分（怎样实现比较简单和方便呢？）。
+“Manual Rating”的值从'MANUAL_RATING'取，如果不存在这个字段，则使用和“Rating”相同的默认值。
+注意：实现尽可能简单，尽量和现有代码耦合少（封装函数，少改动现有代码），且提交手工评分时需要附带UUID信息以标识评分对象。
+
+
+
+
+
+
