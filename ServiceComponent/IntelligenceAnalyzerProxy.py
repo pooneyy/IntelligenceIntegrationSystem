@@ -133,13 +133,12 @@ def aggressive_with_ai(
 ) -> Dict:
     new_data_text = \
         f"{new_data['EVENT_TITLE']}\n\n"\
-        f"{new_data['EVENT_BRIEF']}\n\n"\
-        f"{new_data['EVENT_TEXT']}\n\n"
+        f"{new_data['EVENT_BRIEF']}\n\n"
     history_data_md_table = dict_list_to_markdown(history_data)
 
     user_message = \
-        f"# 情情报\n\n {new_data_text}"\
-        f"# 历史情报\n\n {history_data_md_table}"
+        f"# 新情报\n {new_data_text}"\
+        f"# 历史情报\n {history_data_md_table}"
 
     messages = [
         {"role": "system", "content": prompt},

@@ -77,7 +77,7 @@ class IntelligenceHub:
 
         # --------------- Components ----------------
 
-        self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, datetime.timedelta(days=1))
+        self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
 
         # ------------------ Loads ------------------
 
@@ -324,15 +324,17 @@ class IntelligenceHub:
 
                 # --------------------------------- AI Aggressive with Retry ---------------------------------
 
-                history_data_brief = self._get_cached_data_brief()
-                aggressive_result = aggressive_with_ai(self.open_ai_client, AGGRESSIVE_PROMPT, result, history_data_brief)
-
-                if not aggressive_result:
-                    # dict is ordered in python 3.7+
-                    related_intelligence_uuid = next(iter(aggressive_result))
-                    if aggressive_result[related_intelligence_uuid] > 1:
-                        self._add_item_link(related_intelligence_uuid, validated_data['UUID'])
-                        validated_data['APPENDIX'][APPENDIX_PARENT_ITEM] = related_intelligence_uuid
+                # TODO: 暂时不做，因为需要考虑的事情太多，且消耗token，后续可以考虑采用小模型实现。
+                #
+                # history_data_brief = self._get_cached_data_brief()
+                # aggressive_result = aggressive_with_ai(self.open_ai_client, AGGRESSIVE_PROMPT, result, history_data_brief)
+                #
+                # if aggressive_result:
+                #     # dict is ordered in python 3.7+
+                #     related_intelligence_uuid = next(iter(aggressive_result))
+                #     if aggressive_result[related_intelligence_uuid] > 1:
+                #         self._add_item_link(related_intelligence_uuid, validated_data['UUID'])
+                #         validated_data['APPENDIX'][APPENDIX_PARENT_ITEM] = related_intelligence_uuid
 
                 # -------------------------------- Fill Extra Data and Enqueue --------------------------------
 
