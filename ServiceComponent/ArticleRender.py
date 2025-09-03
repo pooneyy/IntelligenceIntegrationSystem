@@ -5,38 +5,28 @@ from Tools.DateTimeUtility import any_time_to_time_str
 
 RATING_SCRIPT = """
 <script>
-$(document).ready(function() {
-    // 初始化所有评分控件
-    $('.rating').rating({
-        theme: 'krajee-svg',
-        filledStar: '<i class="bi bi-star-fill"></i>',
-        emptyStar: '<i class="bi bi-star"></i>',
-        // 更多配置选项
-        hoverOnClear: false,
-        starCaptions: {
-            0.5: '半星',
-            1: '一星',
-            1.5: '一星半',
-            2: '二星',
-            2.5: '二星半',
-            3: '三星',
-            3.5: '三星半',
-            4: '四星',
-            4.5: '四星半',
-            5: '五星'
-        }
-    });
+// 验证评分输入
+function validateRating(input) {
+    if (input.value < 0) {
+        input.value = 0;
+    } else if (input.value > 10) {
+        input.value = 10;
+    }
+}
 
+$(document).ready(function() {
     // 提交评分处理
     $('#submit-rating').click(function() {
         const ratings = {};
         const uuid = '{uuid_val}';  // 从模板变量获取UUID
-        
+
         // 收集所有评分
-        $('input.rating').each(function() {
-            const dimension = this.id.replace('rating-', '');
-            const score = $(this).val();
-            ratings[dimension] = score;
+        $('input.form-control').each(function() {
+            if (this.id.startsWith('rating-')) {
+                const dimension = this.id.replace('rating-', '');
+                const score = $(this).val();
+                ratings[dimension] = score;
+            }
         });
 
         // 发送评分数据到服务器
@@ -50,7 +40,6 @@ $(document).ready(function() {
                 timestamp: new Date().toISOString()
             }),
             success: function(response) {
-                // 使用Bootstrap的Toast提示代替alert
                 showNotification('Ratings submitted successfully!', 'success');
             },
             error: function(xhr, status, error) {
@@ -72,7 +61,7 @@ $(document).ready(function() {
                 </div>
             </div>
         `;
-        
+
         $('#toast-container').html(toastHtml);
         $('.toast').toast('show');
     }
@@ -119,10 +108,9 @@ def gen_rating_table(article_dict: dict) -> str:
                     <td>{key}</td>
                     <td>{create_rating_stars(score)}</td>
                     <td>
-                        <input id="rating-{key}" type="number" class="rating" 
-                               value="{manual_score}" min="0" max="10" step="0.5" 
-                               data-size="sm" data-show-clear="false" data-show-caption="false"
-                               data-theme="krajee-svg">
+                        <input id="rating-{key}" type="number" class="form-control form-control-sm" 
+                               value="{manual_score}" min="0" max="10" step="0.5"
+                               style="width: 80px;" oninput="validateRating(this)">
                     </td>
                 </tr>
                 '''
@@ -182,9 +170,6 @@ def default_article_render(article_dict: dict):
         
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-        <!-- 星级评分插件CSS -->
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/css/star-rating.min.css" media="all" rel="stylesheet" type="text/css" />
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/themes/krajee-svg/theme.css" media="all" rel="stylesheet" type="text/css" />
 
         <style>
             .article-header {{
@@ -329,9 +314,6 @@ def default_article_render(article_dict: dict):
         
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-        <!-- 星级评分插件JS -->
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/js/star-rating.min.js" type="text/javascript"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap-star-rating@4.1.2/themes/krajee-svg/theme.js" type="text/javascript"></script>
 
         {RATING_SCRIPT.replace('{uuid_val}', uuid_val)}
     </body>
