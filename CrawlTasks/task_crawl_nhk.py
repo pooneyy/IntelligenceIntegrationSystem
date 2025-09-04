@@ -13,7 +13,7 @@ from Workflow.CommonFeedsCrawFlow import feeds_craw_flow
 # https://www.nhk.or.jp/
 
 feed_list = {
-    "Main news": "https://www.nhk.or.jp/rss/news/cat0.xml",
+    # "Main news": "https://www.nhk.or.jp/rss/news/cat0.xml",
     "Social": "https://www.nhk.or.jp/rss/news/cat1.xml",
     "Politics": "https://www.nhk.or.jp/rss/news/cat4.xml",
     "Economic": "https://www.nhk.or.jp/rss/news/cat5.xml",
