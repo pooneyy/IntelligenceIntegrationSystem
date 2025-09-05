@@ -11,6 +11,7 @@ tortoise-orm==0.25.0         # Async ORM (supports PostgreSQL/MySQL, etc.)
 pydantic==2.11.5             # Data validation library (core dependency of FastAPI)
 markdown
 bcrypt
+psutil
 
 ##############################
 ### Network Requests & Parsing
