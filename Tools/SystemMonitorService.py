@@ -411,6 +411,7 @@ class MonitorAPI:
         """Start the monitoring system and web server."""
         self.monitor.start_monitoring()
         print(f"Starting monitoring API on http://{self.host}:{self.port}")
+        print(f" - Dash board: http://{self.host}:{self.port}/api/dashboard")
         self.app.run(host=self.host, port=self.port, debug=False)
 
     def stop(self):
