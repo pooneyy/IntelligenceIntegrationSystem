@@ -9,6 +9,7 @@ from ServiceComponent.UserManager import UserManager
 from ServiceComponent.RSSPublisher import RSSPublisher
 # from Tools.VectorDatabase import VectorDatabase
 from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
+from Tools.SystemMonotorLauncher import start_system_monitor
 
 
 def main():
@@ -81,11 +82,7 @@ def main():
     )
     hub_service.startup()
 
-    # result = hub.get_intelligence('a6a485dd-d843-4acd-b58a-4d516bfb0fa8')
-    # print(result)
-    #
-    # result = hub.query_intelligence(locations=['美国'])
-    # print(result)
+    start_system_monitor()
 
     prev_statistics = {}
     while True:

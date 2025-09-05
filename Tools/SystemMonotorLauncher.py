@@ -12,21 +12,7 @@ root_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(root_path)
 
 
-def start_application():
-    """Main application entry point."""
-    # Get current process PID
-    current_pid = os.getpid()
-    print(f"Main application started with PID: {current_pid}")
-
-    # Start monitoring system as subprocess with current PID
-    monitor_process = subprocess.Popen([
-        sys.executable, os.path.join(root_path, 'SystemMonitorService.py'),
-        '--host', '0.0.0.0',
-        '--port', '8000',
-        '--pid', str(current_pid),
-        '--add-self'
-    ])
-
+def _run_blocking(monitor_process):
     try:
         # Main application work here
         print("Application running. Press Ctrl+C to stop.")
@@ -41,5 +27,28 @@ def start_application():
         monitor_process.wait()
 
 
+def start_system_monitor(
+        serve_ip: str = '0.0.0.0',
+        serve_port: int = 8000,
+        add_self: bool = False,
+        run_blocking: bool = False):
+
+    """Main application entry point."""
+    # Get current process PID
+    current_pid = os.getpid()
+    print(f"Main application PID: {current_pid}")
+
+    # Start monitoring system as subprocess with current PID
+    monitor_process = subprocess.Popen([
+        sys.executable, os.path.join(root_path, 'SystemMonitorService.py'),
+        '--host', serve_ip,
+        '--port', str(serve_port),
+        '--pid', str(current_pid),
+        '--add-self' if add_self else ''
+    ])
+
+    return _run_blocking(monitor_process) if run_blocking else monitor_process
+
+
 if __name__ == '__main__':
-    start_application()
+    start_system_monitor(run_blocking=True)

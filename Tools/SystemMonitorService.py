@@ -181,49 +181,227 @@ class MonitorAPI:
 
         @self.app.route('/api/dashboard', methods=['GET'])
         def get_dashboard():
-            """Simple HTML dashboard for monitoring data."""
+            """Enhanced HTML dashboard with detailed process monitoring data."""
             stats = self.monitor.get_all_stats()
+
+            # Format memory values for human readability
+            def format_memory(bytes_value):
+                for unit in ['B', 'KB', 'MB', 'GB']:
+                    if bytes_value < 1024.0:
+                        return f"{bytes_value:.1f} {unit}"
+                    bytes_value /= 1024.0
+                return f"{bytes_value:.1f} TB"
+
+            # Create detailed process table
+            process_rows = []
+            for pid, data in stats['processes'].items():
+                mem_info = data.get('memory_info', {})
+                cpu_times = data.get('cpu_times', {})
+                io_info = data.get('io_counters', {})
+
+                process_rows.append(f"""
+                    <tr>
+                        <td>{data.get('name', 'N/A')}</td>
+                        <td>{pid}</td>
+                        <td>{data.get('status', 'N/A')}</td>
+                        <td>{data.get('cpu_percent', 0):.1f}%</td>
+                        <td>{data.get('memory_percent', 0):.1f}%</td>
+                        <td>{format_memory(mem_info.get('rss', 0))}</td>
+                        <td>{format_memory(mem_info.get('vms', 0))}</td>
+                        <td>{data.get('num_threads', 'N/A')}</td>
+                        <td>{data.get('num_handles', 'N/A')}</td>
+                        <td>{io_info.get('read_bytes', 0) // 1024} KB</td>
+                        <td>{io_info.get('write_bytes', 0) // 1024} KB</td>
+                        <td>{data.get('connections', 0)}</td>
+                        <td>{cpu_times.get('user', 0):.1f}s</td>
+                        <td>{cpu_times.get('system', 0):.1f}s</td>
+                    </tr>
+                """)
+
+            process_table = "".join(process_rows)
+
             return f"""
             <html>
                 <head>
-                    <title>System Monitoring Dashboard</title>
+                    <title>Enhanced System Monitoring Dashboard</title>
                     <meta http-equiv="refresh" content="5">
                     <style>
-                        body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                        .card {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-                        .system-stats {{ background-color: #f8f9fa; }}
-                        .process-stats {{ background-color: #e9ecef; }}
-                        .warning {{ color: #dc3545; font-weight: bold; }}
+                        body {{ 
+                            font-family: Arial, sans-serif; 
+                            margin: 20px;
+                            background-color: #f8f9fa;
+                        }}
+                        .dashboard-container {{
+                            max-width: 1400px;
+                            margin: 0 auto;
+                        }}
+                        .card {{ 
+                            border: 1px solid #ddd; 
+                            padding: 20px; 
+                            margin: 15px 0; 
+                            border-radius: 8px;
+                            background-color: white;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        }}
+                        .system-stats {{ 
+                            background-color: #e3f2fd;
+                            border-left: 4px solid #2196f3;
+                        }}
+                        .process-stats {{ 
+                            background-color: #fff3e0;
+                            border-left: 4px solid #ff9800;
+                        }}
+                        .warning {{ 
+                            color: #dc3545; 
+                            font-weight: bold;
+                        }}
+                        .info-table {{
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin: 15px 0;
+                        }}
+                        .info-table th, .info-table td {{
+                            padding: 12px;
+                            text-align: left;
+                            border-bottom: 1px solid #ddd;
+                        }}
+                        .info-table th {{
+                            background-color: #f5f5f5;
+                            font-weight: bold;
+                        }}
+                        .info-table tr:hover {{
+                            background-color: #f8f9fa;
+                        }}
+                        .metric-grid {{
+                            display: grid;
+                            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                            gap: 15px;
+                            margin: 15px 0;
+                        }}
+                        .metric-card {{
+                            background: white;
+                            padding: 15px;
+                            border-radius: 6px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                            text-align: center;
+                        }}
+                        .metric-value {{
+                            font-size: 1.5em;
+                            font-weight: bold;
+                            color: #2196f3;
+                        }}
+                        .metric-label {{
+                            font-size: 0.9em;
+                            color: #666;
+                        }}
                     </style>
                 </head>
                 <body>
-                    <h1>System Monitoring Dashboard</h1>
-                    <p>Last updated: {stats['timestamp']}</p>
+                    <div class="dashboard-container">
+                        <h1>Enhanced System Monitoring Dashboard</h1>
+                        <p>Last updated: {stats['timestamp']}</p>
 
-                    <div class="card system-stats">
-                        <h2>System Statistics</h2>
-                        <p>CPU Usage: {stats['system']['cpu']['percent']}%</p>
-                        <p>Memory Usage: {stats['system']['memory']['percent']}%</p>
-                        <p>Disk Usage: {stats['system']['disk']['usage']['percent']}%</p>
-                    </div>
+                        <div class="card system-stats">
+                            <h2>📊 System Statistics</h2>
+                            <div class="metric-grid">
+                                <div class="metric-card">
+                                    <div class="metric-value">{stats['system']['cpu']['percent']}%</div>
+                                    <div class="metric-label">CPU Usage</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value">{stats['system']['memory']['percent']}%</div>
+                                    <div class="metric-label">Memory Usage</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value">{stats['system']['disk']['usage']['percent']}%</div>
+                                    <div class="metric-label">Disk Usage</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value">{len(stats['system'].get('users', []))}</div>
+                                    <div class="metric-label">Active Users</div>
+                                </div>
+                            </div>
 
-                    <div class="card process-stats">
-                        <h2>Monitored Processes ({len(stats['processes'])}))</h2>
-                        {"".join([
-                f"<div><strong>{data['name']} (PID: {pid}))</strong>: "
-                f"CPU: {data['cpu_percent']}%, "
-                f"Memory: {data['memory_percent']:.1f}%, "
-                f"Handles: {data.get('num_handles', 'N/A')}</div>"
-                for pid, data in stats['processes'].items()
-            ])}
-                    </div>
+                            <h3>Detailed System Metrics</h3>
+                            <table class="info-table">
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Value</th>
+                                    <th>Metric</th>
+                                    <th>Value</th>
+                                </tr>
+                                <tr>
+                                    <td>Total Memory</td>
+                                    <td>{format_memory(stats['system']['memory']['total'])}</td>
+                                    <td>Available Memory</td>
+                                    <td>{format_memory(stats['system']['memory']['available'])}</td>
+                                </tr>
+                                <tr>
+                                    <td>Used Memory</td>
+                                    <td>{format_memory(stats['system']['memory']['used'])}</td>
+                                    <td>Free Memory</td>
+                                    <td>{format_memory(stats['system']['memory']['free'])}</td>
+                                </tr>
+                                <tr>
+                                    <td>Disk Total</td>
+                                    <td>{format_memory(stats['system']['disk']['usage']['total'])}</td>
+                                    <td>Disk Free</td>
+                                    <td>{format_memory(stats['system']['disk']['usage']['free'])}</td>
+                                </tr>
+                            </table>
+                        </div>
 
-                    <div>
-                        <h3>Manage Processes</h3>
-                        <form action="/api/process" method="post">
-                            <input type="number" name="pid" placeholder="Enter PID" required>
-                            <button type="submit">Add Process</button>
-                        </form>
+                        <div class="card process-stats">
+                            <h2>🔄 Monitored Processes ({len(stats['processes'])})</h2>
+
+                            <table class="info-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>PID</th>
+                                        <th>Status</th>
+                                        <th>CPU %</th>
+                                        <th>Mem %</th>
+                                        <th>RSS Memory</th>
+                                        <th>VMS Memory</th>
+                                        <th>Threads</th>
+                                        <th>Handles</th>
+                                        <th>Read I/O</th>
+                                        <th>Write I/O</th>
+                                        <th>Connections</th>
+                                        <th>User CPU</th>
+                                        <th>System CPU</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {process_table}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card">
+                            <h2>⚙️ Process Management</h2>
+                            <form action="/api/process" method="post" style="margin: 15px 0;">
+                                <input type="number" name="pid" placeholder="Enter PID" required 
+                                       style="padding: 10px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                <button type="submit" style="padding: 10px 20px; background-color: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    Add Process
+                                </button>
+                            </form>
+
+                            <h3>Quick Actions</h3>
+                            <div style="display: flex; gap: 10px;">
+                                <a href="/api/stats" target="_blank" style="padding: 10px; background-color: #2196f3; color: white; text-decoration: none; border-radius: 4px;">
+                                    View Raw JSON
+                                </a>
+                                <a href="/api/system" target="_blank" style="padding: 10px; background-color: #ff9800; color: white; text-decoration: none; border-radius: 4px;">
+                                    System Stats
+                                </a>
+                                <a href="/api/processes" target="_blank" style="padding: 10px; background-color: #9c27b0; color: white; text-decoration: none; border-radius: 4px;">
+                                    Process List
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </body>
             </html>
