@@ -1,7 +1,105 @@
 """
-Web API module for system monitoring data exposure.
-Provides RESTful endpoints for monitoring data and management.
+System Monitoring API Module.
+
+This module provides a RESTful web interface for monitoring system resources
+and specific processes. It offers real-time statistics including CPU, memory,
+disk, network usage, and process-specific metrics with thread-safe operations.
+
+The API exposes endpoints for managing monitored processes and retrieving
+statistical data in JSON format, along with a simple HTML dashboard for
+quick visualization.
+
+Key Features:
+    - Real-time system and process monitoring
+    - Thread-safe operations with locking mechanisms
+    - Dynamic process management (add/remove at runtime)
+    - RESTful API endpoints with JSON responses
+    - Auto-refreshing HTML dashboard
+    - Cross-platform support (Windows, Linux, macOS)
+
+API Endpoints:
+    GET    /api/stats          Retrieve complete system and process statistics
+    GET    /api/system         Get system-wide statistics only
+    GET    /api/processes      List all monitored processes with basic info
+    GET    /api/process/<pid>  Get detailed statistics for specific process
+    POST   /api/process        Add a new process to monitoring
+    DELETE /api/process/<pid>  Remove a process from monitoring
+    GET    /api/dashboard      HTML dashboard with auto-refresh
+
+
+
+
+Usage Examples:
+
+1. Starting the monitoring service:
+   python monitor_api.py --host 0.0.0.0 --port 8000 --pid 1234 5678 --add-self
+
+2. Adding a process to monitor:
+   curl -X POST http://localhost:8000/api/process \
+     -H "Content-Type: application/json" \
+     -d '{"pid": 1234}'
+
+3. Retrieving all statistics:
+   curl http://localhost:8000/api/stats
+
+4. Getting system statistics only:
+   curl http://localhost:8000/api/system
+
+5. Listing monitored processes:
+   curl http://localhost:8000/api/processes
+
+6. Removing a process from monitoring:
+   curl -X DELETE http://localhost:8000/api/process/1234
+
+7. Accessing the web dashboard:
+   Open http://localhost:8000/api/dashboard in a browser
+
+Request/Response Examples:
+
+Add Process (POST /api/process):
+  Request: {"pid": 1234}
+  Success: {"status": "success", "pid": 1234}
+  Error: {"error": "Could not monitor process 1234"}
+
+Process Statistics (GET /api/process/1234):
+  Response: {
+    "pid": 1234,
+    "name": "python",
+    "cpu_percent": 12.5,
+    "memory_info": {"rss": 1024000, "vms": 2048000},
+    "memory_percent": 2.1,
+    "num_handles": 45,
+    "num_threads": 3,
+    "status": "running"
+  }
+
+All Statistics (GET /api/stats):
+  Response: {
+    "system": {
+      "cpu": {"percent": 25.0, "cores": 4},
+      "memory": {"total": 17179869184, "available": 8589934592},
+      "timestamp": "2023-10-15T10:30:00.000000"
+    },
+    "processes": {
+      "1234": {
+        "pid": 1234,
+        "name": "python",
+        "cpu_percent": 12.5
+      }
+    }
+  }
+
+Dependencies:
+- psutil: For system and process monitoring
+- flask: For web API functionality
+
+Install required packages:
+pip install psutil flask
+
+Note: The monitoring thread runs as a daemon with a 2-second update interval.
+All operations are protected with reentrant locks for thread safety.
 """
+
 import os
 import sys
 import argparse
@@ -14,10 +112,13 @@ sys.path.append(root_path)
 from SystemMonitor import SystemMonitor
 
 
+DEFAULT_PORT = 8000
+
+
 class MonitorAPI:
     """Web API for system monitoring data and management."""
 
-    def __init__(self, host: str = '0.0.0.0', port: int = 8080):
+    def __init__(self, host: str = '0.0.0.0', port: int = DEFAULT_PORT):
         """
         Initialize the monitoring API.
 
@@ -143,7 +244,7 @@ def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='System Monitoring API')
     parser.add_argument('--host', default='0.0.0.0', help='Host address to bind to')
-    parser.add_argument('--port', type=int, default=8080, help='Port number to listen on')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Port number to listen on')
     parser.add_argument('--pid', type=int, nargs='+', help='PIDs to monitor initially')
     parser.add_argument('--add-self', action='store_true', help='Add current process to monitoring')
     return parser.parse_args()

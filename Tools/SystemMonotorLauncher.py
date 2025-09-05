@@ -8,6 +8,10 @@ import time
 import os
 
 
+root_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(root_path)
+
+
 def start_application():
     """Main application entry point."""
     # Get current process PID
@@ -16,9 +20,9 @@ def start_application():
 
     # Start monitoring system as subprocess with current PID
     monitor_process = subprocess.Popen([
-        sys.executable, 'monitor_api.py',
+        sys.executable, os.path.join(root_path, 'SystemMonitorService.py'),
         '--host', '0.0.0.0',
-        '--port', '8080',
+        '--port', '8000',
         '--pid', str(current_pid),
         '--add-self'
     ])
