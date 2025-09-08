@@ -284,6 +284,17 @@ class IntelligenceQueryEngine:
             logger.error(f"Dynamic query error: {str(e)}", stack_info=True)
             return []
 
+    def aggregate(self, pipeline: list) -> list:
+        try:
+            collection = self.__mongo_db.collection
+            results = list(collection.aggregate(pipeline))
+        except ValueError:
+            logger.error("Invalid time format. Please use ISO format (e.g., '2024-01-01T00:00:00Z')")
+            return []
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}")
+            return []
+
     @staticmethod
     def build_common_conditions(conditions: Dict[str, Any], operator: str = "$and") -> dict:
         """

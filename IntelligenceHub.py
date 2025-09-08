@@ -260,6 +260,11 @@ class IntelligenceHub:
         result = query_engine.get_paginated_intelligences(base_uuid, offset, limit)
         return result
 
+    def aggregate(self, pipeline: list) -> list:
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        result = query_engine.aggregate(pipeline)
+        return result
+
     # ---------------------------------------------------- Updates -----------------------------------------------------
 
     def submit_intelligence_manual_rating(self, _uuid: str, rating: dict):

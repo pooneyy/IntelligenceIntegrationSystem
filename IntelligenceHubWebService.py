@@ -11,6 +11,7 @@ from werkzeug.serving import make_server
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort
 
 from GlobalConfig import *
+from ServiceComponent.IntelligenceHubDefines import APPENDIX_MAX_RATE_SCORE
 from ServiceComponent.UserManager import UserManager
 from Tools.CommonPost import common_post
 from MyPythonUtility.ArbitraryRPC import RPCService
@@ -356,6 +357,95 @@ class IntelligenceHubWebService:
                 print(str(e))
                 traceback.print_exc()
                 return jsonify({"error": "Server error"}), 500
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+        @self.app.route('/statistics/score_distribution', methods=['GET', 'POST'])
+        @WebServiceAccessManager.login_required
+        def get_score_distribution():
+            """
+            API endpoint to get score distribution within a specified time range
+            Expected query parameters:
+            - start_time: ISO format start timestamp (e.g., '2024-01-01T00:00:00Z')
+            - end_time: ISO format end timestamp (e.g., '2024-12-31T23:59:59Z')
+            """
+            try:
+                # Get query parameters
+                start_time_str = request.args.get('start_time')
+                end_time_str = request.args.get('end_time')
+
+                if not start_time_str or not end_time_str:
+                    return jsonify({
+                        "error": "Both start_time and end_time parameters are required"
+                    }), 400
+
+                # Convert to datetime objects
+                start_time = datetime.datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                end_time = datetime.datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+
+                # MongoDB aggregation pipeline for score distribution[4,9](@ref)
+                pipeline = [
+                    {
+                        "$match": {
+                            f"APPENDIX.{APPENDIX_TIME_ARCHIVED}": {
+                                "$gte": start_time,
+                                "$lte": end_time
+                            },
+                            f"APPENDIX.{APPENDIX_MAX_RATE_SCORE}": {
+                                "$gte": 1,
+                                "$lte": 10
+                            }
+                        }
+                    },
+                    {
+                        "$group": {
+                            "_id": f"$APPENDIX.{APPENDIX_MAX_RATE_SCORE}",
+                            "count": {"$sum": 1}
+                        }
+                    },
+                    {
+                        "$sort": {"_id": 1}
+                    }
+                ]
+
+                # Execute aggregation query[4](@ref)
+                results = self.intelligence_hub.aggregate(pipeline)
+
+                # Format results for frontend
+                score_distribution = {str(i): 0 for i in range(1, 11)}  # Initialize all scores 1-10 with count 0
+
+                for result in results:
+                    score = str(result['_id'])
+                    if score in score_distribution:
+                        score_distribution[score] = result['count']
+
+                # Convert to array format for charting
+                chart_data = [
+                    {"score": score, "count": count}
+                    for score, count in score_distribution.items()
+                ]
+
+                return jsonify({
+                    "success": True,
+                    "time_range": {
+                        "start": start_time_str,
+                        "end": end_time_str
+                    },
+                    "distribution": score_distribution,
+                    "chart_data": chart_data,
+                    "total_records": sum(score_distribution.values())
+                })
+
+            except ValueError:
+                return jsonify({
+                    "error": "Invalid time format. Please use ISO format (e.g., '2024-01-01T00:00:00Z')"
+                }), 400
+            except Exception as e:
+                logger.error(f"Error processing request: {str(e)}")
+                return jsonify({
+                    "error": "Internal server error",
+                    "message": str(e)
+                }), 500
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 

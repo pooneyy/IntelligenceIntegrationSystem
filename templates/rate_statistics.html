@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Score Distribution Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Score Distribution Analysis</h1>
+
+    <div>
+        <label for="startTime">Start Time:</label>
+        <input type="datetime-local" id="startTime">
+
+        <label for="endTime">End Time:</label>
+        <input type="datetime-local" id="endTime">
+
+        <button onclick="fetchData()">Generate Report</button>
+    </div>
+
+    <div style="width: 800px; height: 400px;">
+        <canvas id="distributionChart"></canvas>
+    </div>
+
+    <div id="stats"></div>
+
+    <script>
+        let chart = null;
+
+        function fetchData() {
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (!startTime || !endTime) {
+                alert('Please select both start and end times');
+                return;
+            }
+
+            // Convert to ISO format
+            const startISO = new Date(startTime).toISOString();
+            const endISO = new Date(endTime).toISOString();
+
+            fetch(`http://127.0.0.1:5000/statistics/score_distribution?start_time=${startISO}&end_time=${endISO}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderChart(data.chart_data);
+                        renderStats(data);
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to fetch data');
+                });
+        }
+
+        function renderChart(chartData) {
+            const ctx = document.getElementById('distributionChart').getContext('2d');
+
+            // Destroy previous chart if exists
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: chartData.map(item => 'Score ' + item.score),
+                    datasets: [{
+                        label: 'Number of Records',
+                        data: chartData.map(item => item.count),
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Records'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Score Value'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderStats(data) {
+            const statsDiv = document.getElementById('stats');
+            statsDiv.innerHTML = `
+                <h3>Statistics</h3>
+                <p>Time Range: ${data.time_range.start} to ${data.time_range.end}</p>
+                <p>Total Records: ${data.total_records}</p>
+            `;
+        }
+
+        // Set default time range (last 30 days)
+        window.onload = function() {
+            const end = new Date();
+            const start = new Date();
+            start.setDate(start.getDate() - 30);
+
+            document.getElementById('startTime').value = start.toISOString().slice(0, 16);
+            document.getElementById('endTime').value = end.toISOString().slice(0, 16);
+        };
+    </script>
+</body>
+</html>

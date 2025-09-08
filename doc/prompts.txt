@@ -1628,6 +1628,62 @@ class IntelligenceCache:
 
 
 
+我在mongodb中存储的数据记录如下所示：
+
+```
+
+class ProcessedData(BaseModel):
+    UUID: str = Field(..., min_length=1)
+    INFORMANT: str = Field(..., min_length=1)
+    PUB_TIME: str | datetime.datetime | None = None
+
+    TIME: list | None = Field(default_factory=list)
+    LOCATION: list | None = Field(default_factory=list)
+    PEOPLE: list | None = Field(default_factory=list)
+    ORGANIZATION: list | None = Field(default_factory=list)
+    EVENT_TITLE: str | None = Field(..., min_length=1)
+    EVENT_BRIEF: str | None = Field(..., min_length=1)
+    EVENT_TEXT: str | None = None
+
+    RATE: dict | None = {}
+    IMPACT: str | None = None
+    TIPS: str | None = None
+
+
+class ArchivedDataExtraFields(BaseModel):
+    RAW_DATA: dict | None
+    SUBMITTER: str | None
+    APPENDIX: dict | None
+
+
+class ArchivedData(ProcessedData, ArchivedDataExtraFields):
+    pass
+```
+
+其中APPENDIX下有以下字段：
+
+```
+
+APPENDIX_TIME_GOT       = '__TIME_GOT__'            # Timestamp of get from collector
+APPENDIX_TIME_POST      = '__TIME_POST__'           # Timestamp of post to processor
+APPENDIX_TIME_DONE      = '__TIME_DONE__'           # Timestamp of retrieve from processor
+APPENDIX_TIME_ARCHIVED  = '__TIME_ARCHIVED__'
+APPENDIX_RETRY_COUNT    = '__RETRY_COUNT__'
+APPENDIX_ARCHIVED_FLAG  = '__ARCHIVED__'
+APPENDIX_MAX_RATE_CLASS = '__MAX_RATE_CLASS__'
+APPENDIX_MAX_RATE_SCORE = '__MAX_RATE_SCORE__'
+
+APPENDIX_MANUAL_RATING  = '__MANUAL_RATING__'
+
+APPENDIX_LINK_ITEMS     = '__LINK_ITEMS__'
+APPENDIX_PARENT_ITEM    = '__PARENT_ITEM__'
+```
+
+请帮我组织一个mongodb的查询，指定一个时间范围（依据APPENDIX_TIME_ARCHIVED），统计所有记录在 APPENDIX_MAX_RATE_SCORE 上的分布（评分为1 - 10），并通过网络发布，由前端绘制柱状图。
+要求除前端外代码由python实现，使用Flask提供网络服务。
+所有文本和注释均使用英文。
+
+
 
 
 
