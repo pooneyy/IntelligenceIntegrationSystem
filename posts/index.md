@@ -8,6 +8,8 @@
 
 [Statistics](/statistics/score_distribution.html)
 
+[MongoDB Export](/maintenance/export_mongodb.html)
+
 ## Project Address (github)
 
 [Intelligence Integration System](https://github.com/SleepySoft/IntelligenceIntegrationSystem/tree/dev)

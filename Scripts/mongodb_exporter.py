@@ -1,7 +1,7 @@
-import subprocess
 import json
 import argparse
-from typing import Dict, Optional
+import subprocess
+from typing import Dict, Optional, Tuple
 
 
 def export_mongodb_data(
@@ -12,7 +12,7 @@ def export_mongodb_data(
         query: Optional[Dict] = None,
         fields: Optional[str] = None,
         export_format: str = "json"
-) -> None:
+) -> Tuple[bool, str]:
     """
     导出MongoDB数据到文件（兼容mongoimport导入格式）
 
@@ -62,10 +62,13 @@ def export_mongodb_data(
         print(f"📊 导出格式: {export_format.upper()}")
         if query:
             print(f"🔍 查询条件: {json.dumps(query)}")
+        return True, "Export successful"
     except subprocess.CalledProcessError as e:
         print(f"❌ 导出失败: {e.stderr}")
+        return False, f"Export failed: {e.stderr}"
     except FileNotFoundError:
         print("❌ 未找到mongoexport工具，请安装MongoDB数据库工具")
+        return False, "mongoexport tool not found, please install MongoDB database tools"
 
 
 if __name__ == "__main__":

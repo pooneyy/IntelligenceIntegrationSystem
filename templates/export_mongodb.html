@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB Data Exporter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* 添加到现有的样式部分 */
+        .preset-btn {
+            margin: 2px;
+            font-size: 0.85rem;
+        }
+
+        /* Week Presets 容器样式 */
+        #weekPresets {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        /* 周按钮统一宽度样式 */
+        #weekPresets .preset-btn {
+            flex: 0 0 calc(25% - 10px); /* 每行4个按钮 */
+            min-width: 120px;
+            margin-bottom: 8px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* 响应式调整：小屏幕时每行2个按钮 */
+        @media (max-width: 768px) {
+            #weekPresets .preset-btn {
+                flex: 0 0 calc(50% - 10px);
+            }
+        }
+
+        /* 响应式调整：超小屏幕时每行1个按钮 */
+        @media (max-width: 576px) {
+            #weekPresets .preset-btn {
+                flex: 0 0 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4"><i class="fas fa-database me-2"></i>MongoDB Data Exporter</h1>
+
+        <div class="row">
+            <div class="col-md-8 mx-auto">
+                <div class="export-section">
+                    <h3><i class="fas fa-calendar-alt me-2"></i>Select Time Period</h3>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="startDate" class="form-label">Start Date</label>
+                            <input type="datetime-local" class="form-control" id="startDate">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="endDate" class="form-label">End Date</label>
+                            <input type="datetime-local" class="form-control" id="endDate">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col">
+                            <h5><i class="fas fa-calendar me-2"></i>Month Presets</h5>
+                            <div class="date-presets" id="monthPresets">
+                                <!-- Month preset buttons will be generated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col">
+                            <h5><i class="fas fa-calendar-week me-2"></i>Week Presets</h5>
+                            <div class="date-presets" id="weekPresets">
+                                <!-- Week preset buttons will be generated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col">
+                            <button id="exportBtn" class="btn btn-primary w-100">
+                                <i class="fas fa-download me-2"></i>Export Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress mt-3 d-none" id="progressContainer">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 0%">0%</div>
+                </div>
+
+                <div id="resultAlert" class="alert d-none mt-3">
+                    <i class="fas fa-info-circle me-2"></i><span id="resultMessage"></span>
+                </div>
+
+                <div id="downloadSection" class="d-none mt-3 text-center">
+                    <a id="downloadLink" class="btn btn-success">
+                        <i class="fas fa-file-download me-2"></i>Download Export File
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize date inputs with current time
+            const now = new Date();
+            const oneHourAgo = new Date(now.getTime() - (60 * 60 * 1000));
+
+            document.getElementById('startDate').value = formatDateTime(oneHourAgo);
+            document.getElementById('endDate').value = formatDateTime(now);
+
+            // Generate preset buttons
+            generateMonthPresets();
+            generateWeekPresets();
+
+            // Set up export button event listener
+            document.getElementById('exportBtn').addEventListener('click', startExport);
+        });
+
+        function formatDateTime(date) {
+            return date.toISOString().slice(0, 16);
+        }
+
+        function generateMonthPresets() {
+            const container = document.getElementById('monthPresets');
+            const now = new Date();
+
+            for (let i = 0; i < 12; i++) {
+                const monthDate = new Date(now);
+                monthDate.setMonth(now.getMonth() - i);
+
+                const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+                const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59);
+
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-outline-primary preset-btn';
+                btn.textContent = startOfMonth.toLocaleDateString('en-US', {month: 'short', year: 'numeric'});
+                btn.onclick = () => {
+                    document.getElementById('startDate').value = formatDateTime(startOfMonth);
+                    document.getElementById('endDate').value = formatDateTime(endOfMonth);
+                };
+
+                container.appendChild(btn);
+            }
+        }
+
+        function generateWeekPresets() {
+            const container = document.getElementById('weekPresets');
+            const now = new Date();
+
+            container.innerHTML = '';
+
+            for (let i = 0; i < 52; i++) {
+                // 计算当前周减去i周的日期
+                const weekDate = new Date(now);
+                weekDate.setDate(now.getDate() - (7 * i));
+
+                // 获取当周的开始日期（周一）
+                const weekStart = new Date(weekDate);
+                const dayOfWeek = weekStart.getDay(); // 0=周日, 1=周一,...,6=周六
+                const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                weekStart.setDate(weekStart.getDate() + diffToMonday);
+
+                // 计算真实的ISO周数
+                const isoWeekNumber = getISOWeekNumber(weekStart);
+
+                // 格式化日期为YYYY-MM-DD
+                const formatDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                const startDateStr = formatDate(weekStart);
+
+                // 创建按钮
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-outline-secondary preset-btn';
+                btn.textContent = `Week ${isoWeekNumber} (${startDateStr})`; // 使用真实的ISO周数
+                btn.onclick = () => {
+                    // 设置开始日期为当周周一
+                    const startDate = new Date(weekStart);
+                    startDate.setHours(0, 0, 0, 0);
+
+                    // 设置结束日期为当周周日23:59:59
+                    const endDate = new Date(weekStart);
+                    endDate.setDate(weekStart.getDate() + 6);
+                    endDate.setHours(23, 59, 59, 999);
+
+                    document.getElementById('startDate').value = formatDateTime(startDate);
+                    document.getElementById('endDate').value = formatDateTime(endDate);
+                };
+
+                container.appendChild(btn);
+            }
+        }
+
+        // 计算ISO周数的函数 (基于ISO 8601标准)
+        function getISOWeekNumber(date) {
+            // 创建一个新的日期对象，避免修改原始日期[4](@ref)
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+
+            // 设置日期为本周的星期四 - ISO 8601标准[4](@ref)
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+
+            // 计算年份的第一个星期四[4](@ref)
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+
+            // 计算周数[4](@ref)
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return weekNo;
+        }
+
+        function startExport() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate || !endDate) {
+                showResult('Please select both start and end dates.', 'danger');
+                return;
+            }
+
+            // Show progress bar
+            document.getElementById('progressContainer').classList.remove('d-none');
+            document.getElementById('exportBtn').disabled = true;
+            updateProgress(10);
+
+            // Send export request
+            fetch('/maintenance/export_mongodb', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    startDate: startDate + ':00',
+                    endDate: endDate + ':00'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    updateProgress(100);
+                    showResult('Export completed successfully!', 'success');
+
+                    // Show download link
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadLink.href = `/download/${data.filename}`;
+                    downloadLink.download = data.filename;
+                    document.getElementById('downloadSection').classList.remove('d-none');
+                } else {
+                    updateProgress(0);
+                    showResult(`Export failed: ${data.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                updateProgress(0);
+                showResult(`Error: ${error.message}`, 'danger');
+            })
+            .finally(() => {
+                document.getElementById('exportBtn').disabled = false;
+            });
+        }
+
+        function updateProgress(percent) {
+            const progressBar = document.getElementById('progressBar');
+            progressBar.style.width = `${percent}%`;
+            progressBar.textContent = `${percent}%`;
+        }
+
+        function showResult(message, type) {
+            const alert = document.getElementById('resultAlert');
+            const messageSpan = document.getElementById('resultMessage');
+
+            alert.classList.remove('d-none', 'alert-success', 'alert-danger');
+            alert.classList.add(`alert-${type}`);
+            messageSpan.textContent = message;
+        }
+    </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ from werkzeug.serving import make_server
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort
 
 from GlobalConfig import *
+from Scripts.mongodb_exporter import export_mongodb_data
 from ServiceComponent.IntelligenceHubDefines import APPENDIX_MAX_RATE_SCORE
 from ServiceComponent.RateStatisticsPageRender import get_statistics_page
 from ServiceComponent.UserManager import UserManager
@@ -348,10 +349,16 @@ class IntelligenceHubWebService:
                 traceback.print_exc()
                 return jsonify({"error": "Server error"}), 500
 
+        # --------------------------------------------------------------------------------------------------------------
+
         @self.app.route('/statistics/score_distribution.html', methods=['GET'])
         @WebServiceAccessManager.login_required
         def score_distribution_page():
             return get_statistics_page('/statistics/score_distribution')
+
+        @self.app.route('/maintenance/export_mongodb.html', methods=['GET'])
+        def export_mongodb_page():
+            return render_template('export_mongodb.html')
 
     # ------------------------------------------------------------------------------------------------------------------
 
@@ -440,6 +447,61 @@ class IntelligenceHubWebService:
                 return jsonify({
                     "error": "Internal server error",
                     "message": str(e)
+                }), 500
+
+        @self.app.route('/maintenance/export_mongodb', methods=['POST'])
+        def export_mongodb():
+            """Handle export request"""
+            try:
+                # Get parameters from request
+                data = request.get_json()
+                start_date = data['startDate']
+                end_date = data['endDate']
+
+                # Create query based on date range
+                date_query = {
+                    "PUB_TIME": {
+                        "$gte": {"$date": start_date},
+                        "$lte": {"$date": end_date}
+                    }
+                }
+
+                # Generate filename with timestamp
+                start_str = start_date.split('T')[0]
+                end_str = end_date.split('T')[0]
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"intelligence_archived_{start_str}_{end_str}_{timestamp}.json"
+
+                os.makedirs('exports', exist_ok=True)
+                output_path = os.path.join('exports', filename)
+
+                # Execute export
+                success, message = export_mongodb_data(
+                    uri='mongodb://localhost:27017',
+                    db='IntelligenceIntegrationSystem',
+                    collection='intelligence_archived',
+                    output_file=output_path,
+                    query=date_query,
+                    export_format="json"
+                )
+
+                if success:
+                    return jsonify({
+                        'status': 'success',
+                        'message': message,
+                        'filename': filename,
+                        'path': output_path
+                    })
+                else:
+                    return jsonify({
+                        'status': 'error',
+                        'message': message
+                    }), 500
+
+            except Exception as e:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Server error: {str(e)}'
                 }), 500
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------

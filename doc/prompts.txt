@@ -1735,4 +1735,129 @@ def login_required(f):
 
 
 
+我们已经有以下一个脚本：
 
+```Scripts/mongodb_exporter.py
+import subprocess
+import json
+import argparse
+from typing import Dict, Optional
+
+
+def export_mongodb_data(
+        uri: str,
+        db: str,
+        collection: str,
+        output_file: str,
+        query: Optional[Dict] = None,
+        fields: Optional[str] = None,
+        export_format: str = "json"
+) -> None:
+    """
+    导出MongoDB数据到文件（兼容mongoimport导入格式）
+
+    参数:
+    uri: MongoDB连接字符串 (e.g. "mongodb://user:pass@localhost:27017")
+    db: 数据库名称
+    collection: 集合名称
+    output_file: 输出文件路径
+    query: 导出数据的查询条件 (e.g. {"age": {"$gt": 25}})
+    fields: 指定导出字段 (e.g. "name,age,email")
+    export_format: 导出格式 ("json" 或 "csv")
+    """
+    # 构建基础命令
+    cmd = [
+        "mongoexport",
+        f"--uri={uri}",
+        f"--db={db}",
+        f"--collection={collection}",
+        f"--out={output_file}"
+    ]
+
+    # 添加格式参数
+    if export_format.lower() == "csv":
+        cmd.append("--type=csv")
+        if not fields:
+            raise ValueError("导出CSV格式时必须指定--fields参数")
+
+    # 添加查询条件
+    if query:
+        cmd.append(f"--query='{json.dumps(query)}'")
+
+    # 添加字段选择
+    if fields:
+        cmd.append(f"--fields={fields}")
+
+    # 执行导出命令
+    try:
+        result = subprocess.run(
+            " ".join(cmd),
+            shell=True,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("✅ 导出成功!")
+        print(f"📁 文件路径: {output_file}")
+        print(f"📊 导出格式: {export_format.upper()}")
+        if query:
+            print(f"🔍 查询条件: {json.dumps(query)}")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 导出失败: {e.stderr}")
+    except FileNotFoundError:
+        print("❌ 未找到mongoexport工具，请安装MongoDB数据库工具")
+
+
+if __name__ == "__main__":
+    # 命令行参数解析
+    parser = argparse.ArgumentParser(description="MongoDB数据导出工具")
+    parser.add_argument("--uri", required=True, help="MongoDB连接URI")
+    parser.add_argument("--db", required=True, help="数据库名称")
+    parser.add_argument("--collection", required=True, help="集合名称")
+    parser.add_argument("--output", required=True, help="输出文件路径")
+    parser.add_argument("--query", type=json.loads, help="查询条件(JSON格式)")
+    parser.add_argument("--fields", help="导出字段(逗号分隔)")
+    parser.add_argument("--format", choices=["json", "csv"], default="json", help="导出格式")
+
+    args = parser.parse_args()
+
+    # 执行导出
+    export_mongodb_data(
+        uri=args.uri,
+        db=args.db,
+        collection=args.collection,
+        output_file=args.output,
+        query=args.query,
+        fields=args.fields,
+        export_format=args.format
+    )
+```
+
+帮我实现一个前端页面和对应的基于Flask的python后端，用以调用该脚本导出数据库数据到服务器本地目录。
+
+前端需要一定美化，提供时间段选择，点击导出后根据选择的时间段导出数据，并显示进度和结果。
+可以通过三种方式选择时间段：
+    通过时间控件手动任意选择间隔
+    当前月 ~ 当前月-12个月的预设按钮（12个），用以快速设置时间控件
+    当前周 ~ 当前周-52周的预设按钮（52个），用以快速设置时间控件
+
+后端只需要接收时间段即可执行导出，剩余的参数参考以下代码：
+    date_query = {
+        "PUB_TIME": {
+            "$gte": {"$date": start_date},
+            "$lte": {"$date": end_date}
+        }
+    }
+
+    # 导出 IntelligenceIntegrationSystem 数据库中的 intelligence_archived 集合本月记录
+    export_mongodb_data(
+        uri="mongodb://localhost:27017",  # 根据实际情况修改
+        db="IntelligenceIntegrationSystem",
+        collection="intelligence_archived",
+        output_file='文件名+时间段作为文件名后缀',
+        query=date_query,
+        export_format="json"
+    )
+
+所有文本和注释需要使用英文。
+该功能比较复杂，请一步步思考，逐步实现该功能。
