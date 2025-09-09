@@ -177,8 +177,9 @@ class IntelligenceHubWebService:
 
         @self.app.route('/')
         def index():
-            index_page = 'index' if session.get('logged_in') else 'index_public'
-            return self.get_rendered_md_post(index_page) or abort(404)
+            return redirect(url_for('show_post', article='index')) \
+                if session.get('logged_in') \
+                else self.get_rendered_md_post('index_public') or abort(404)
 
         @self.app.route('/post/<path:article>')
         @WebServiceAccessManager.login_required
