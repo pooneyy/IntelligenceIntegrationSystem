@@ -8,7 +8,7 @@ from typing import List
 import datetime
 import threading
 from werkzeug.serving import make_server
-from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort
+from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort, send_file
 
 from GlobalConfig import *
 from Scripts.mongodb_exporter import export_mongodb_data
@@ -450,6 +450,7 @@ class IntelligenceHubWebService:
                 }), 500
 
         @self.app.route('/maintenance/export_mongodb', methods=['POST'])
+        @WebServiceAccessManager.login_required
         def export_mongodb():
             """Handle export request"""
             try:
@@ -458,7 +459,13 @@ class IntelligenceHubWebService:
                 start_date = data['startDate']
                 end_date = data['endDate']
 
-                # Create query based on date range
+                # 确保日期时间包含时区信息（添加'Z'表示UTC时间）
+                if 'Z' not in start_date:
+                    start_date += 'Z'
+                if 'Z' not in end_date:
+                    end_date += 'Z'
+
+                # Create query based on date range (使用正确的ISODate格式)
                 date_query = {
                     "PUB_TIME": {
                         "$gte": {"$date": start_date},
@@ -467,20 +474,21 @@ class IntelligenceHubWebService:
                 }
 
                 # Generate filename with timestamp
-                start_str = start_date.split('T')[0]
-                end_str = end_date.split('T')[0]
+                start_str = start_date.split('T')[0].replace('-', '')
+                end_str = end_date.split('T')[0].replace('-', '')
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"intelligence_archived_{start_str}_{end_str}_{timestamp}.json"
 
                 os.makedirs('exports', exist_ok=True)
                 output_path = os.path.join('exports', filename)
+                output_path_abs = os.path.abspath(output_path)
 
                 # Execute export
                 success, message = export_mongodb_data(
                     uri='mongodb://localhost:27017',
                     db='IntelligenceIntegrationSystem',
                     collection='intelligence_archived',
-                    output_file=output_path,
+                    output_file=output_path_abs,
                     query=date_query,
                     export_format="json"
                 )
@@ -503,6 +511,27 @@ class IntelligenceHubWebService:
                     'status': 'error',
                     'message': f'Server error: {str(e)}'
                 }), 500
+
+        @self.app.route('/download/<filename>')
+        @WebServiceAccessManager.login_required
+        def download_file(filename):
+            """Download exported file"""
+            try:
+                if 'intelligence_archived' in filename:
+                    # MongoDB export
+                    file_dir = 'exports'
+                else:
+                    file_dir = 'download'
+
+                return send_file(
+                    os.path.join(file_dir, filename),
+                    as_attachment=True
+                )
+            except FileNotFoundError:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'File not found'
+                }), 404
 
     # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
 
