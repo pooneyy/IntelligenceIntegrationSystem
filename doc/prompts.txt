@@ -1690,6 +1690,49 @@ APPENDIX_PARENT_ITEM    = '__PARENT_ITEM__'
 
 
 
+接下来我将给你一个python渲染的页面代码，帮我做以下改进：
+
+界面做一定程度的美化，现在的界面太素，时间控件也不好用
+脚本和HTML分离，在生成页面时再组合，使得以后可以独立调整网页风格和JS代码
+使用网络资源，不要增加窗外的js及css文件。
+
+
+
+
+
+
+
+
+
+
+
+
+诸如以下flask的routing函数，我应该怎样做才能跳转到登录界面，让用户登录之后再返回到之前请求的页面呢：
+
+```
+@self.app.route('/statistics/score_distribution', methods=['GET', 'POST'])
+@WebServiceAccessManager.login_required
+def get_score_distribution():
+```
+
+其中login_required实现如下：
+
+```
+@staticmethod
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session or not session['logged_in']:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+```
+
+
+
+
+
+
 
 
 

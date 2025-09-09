@@ -175,6 +175,11 @@ class IntelligenceHubWebService:
 
         # ---------------------------------------------- Post and Article ----------------------------------------------
 
+        @self.app.route('/')
+        def index():
+            index_page = 'index' if session.get('logged_in') else 'index_public'
+            return self.get_rendered_md_post(index_page) or abort(404)
+
         @self.app.route('/post/<path:article>')
         @WebServiceAccessManager.login_required
         def show_post(article):
@@ -187,23 +192,7 @@ class IntelligenceHubWebService:
             Returns:
                 Rendered HTML template or 404 error
             """
-            # Sanitize input and construct safe file path
-            safe_article = article.replace('..', '').strip('/')  # Prevent directory traversal
-            md_file_path = os.path.join('posts', f"{safe_article}.md")
-
-            # Generate HTML from Markdown
-            rendered_html_path = generate_html_from_markdown(md_file_path)
-
-            if rendered_html_path:
-                # Extract relative template path (remove 'templates/' prefix)
-                template_path = os.path.relpath(
-                    rendered_html_path,
-                    start='templates'
-                ).replace('\\', '/')  # Windows compatibility
-
-                return render_template(template_path)
-            else:
-                abort(404)  # File not found or conversion failed
+            return self.get_rendered_md_post(article) or abort(404)
 
         # -------------------------------------------- API and Open Service --------------------------------------------
 
@@ -490,3 +479,26 @@ class IntelligenceHubWebService:
         except Exception as e:
             logger.error(f"Article to rss items failed: {str(e)}")
             return []
+
+    def get_rendered_md_post(self, post_name: str) -> str:
+        try:
+            # Sanitize input and construct safe file path
+            safe_article = post_name.replace('..', '').strip('/')  # Prevent directory traversal
+            md_file_path = os.path.join('posts', f"{safe_article}.md")
+
+            # Generate HTML from Markdown
+            rendered_html_path = generate_html_from_markdown(md_file_path)
+
+            if rendered_html_path:
+                # Extract relative template path (remove 'templates/' prefix)
+                template_path = os.path.relpath(
+                    rendered_html_path,
+                    start='templates'
+                ).replace('\\', '/')  # Windows compatibility
+
+                return render_template(template_path)
+            else:
+                return ''
+        except Exception as e:
+            logger.error(f'Invalid post: {post_name}')
+            return ''
