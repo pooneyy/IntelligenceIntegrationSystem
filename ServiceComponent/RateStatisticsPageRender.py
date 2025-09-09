@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+from jinja2 import Template
+
+
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
 <head>
     <title>Score Distribution Chart</title>
@@ -39,7 +42,7 @@
             const startISO = new Date(startTime).toISOString();
             const endISO = new Date(endTime).toISOString();
 
-            fetch(`http://127.0.0.1:5000/statistics/score_distribution?start_time=${startISO}&end_time=${endISO}`)
+            fetch(`{{ query_url }}?start_time=${startISO}&end_time=${endISO}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -117,3 +120,10 @@
     </script>
 </body>
 </html>
+"""
+
+
+def get_statistics_page(query_url: str) -> str:
+    template = Template(HTML_TEMPLATE)
+    return template.render({'query_url': query_url})
+

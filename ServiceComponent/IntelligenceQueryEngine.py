@@ -288,6 +288,7 @@ class IntelligenceQueryEngine:
         try:
             collection = self.__mongo_db.collection
             results = list(collection.aggregate(pipeline))
+            return results
         except ValueError:
             logger.error("Invalid time format. Please use ISO format (e.g., '2024-01-01T00:00:00Z')")
             return []

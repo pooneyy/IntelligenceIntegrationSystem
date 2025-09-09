@@ -12,6 +12,7 @@ from flask import Flask, request, jsonify, session, redirect, url_for, render_te
 
 from GlobalConfig import *
 from ServiceComponent.IntelligenceHubDefines import APPENDIX_MAX_RATE_SCORE
+from ServiceComponent.RateStatisticsPageRender import get_statistics_page
 from ServiceComponent.UserManager import UserManager
 from Tools.CommonPost import common_post
 from MyPythonUtility.ArbitraryRPC import RPCService
@@ -280,7 +281,6 @@ class IntelligenceHubWebService:
                 return 'Error'
 
         @self.app.route('/intelligences', methods=['GET'])
-        @WebServiceAccessManager.login_required
         def intelligences_list_api():
             try:
                 offset = request.args.get('offset', default=0, type=int)
@@ -357,6 +357,11 @@ class IntelligenceHubWebService:
                 print(str(e))
                 traceback.print_exc()
                 return jsonify({"error": "Server error"}), 500
+
+        @self.app.route('/statistics/score_distribution.html', methods=['GET'])
+        @WebServiceAccessManager.login_required
+        def score_distribution_page():
+            return get_statistics_page('/statistics/score_distribution')
 
     # ------------------------------------------------------------------------------------------------------------------
 
