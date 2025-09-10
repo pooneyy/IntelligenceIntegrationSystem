@@ -467,7 +467,7 @@ class IntelligenceHubWebService:
 
                 # Create query based on date range (使用正确的ISODate格式)
                 date_query = {
-                    "PUB_TIME": {
+                    f"APPENDIX.{APPENDIX_TIME_ARCHIVED}": {
                         "$gte": {"$date": start_date},
                         "$lte": {"$date": end_date}
                     }

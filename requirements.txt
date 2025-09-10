@@ -12,6 +12,7 @@ pydantic==2.11.5             # Data validation library (core dependency of FastA
 markdown
 bcrypt
 psutil
+gunicorn
 
 ##############################
 ### Network Requests & Parsing
