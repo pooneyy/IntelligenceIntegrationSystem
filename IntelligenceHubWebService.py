@@ -7,7 +7,6 @@ from typing import List
 
 import datetime
 import threading
-from werkzeug.serving import make_server
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort, send_file
 
 from GlobalConfig import *
@@ -95,32 +94,15 @@ class WebServiceAccessManager:
 
 class IntelligenceHubWebService:
     def __init__(self, *,
-                 serve_ip: str = '0.0.0.0',
-                 serve_port: int = DEFAULT_IHUB_PORT,
                  intelligence_hub: IntelligenceHub,
                  access_manager: WebServiceAccessManager,
                  rss_publisher: RSSPublisher):
 
         # ---------------- Parameters ----------------
 
-        self.serve_ip = serve_ip
-        self.serve_port = serve_port
         self.intelligence_hub = intelligence_hub
         self.access_manager = access_manager
         self.rss_publisher = rss_publisher
-
-        # ---------------- Web Service ----------------
-
-        self.app = Flask(__name__)
-        self.app.secret_key = str(uuid.uuid4())
-        self.app.permanent_session_lifetime = datetime.timedelta(days=7)
-        self.app.config.update(
-            # SESSION_COOKIE_SECURE=True,  # 仅通过HTTPS发送（生产环境必须）
-            SESSION_COOKIE_HTTPONLY=True,  # 防止JavaScript访问（安全）
-            SESSION_COOKIE_SAMESITE='Lax'  # 防止CSRF攻击
-        )
-        self._setup_apis()
-        self.server = make_server(serve_ip, self.serve_port, self.app)
 
         # ---------------- RPC Service ----------------
 
@@ -130,21 +112,17 @@ class IntelligenceHubWebService:
             error_handler=self.handle_error
         )
 
-        # ----------------- Threads -----------------
+    # ---------------------------------------------------- Routers -----------------------------------------------------
 
-        self.server_thread = threading.Thread(target=self.server.serve_forever)
-
-    # ---------------------------------------------------- Web API -----------------------------------------------------
-
-    def _setup_apis(self):
+    def register_routers(self, app: Flask):
 
         # -------------------------------------------------- Security --------------------------------------------------
 
-        @self.app.before_request
+        @app.before_request
         def refresh_session():
             session.modified = True
 
-        @self.app.route('/login', methods=['GET', 'POST'])
+        @app.route('/login', methods=['GET', 'POST'])
         def login():
             if request.method == 'POST':
                 client_ip = (request.headers.get('X-Forwarded-For', '').split(',')[0].strip() or
@@ -168,7 +146,7 @@ class IntelligenceHubWebService:
                     return "Invalid credentials", 401
             return render_template('login.html')
 
-        @self.app.route('/logout')
+        @app.route('/logout')
         @WebServiceAccessManager.login_required
         def logout():
             session.clear()
@@ -176,13 +154,13 @@ class IntelligenceHubWebService:
 
         # ---------------------------------------------- Post and Article ----------------------------------------------
 
-        @self.app.route('/')
+        @app.route('/')
         def index():
             return redirect(url_for('show_post', article='index')) \
                 if session.get('logged_in') \
                 else self.get_rendered_md_post('index_public') or abort(404)
 
-        @self.app.route('/post/<path:article>')
+        @app.route('/post/<path:article>')
         @WebServiceAccessManager.login_required
         def show_post(article):
             """
@@ -198,7 +176,7 @@ class IntelligenceHubWebService:
 
         # -------------------------------------------- API and Open Service --------------------------------------------
 
-        @self.app.route('/api', methods=['POST'])
+        @app.route('/api', methods=['POST'])
         @WebServiceAccessManager.login_required
         def rpc_api():
             try:
@@ -210,7 +188,7 @@ class IntelligenceHubWebService:
                     response = ''
             return response
 
-        @self.app.route('/collect', methods=['POST'])
+        @app.route('/collect', methods=['POST'])
         def collect_api():
             try:
                 data = dict(request.json)
@@ -232,7 +210,7 @@ class IntelligenceHubWebService:
                 logger.error(f'collect_api() fail: {str(e)}')
                 return jsonify({'resp': 'error', 'uuid': ''})
 
-        @self.app.route('/manual_rate', methods=['POST'])
+        @app.route('/manual_rate', methods=['POST'])
         def submit_rating():
             try:
                 data = request.get_json()
@@ -247,7 +225,7 @@ class IntelligenceHubWebService:
 
         # ---------------------------------------------------- Pages ---------------------------------------------------
 
-        @self.app.route('/rssfeed.xml', methods=['GET'])
+        @app.route('/rssfeed.xml', methods=['GET'])
         def rssfeed_api():
             try:
                 count = request.args.get('count', default=100, type=int)
@@ -271,7 +249,7 @@ class IntelligenceHubWebService:
                 logger.error(f'rssfeed_api() error: {str(e)}', stack_info=True)
                 return 'Error'
 
-        @self.app.route('/intelligences', methods=['GET'])
+        @app.route('/intelligences', methods=['GET'])
         def intelligences_list_api():
             try:
                 offset = request.args.get('offset', default=0, type=int)
@@ -289,7 +267,7 @@ class IntelligenceHubWebService:
                 logger.error(f'intelligences_list_api() error: {str(e)}', stack_info=True)
                 return jsonify({"error": "Server error"}), 500
 
-        @self.app.route('/intelligences/query', methods=['GET', 'POST'])
+        @app.route('/intelligences/query', methods=['GET', 'POST'])
         @WebServiceAccessManager.login_required
         def intelligences_query_api():
             form_data = request.form if request.method == 'POST' else {}
@@ -335,7 +313,7 @@ class IntelligenceHubWebService:
                 logger.error(error)
                 return ''
 
-        @self.app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
+        @app.route('/intelligence/<string:intelligence_uuid>', methods=['GET'])
         def intelligence_viewer_api(intelligence_uuid: str):
             try:
                 intelligence = self.intelligence_hub.get_intelligence(intelligence_uuid)
@@ -351,18 +329,18 @@ class IntelligenceHubWebService:
 
         # --------------------------------------------------------------------------------------------------------------
 
-        @self.app.route('/statistics/score_distribution.html', methods=['GET'])
+        @app.route('/statistics/score_distribution.html', methods=['GET'])
         @WebServiceAccessManager.login_required
         def score_distribution_page():
             return get_statistics_page('/statistics/score_distribution')
 
-        @self.app.route('/maintenance/export_mongodb.html', methods=['GET'])
+        @app.route('/maintenance/export_mongodb.html', methods=['GET'])
         def export_mongodb_page():
             return render_template('export_mongodb.html')
 
     # ------------------------------------------------------------------------------------------------------------------
 
-        @self.app.route('/statistics/score_distribution', methods=['GET', 'POST'])
+        @app.route('/statistics/score_distribution', methods=['GET', 'POST'])
         @WebServiceAccessManager.login_required
         def get_score_distribution():
             """
@@ -449,7 +427,7 @@ class IntelligenceHubWebService:
                     "message": str(e)
                 }), 500
 
-        @self.app.route('/maintenance/export_mongodb', methods=['POST'])
+        @app.route('/maintenance/export_mongodb', methods=['POST'])
         @WebServiceAccessManager.login_required
         def export_mongodb():
             """Handle export request"""
@@ -512,7 +490,7 @@ class IntelligenceHubWebService:
                     'message': f'Server error: {str(e)}'
                 }), 500
 
-        @self.app.route('/download/<filename>')
+        @app.route('/download/<filename>')
         @WebServiceAccessManager.login_required
         def download_file(filename):
             """Download exported file"""
@@ -532,15 +510,6 @@ class IntelligenceHubWebService:
                     'status': 'error',
                     'message': 'File not found'
                 }), 404
-
-    # ----------------------------------------------- Startup / Shutdown -----------------------------------------------
-
-    def startup(self):
-        self.server_thread.start()
-
-    def shutdown(self, timeout=10):
-        self.server.shutdown()
-        self.server_thread.join(timeout=timeout)
 
     # ----------------------------------------------------------------
 

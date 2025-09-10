@@ -43,7 +43,7 @@
 
 + [IntelligenceHub.py](IntelligenceHub.py)（IHub）：程序的核心。所有的信息都会提交汇总至此，由该模块进行处理、分析、归档，并提供查询功能。
 + [IntelligenceHubWebService.py](IntelligenceHubWebService.py)：为IHub提供网络服务的模块，包括API、网页发布和鉴权。
-+ [IntelligenceHubLauncher.py](IntelligenceHubLauncher.py)：IHub的**启动**器，包括初始化所有子组件，初始化IHub，启动WebService。
++ [IntelligenceHubLauncher.py](IntelligenceHubStartup.py)：IHub的**启动**器，包括初始化所有子组件，初始化IHub，启动WebService。
 
 > IHub的处理流程请参见：[IIS_Diagram.drawio](doc/IIS_Diagram.drawio)
 

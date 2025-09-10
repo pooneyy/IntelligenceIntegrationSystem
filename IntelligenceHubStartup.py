@@ -1,4 +1,10 @@
+import threading
 import time
+import uuid
+import datetime
+import traceback
+from flask import Flask
+from typing import Tuple
 
 from GlobalConfig import *
 from IntelligenceHub import IntelligenceHub
@@ -12,7 +18,16 @@ from ServiceComponent.RSSPublisher import RSSPublisher
 from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
 
 
-def main():
+def show_intelligence_hub_statistics_forever(hub: IntelligenceHub):
+    prev_statistics = {}
+    while True:
+        if hub.statistics != prev_statistics:
+            print(f'Hub queue size: {hub.statistics}')
+            prev_statistics = hub.statistics
+        time.sleep(2)
+
+
+def start_intelligence_hub_service(wsgi_app: Flask) -> Tuple[IntelligenceHub, IntelligenceHubWebService]:
     config = EasyConfig()
 
     print('Apply config: ')
@@ -57,9 +72,6 @@ def main():
     )
     hub.startup()
 
-    listen_ip = config.get('intelligence_hub_web_service.service.listen_ip', '0.0.0.0')
-    listen_port = config.get('intelligence_hub_web_service.service.listen_port', DEFAULT_IHUB_PORT)
-
     rpc_api_tokens = config.get('intelligence_hub_web_service.rpc_api.tokens', [])
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens', [])
     processor_tokens = config.get('intelligence_hub_web_service.processor.tokens', [])
@@ -74,23 +86,58 @@ def main():
         deny_on_empty_config=True)
 
     hub_service = IntelligenceHubWebService(
-        serve_ip=listen_ip,
-        serve_port=listen_port,
         intelligence_hub = hub,
         access_manager=access_manager,
         rss_publisher=RSSPublisher(rss_base_url)
     )
-    hub_service.startup()
 
+    hub_service.register_routers(wsgi_app)
+
+    return hub, hub_service
+
+
+def startup_with_werkzeug(blocking: bool):
+    app = Flask(__name__)
+    app.secret_key = str(uuid.uuid4())
+    app.permanent_session_lifetime = datetime.timedelta(days=7)
+    app.config.update(
+        # SESSION_COOKIE_SECURE=True,  # 仅通过HTTPS发送（生产环境必须）
+        SESSION_COOKIE_HTTPONLY=True,  # 防止JavaScript访问（安全）
+        SESSION_COOKIE_SAMESITE='Lax'  # 防止CSRF攻击
+    )
+
+    hub, hub_service = start_intelligence_hub_service(app)
+
+    config = EasyConfig()
+    listen_ip = config.get('intelligence_hub_web_service.service.listen_ip', '0.0.0.0')
+    listen_port = config.get('intelligence_hub_web_service.service.listen_port', DEFAULT_IHUB_PORT)
+
+    from werkzeug.serving import make_server
+    server = make_server(listen_ip, listen_port, app)
+
+    if blocking:
+        server.serve_forever()
+    else:
+        server_thread = threading.Thread(target=server.serve_forever)
+        server_thread.start()
+        # server.shutdown()
+        # server_thread.join(timeout=timeout)
+    return hub, hub_service
+
+
+def main():
+    print("=========================================================================")
+    print("================ Default startup with Flask WSGI service ================")
+    print("=========================================================================")
+
+    hub, _ = startup_with_werkzeug(blocking=False)
     start_system_monitor()
-
-    prev_statistics = {}
-    while True:
-        if hub.statistics != prev_statistics:
-            print(f'Hub queue size: {hub.statistics}')
-            prev_statistics = hub.statistics
-        time.sleep(2)
+    show_intelligence_hub_statistics_forever(hub)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(str(e))
+        print(traceback.format_exc())
