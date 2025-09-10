@@ -1,8 +1,6 @@
-import threading
 import time
 import uuid
 import datetime
-import traceback
 from flask import Flask
 from typing import Tuple
 
@@ -18,6 +16,16 @@ from ServiceComponent.RSSPublisher import RSSPublisher
 from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
 
 
+wsgi_app = Flask(__name__)
+wsgi_app.secret_key = str(uuid.uuid4())
+wsgi_app.permanent_session_lifetime = datetime.timedelta(days=7)
+wsgi_app.config.update(
+    # SESSION_COOKIE_SECURE=True,  # 仅通过HTTPS发送（生产环境必须）
+    SESSION_COOKIE_HTTPONLY=True,  # 防止JavaScript访问（安全）
+    SESSION_COOKIE_SAMESITE='Lax'  # 防止CSRF攻击
+)
+
+
 def show_intelligence_hub_statistics_forever(hub: IntelligenceHub):
     prev_statistics = {}
     while True:
@@ -27,7 +35,7 @@ def show_intelligence_hub_statistics_forever(hub: IntelligenceHub):
         time.sleep(2)
 
 
-def start_intelligence_hub_service(wsgi_app: Flask) -> Tuple[IntelligenceHub, IntelligenceHubWebService]:
+def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWebService]:
     config = EasyConfig()
 
     print('Apply config: ')
@@ -96,48 +104,6 @@ def start_intelligence_hub_service(wsgi_app: Flask) -> Tuple[IntelligenceHub, In
     return hub, hub_service
 
 
-def startup_with_werkzeug(blocking: bool):
-    app = Flask(__name__)
-    app.secret_key = str(uuid.uuid4())
-    app.permanent_session_lifetime = datetime.timedelta(days=7)
-    app.config.update(
-        # SESSION_COOKIE_SECURE=True,  # 仅通过HTTPS发送（生产环境必须）
-        SESSION_COOKIE_HTTPONLY=True,  # 防止JavaScript访问（安全）
-        SESSION_COOKIE_SAMESITE='Lax'  # 防止CSRF攻击
-    )
+ihub, ihub_service = start_intelligence_hub_service()
 
-    hub, hub_service = start_intelligence_hub_service(app)
-
-    config = EasyConfig()
-    listen_ip = config.get('intelligence_hub_web_service.service.listen_ip', '0.0.0.0')
-    listen_port = config.get('intelligence_hub_web_service.service.listen_port', DEFAULT_IHUB_PORT)
-
-    from werkzeug.serving import make_server
-    server = make_server(listen_ip, listen_port, app)
-
-    if blocking:
-        server.serve_forever()
-    else:
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.start()
-        # server.shutdown()
-        # server_thread.join(timeout=timeout)
-    return hub, hub_service
-
-
-def main():
-    print("=========================================================================")
-    print("================ Default startup with Flask WSGI service ================")
-    print("=========================================================================")
-
-    hub, _ = startup_with_werkzeug(blocking=False)
-    start_system_monitor()
-    show_intelligence_hub_statistics_forever(hub)
-
-
-if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        print(str(e))
-        print(traceback.format_exc())
+start_system_monitor()
