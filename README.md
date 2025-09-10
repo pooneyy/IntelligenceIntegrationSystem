@@ -43,7 +43,12 @@
 
 + [IntelligenceHub.py](IntelligenceHub.py)（IHub）：程序的核心。所有的信息都会提交汇总至此，由该模块进行处理、分析、归档，并提供查询功能。
 + [IntelligenceHubWebService.py](IntelligenceHubWebService.py)：为IHub提供网络服务的模块，包括API、网页发布和鉴权。
-+ [IntelligenceHubLauncher.py](IntelligenceHubStartup.py)：IHub的**启动**器，包括初始化所有子组件，初始化IHub，启动WebService。
++ 
++ [IntelligenceHubStartup.py](IntelligenceHubStartup.py)：初始化所有子组件、IntelligenceHub和IntelligenceHubWebService。
++ [IntelligenceHubLauncher.py](IntelligenceHubStartup.py)：IHub的**启动**器
+  > [20250910] 提供Flask原生、waitress、gunicorn三种WSGI服务器，默认服务器为waitress。
+  > 
+  > 注意gunicorn仅支持Linux。
 
 > IHub的处理流程请参见：[IIS_Diagram.drawio](doc/IIS_Diagram.drawio)
 
