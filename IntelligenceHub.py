@@ -1,3 +1,4 @@
+import datetime
 import time
 import uuid
 import queue
@@ -9,7 +10,7 @@ from attr import dataclass
 from typing import Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
-from prompts import ANALYSIS_PROMPT, AGGRESSIVE_PROMPT
+from prompts import ANALYSIS_PROMPT, AGGRESSIVE_PROMPT, SUGGESTION_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.DateTimeUtility import time_str_to_datetime
@@ -17,8 +18,7 @@ from MyPythonUtility.DictTools import check_sanitize_dict
 from ServiceComponent.IntelligenceHubDefines import *
 from ServiceComponent.IntelligenceCache import IntelligenceCache
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
-from ServiceComponent.IntelligenceAnalyzerProxy import analyze_with_ai, aggressive_with_ai
-
+from ServiceComponent.IntelligenceAnalyzerProxy import analyze_with_ai, aggressive_by_ai, generate_recommendation_by_ai
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -78,6 +78,7 @@ class IntelligenceHub:
         # --------------- Components ----------------
 
         self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
+        self.recommendations = []
 
         # ------------------ Loads ------------------
 
@@ -230,7 +231,7 @@ class IntelligenceHub:
     def query_intelligence(self,
                            *,
                            db: str = 'archive',
-                           period:      Optional[Tuple[datetime.date, datetime.date]] = None,
+                           period:      Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
                            locations:   Optional[List[str]] = None,
                            peoples:     Optional[List[str]] = None,
                            organizations: Optional[List[str]] = None,
@@ -264,6 +265,11 @@ class IntelligenceHub:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result = query_engine.aggregate(pipeline)
         return result
+
+    def get_recommendations(self):
+        if not self.recommendations:
+            self.recommendations = self._generate_recommendation()
+        return self.recommendations
 
     # ---------------------------------------------------- Updates -----------------------------------------------------
 
@@ -344,7 +350,7 @@ class IntelligenceHub:
                 # TODO: 暂时不做，因为需要考虑的事情太多，且消耗token，后续可以考虑采用小模型实现。
                 #
                 # history_data_brief = self._get_cached_data_brief()
-                # aggressive_result = aggressive_with_ai(self.open_ai_client, AGGRESSIVE_PROMPT, result, history_data_brief)
+                # aggressive_result = aggressive_by_ai(self.open_ai_client, AGGRESSIVE_PROMPT, result, history_data_brief)
                 #
                 # if aggressive_result:
                 #     # dict is ordered in python 3.7+
@@ -541,3 +547,38 @@ class IntelligenceHub:
 
     def _aggressive_intelligence(self, article: dict):
         pass
+
+    def _generate_recommendation(self,
+                                 period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+                                 threshold: int = 6,
+                                 limit: int = 2000) -> List:
+        if not period:
+            period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
+
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        result, total = query_engine.query_intelligence(period = period, threshold=threshold, limit=limit)
+
+        if not result:
+            return []
+        if total > 2000:
+            logger.info(f'Total intelligence is larger than limit {limit}.')
+
+        title_brief = [{
+            'UUID': item['UUID'],
+            'EVENT_TITLE': item['EVENT_TITLE'],
+            'EVENT_BRIEF': item['EVENT_BRIEF'],
+        } for item in result]
+
+        recommendation_uuids = generate_recommendation_by_ai(self.open_ai_client, SUGGESTION_PROMPT, title_brief)
+
+        if not recommendation_uuids:
+            return []
+
+        uuid_set = set(recommendation_uuids)
+
+        recommendation_intelligences = [
+            item for item in result
+            if item['UUID'] in uuid_set
+        ]
+
+        return recommendation_intelligences

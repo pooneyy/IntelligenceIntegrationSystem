@@ -125,7 +125,7 @@ def analyze_with_ai(
     return parse_ai_response(response)
 
 
-def aggressive_with_ai(
+def aggressive_by_ai(
         api_client: OpenAICompatibleAPI,
         prompt: str,
         new_data: Dict[str, Any],
@@ -158,6 +158,34 @@ def aggressive_with_ai(
     record_conversation('aggressive', messages, response)
     return parse_ai_response(response)
 
+
+def generate_recommendation_by_ai(
+        api_client: OpenAICompatibleAPI,
+        prompt: str,
+        intelligence_list: List[Dict[str, str]]
+) -> List[str]:
+
+    intelligence_table = dict_list_to_markdown(intelligence_list)
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": intelligence_table}]
+
+    start = time.time()
+
+    response = api_client.create_chat_completion_sync(
+        messages=messages,
+        temperature=0,
+        max_tokens=5000
+    )
+
+    elapsed = time.time() - start
+    print(f"AI response spends {elapsed} s")
+
+    record_conversation('recommend', messages, response)
+    return parse_ai_response(response)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
 
 NEWS_TEXT = """An industry group representing companies including Netflix argued on Friday that streamers should not have rules around Canadian content imposed on them. Netflix was also scheduled to appear at a hearing this week, but then cancelled its appearance. (Richard Drew/The Associated Press)
 
