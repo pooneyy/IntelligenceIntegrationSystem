@@ -7,10 +7,13 @@ from typing import List
 
 import datetime
 import threading
+
+import dateutil
 from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort, send_file
 
 from GlobalConfig import *
 from Scripts.mongodb_exporter import export_mongodb_data
+from ServiceComponent.IntelligenceDistributionPageRender import get_intelligence_statistics_page
 from ServiceComponent.IntelligenceHubDefines import APPENDIX_MAX_RATE_SCORE
 from ServiceComponent.RateStatisticsPageRender import get_statistics_page
 from ServiceComponent.UserManager import UserManager
@@ -334,6 +337,11 @@ class IntelligenceHubWebService:
         def score_distribution_page():
             return get_statistics_page('/statistics/score_distribution')
 
+        @app.route('/statistics/intelligence_statistics.html', methods=['GET'])
+        @WebServiceAccessManager.login_required
+        def intelligence_distribution_page():
+            return get_intelligence_statistics_page()
+
         @app.route('/maintenance/export_mongodb.html', methods=['GET'])
         def export_mongodb_page():
             return render_template('export_mongodb.html')
@@ -426,6 +434,200 @@ class IntelligenceHubWebService:
                     "error": "Internal server error",
                     "message": str(e)
                 }), 500
+
+        @app.route('/statistics/intelligence_distribution/hourly', methods=['GET'])
+        def get_hourly_stats():
+            """Get record counts grouped by hour for the specified time range"""
+            start_time, end_time = self.get_time_range_params()
+
+            # MongoDB aggregation pipeline for hourly statistics
+            pipeline = [
+                {
+                    "$match": {
+                        "APPENDIX.__TIME_ARCHIVED__": {
+                            "$gte": start_time,
+                            "$lte": end_time
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "day": {"$dayOfMonth": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "hour": {"$hour": "$APPENDIX.__TIME_ARCHIVED__"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {
+                        "_id.year": 1,
+                        "_id.month": 1,
+                        "_id.day": 1,
+                        "_id.hour": 1
+                    }
+                }
+            ]
+
+            result = list(self.intelligence_hub.aggregate(pipeline))
+            return jsonify(result)
+
+        @app.route('/statistics/intelligence_distribution/daily', methods=['GET'])
+        def get_daily_stats():
+            """Get record counts grouped by day for the specified time range"""
+            start_time, end_time = self.get_time_range_params()
+
+            # MongoDB aggregation pipeline for daily statistics
+            pipeline = [
+                {
+                    "$match": {
+                        "APPENDIX.__TIME_ARCHIVED__": {
+                            "$gte": start_time,
+                            "$lte": end_time
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "day": {"$dayOfMonth": "$APPENDIX.__TIME_ARCHIVED__"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {
+                        "_id.year": 1,
+                        "_id.month": 1,
+                        "_id.day": 1
+                    }
+                }
+            ]
+
+            result = list(self.intelligence_hub.aggregate(pipeline))
+            return jsonify(result)
+
+        @app.route('/statistics/intelligence_distribution/weekly', methods=['GET'])
+        def get_weekly_stats():
+            """Get record counts grouped by week for the specified time range"""
+            start_time, end_time = self.get_time_range_params()
+
+            # MongoDB aggregation pipeline for weekly statistics
+            pipeline = [
+                {
+                    "$match": {
+                        "APPENDIX.__TIME_ARCHIVED__": {
+                            "$gte": start_time,
+                            "$lte": end_time
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "week": {"$week": "$APPENDIX.__TIME_ARCHIVED__"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {
+                        "_id.year": 1,
+                        "_id.week": 1
+                    }
+                }
+            ]
+
+            result = list(self.intelligence_hub.aggregate(pipeline))
+            return jsonify(result)
+
+        @app.route('/statistics/intelligence_distribution/monthly', methods=['GET'])
+        def get_monthly_stats():
+            """Get record counts grouped by month for the specified time range"""
+            start_time, end_time = self.get_time_range_params()
+
+            # MongoDB aggregation pipeline for monthly statistics
+            pipeline = [
+                {
+                    "$match": {
+                        "APPENDIX.__TIME_ARCHIVED__": {
+                            "$gte": start_time,
+                            "$lte": end_time
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
+                            "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"}
+                        },
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {
+                        "_id.year": 1,
+                        "_id.month": 1
+                    }
+                }
+            ]
+
+            result = list(self.intelligence_hub.aggregate(pipeline))
+            return jsonify(result)
+
+        # @app.route('/statistics/intelligence_distribution/summary', methods=['GET'])
+        # def get_stats_summary():
+        #     """Get overall statistics for the specified time range"""
+        #     start_time, end_time = self.get_time_range_params()
+        #
+        #     # Total count in time range
+        #     total_count = collection.count_documents({
+        #         "APPENDIX.__TIME_ARCHIVED__": {
+        #             "$gte": start_time,
+        #             "$lte": end_time
+        #         }
+        #     })
+        #
+        #     # Count by informant
+        #     informant_pipeline = [
+        #         {
+        #             "$match": {
+        #                 "APPENDIX.__TIME_ARCHIVED__": {
+        #                     "$gte": start_time,
+        #                     "$lte": end_time
+        #                 }
+        #             }
+        #         },
+        #         {
+        #             "$group": {
+        #                 "_id": "$INFORMANT",
+        #                 "count": {"$sum": 1}
+        #             }
+        #         },
+        #         {
+        #             "$sort": {"count": -1}
+        #         },
+        #         {
+        #             "$limit": 10  # Top 10 informants
+        #         }
+        #     ]
+        #
+        #     informant_stats = list(collection.aggregate(informant_pipeline))
+        #
+        #     return jsonify({
+        #         "total_count": total_count,
+        #         "time_range": {
+        #             "start": start_time,
+        #             "end": end_time
+        #         },
+        #         "top_informants": informant_stats
+        #     })
 
         @app.route('/maintenance/export_mongodb', methods=['POST'])
         @WebServiceAccessManager.login_required
@@ -563,3 +765,26 @@ class IntelligenceHubWebService:
         except Exception as e:
             logger.error(f'Invalid post: {post_name}')
             return ''
+
+    def get_time_range_params(self):
+        """
+        Extract and validate time range parameters from request
+        Returns start_time and end_time as datetime objects
+        """
+        start_str = request.args.get('start')
+        end_str = request.args.get('end')
+
+        if start_str:
+            start_time = dateutil.parser.parse(start_str)
+        else:
+            # Default to 24 hours ago if no start time provided
+            start_time = datetime.datetime.now() - datetime.timedelta(hours=24)
+
+        if end_str:
+            end_time = dateutil.parser.parse(end_str)
+        else:
+            # Default to current time if no end time provided
+            end_time = datetime.datetime.now()
+
+        return start_time, end_time
+

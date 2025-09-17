@@ -6,9 +6,12 @@
 
 [Intelligence Query](/intelligences/query)
 
-[Statistics](/statistics/score_distribution.html)
+[Rate Statistics](/statistics/score_distribution.html)
+
+[Intelligence Statistics](/statistics/intelligence_statistics.html)
 
 [MongoDB Export](/maintenance/export_mongodb.html)
+
 
 ## Project Address (github)
 

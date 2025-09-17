@@ -20,7 +20,7 @@ from IntelligenceHubStartup import wsgi_app
 # ==================== CONFIGURATION SECTION ====================
 
 # Server selection (auto-detection with manual override)
-SERVER_TYPE = 'waitress'  # Set to 'waitress', 'gunicorn', or None for auto-detection
+SERVER_TYPE = None  # Set to 'waitress', 'gunicorn', or None for auto-detection
 
 # =================== Common server parameters ===================
 
