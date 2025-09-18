@@ -1,3 +1,4 @@
+import json
 import os
 import traceback
 import uuid
@@ -106,6 +107,7 @@ class IntelligenceHubWebService:
         self.intelligence_hub = intelligence_hub
         self.access_manager = access_manager
         self.rss_publisher = rss_publisher
+        self.wsgi_app = None
 
         # ---------------- RPC Service ----------------
 
@@ -118,6 +120,19 @@ class IntelligenceHubWebService:
     # ---------------------------------------------------- Routers -----------------------------------------------------
 
     def register_routers(self, app: Flask):
+
+        self.wsgi_app = app
+
+        # --------------------------------------------------- Config --------------------------------------------------
+
+        class CustomJSONEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, datetime.datetime):
+                    return obj.strftime("%Y-%m-%d %H:%M:%S")
+                # TODO: Add more data type support.
+                return super().default(obj)
+
+        app.json_encoder = CustomJSONEncoder
 
         # -------------------------------------------------- Security --------------------------------------------------
 
