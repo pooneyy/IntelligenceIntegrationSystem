@@ -581,53 +581,53 @@ class IntelligenceHubWebService:
             result = list(self.intelligence_hub.aggregate(pipeline))
             return jsonify(result)
 
-        # @app.route('/statistics/intelligence_distribution/summary', methods=['GET'])
-        # def get_stats_summary():
-        #     """Get overall statistics for the specified time range"""
-        #     start_time, end_time = self.get_time_range_params()
-        #
-        #     # Total count in time range
-        #     total_count = collection.count_documents({
-        #         "APPENDIX.__TIME_ARCHIVED__": {
-        #             "$gte": start_time,
-        #             "$lte": end_time
-        #         }
-        #     })
-        #
-        #     # Count by informant
-        #     informant_pipeline = [
-        #         {
-        #             "$match": {
-        #                 "APPENDIX.__TIME_ARCHIVED__": {
-        #                     "$gte": start_time,
-        #                     "$lte": end_time
-        #                 }
-        #             }
-        #         },
-        #         {
-        #             "$group": {
-        #                 "_id": "$INFORMANT",
-        #                 "count": {"$sum": 1}
-        #             }
-        #         },
-        #         {
-        #             "$sort": {"count": -1}
-        #         },
-        #         {
-        #             "$limit": 10  # Top 10 informants
-        #         }
-        #     ]
-        #
-        #     informant_stats = list(collection.aggregate(informant_pipeline))
-        #
-        #     return jsonify({
-        #         "total_count": total_count,
-        #         "time_range": {
-        #             "start": start_time,
-        #             "end": end_time
-        #         },
-        #         "top_informants": informant_stats
-        #     })
+        @app.route('/statistics/intelligence_distribution/summary', methods=['GET'])
+        def get_stats_summary():
+            """Get overall statistics for the specified time range"""
+            start_time, end_time = self.get_time_range_params()
+
+            # Total count in time range
+            total_count = self.intelligence_hub.count_documents({
+                "APPENDIX.__TIME_ARCHIVED__": {
+                    "$gte": start_time,
+                    "$lte": end_time
+                }
+            })
+
+            # Count by informant
+            informant_pipeline = [
+                {
+                    "$match": {
+                        "APPENDIX.__TIME_ARCHIVED__": {
+                            "$gte": start_time,
+                            "$lte": end_time
+                        }
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": "$INFORMANT",
+                        "count": {"$sum": 1}
+                    }
+                },
+                {
+                    "$sort": {"count": -1}
+                },
+                {
+                    "$limit": 10  # Top 10 informants
+                }
+            ]
+
+            informant_stats = list(self.intelligence_hub.aggregate(informant_pipeline))
+
+            return jsonify({
+                "total_count": total_count,
+                "time_range": {
+                    "start": start_time,
+                    "end": end_time
+                },
+                "top_informants": informant_stats
+            })
 
         @app.route('/maintenance/export_mongodb', methods=['POST'])
         @WebServiceAccessManager.login_required

@@ -201,17 +201,13 @@ BASE_TEMPLATE = """<!DOCTYPE html>
         <!-- 控制面板 -->
         <div class="control-panel">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="mb-3">
-                        <label for="timeRange" class="form-label fw-bold">Time Range</label>
-                        <div class="time-controls">
-                            <input type="datetime-local" id="startTime" class="form-control">
-                            <span class="align-self-center">to</span>
-                            <input type="datetime-local" id="endTime" class="form-control">
-                        </div>
+                        <label for="startTime" class="form-label fw-bold">Start Time</label>
+                        <input type="datetime-local" id="startTime" class="form-control">
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <div class="mb-3">
                         <label for="timeUnit" class="form-label fw-bold">Time Unit</label>
                         <select id="timeUnit" class="form-select">
@@ -222,13 +218,28 @@ BASE_TEMPLATE = """<!DOCTYPE html>
                         </select>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <div class="mb-3">
-                        <label class="form-label fw-bold invisible">Action</label>
-                        <button id="fetchData" class="btn btn-primary w-100">
-                            <i class="fas fa-sync-alt me-2"></i>Update Chart
-                        </button>
+                        <label for="rangeValue" class="form-label fw-bold">Range</label>
+                        <input type="range" class="form-range" id="rangeSlider" min="8" max="48" step="1">
+                        <div class="form-text text-center" id="rangeValueDisplay">8 Hours</div>
+                        <!-- Hidden input to store the numeric range value -->
+                        <input type="hidden" id="rangeValue" value="8">
                     </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="alert alert-info p-2 mb-0">
+                        <small><strong>Adjusted Query Range:</strong> <span id="adjustedRangeDisplay">Calculating...</span></small>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-12 text-center">
+                    <button id="fetchData" class="btn btn-primary">
+                        <i class="fas fa-sync-alt me-2"></i>Update Chart
+                    </button>
                 </div>
             </div>
         </div>
@@ -286,9 +297,85 @@ BASE_TEMPLATE = """<!DOCTYPE html>
     </div>
 
     <script>
-        // 初始化ECharts实例
-        const chartDom = document.getElementById('chartContainer');
-        const myChart = echarts.init(chartDom);
+        let myChart;
+        let chartDom;
+        
+        // 格式化日期时间为YYYY-MM-DDTHH:MM
+        function formatDateTime(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        }
+        
+        function initScript() {
+            // 1. 初始化ECharts实例 (必须确保在DOM准备完成后执行)
+            chartDom = document.getElementById('chartContainer');
+            if (!chartDom) {
+                console.error('Chart container not found!');
+                return;
+            }
+            myChart = echarts.init(chartDom);
+            myChart.setOption(defaultOption);
+        
+            // 2. 设置默认时间
+            const now = new Date();
+            const oneDayAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+            const startTimeElem = document.getElementById('startTime');
+            if (startTimeElem) {
+                startTimeElem.value = formatDateTime(oneDayAgo);
+            }
+
+            // 3. 初始化UI状态
+            updateRangeSliderSettings();
+            calculateAndDisplayAdjustedRange();
+            
+            // 4. 绑定事件监听器 (确保元素存在)
+            document.getElementById('fetchData')?.addEventListener('click', fetchData);
+            document.getElementById('timeUnit')?.addEventListener('change', function() {
+                updateRangeSliderSettings();
+                calculateAndDisplayAdjustedRange();
+            });
+            document.getElementById('startTime').addEventListener('change', calculateAndDisplayAdjustedRange);
+            
+            // 当滑块值变化时，更新显示并重新计算时间范围
+            document.getElementById('rangeSlider').addEventListener('input', function() {
+                const timeUnit = document.getElementById('timeUnit').value;
+                const rangeValueDisplay = document.getElementById('rangeValueDisplay');
+                switch (timeUnit) {
+                    case 'hourly':
+                        rangeValueDisplay.textContent = `${this.value} Hours`;
+                        break;
+                    case 'daily':
+                        rangeValueDisplay.textContent = `${this.value} Days`;
+                        break;
+                    case 'weekly':
+                        rangeValueDisplay.textContent = `${this.value} Weeks`;
+                        break;
+                    case 'monthly':
+                        rangeValueDisplay.textContent = `${this.value} Months`;
+                        break;
+                }
+                calculateAndDisplayAdjustedRange();
+            });
+            
+            // 初始加载数据
+            fetchData();
+            
+            // 响应窗口大小变化
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        }
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initScript);
+        } else {
+            initScript();
+        }
         
         // 设置默认图表选项
         const defaultOption = {
@@ -369,51 +456,207 @@ BASE_TEMPLATE = """<!DOCTYPE html>
                 containLabel: true
             }
         };
+
+        function calculateAndDisplayAdjustedRange() {
+            try {
+                const startTimeInput = document.getElementById('startTime');
+                const timeUnitSelect = document.getElementById('timeUnit');
+                const rangeSlider = document.getElementById('rangeSlider');
+                const adjustedRangeDisplay = document.getElementById('adjustedRangeDisplay');
+                
+                // 确保元素都存在
+                if (!startTimeInput || !timeUnitSelect || !rangeSlider || !adjustedRangeDisplay) {
+                    console.error('Required elements not found');
+                    return;
+                }
+                
+                // 如果开始时间为空，显示提示信息
+                if (!startTimeInput.value) {
+                    adjustedRangeDisplay.textContent = 'Please select a start time first.';
+                    return;
+                }
         
-        myChart.setOption(defaultOption);
-        
-        // 设置默认时间范围（最近24小时）
-        const now = new Date();
-        const oneDayAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        
-        document.getElementById('startTime').value = formatDateTime(oneDayAgo);
-        document.getElementById('endTime').value = formatDateTime(now);
-        
-        // 格式化日期时间为YYYY-MM-DDTHH:MM
-        function formatDateTime(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
+                const startTime = new Date(startTimeInput.value);
+                const timeUnit = timeUnitSelect.value;
+                const rangeValue = parseInt(rangeSlider.value);
             
-            return `${year}-${month}-${day}T${hours}:${minutes}`;
+                let adjustedStartTime;
+                let adjustedEndTime;
+                let description;
+            
+                // Calculate the adjusted time range based on the time unit
+                switch (timeUnit) {
+                    case 'hourly':
+                        adjustedStartTime = new Date(startTime);
+                        adjustedEndTime = new Date(startTime.getTime() + rangeValue * 60 * 60 * 1000);
+                        description = `${rangeValue} Hour(s)`;
+                        break;
+                    case 'daily':
+                        adjustedStartTime = new Date(startTime);
+                        adjustedStartTime.setHours(0, 0, 0, 0); // Align to the start of the day
+                        adjustedEndTime = new Date(adjustedStartTime);
+                        adjustedEndTime.setDate(adjustedStartTime.getDate() + rangeValue);
+                        description = `${rangeValue} Day(s)`;
+                        break;
+                    case 'weekly':
+                        adjustedStartTime = new Date(startTime);
+                        // Adjust to the previous Monday
+                        const dayOfWeek = adjustedStartTime.getDay();
+                        const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // If Sunday(0), go back 6 days; otherwise, go to previous Monday
+                        adjustedStartTime.setDate(adjustedStartTime.getDate() + diffToMonday);
+                        adjustedStartTime.setHours(0, 0, 0, 0);
+                        adjustedEndTime = new Date(adjustedStartTime);
+                        adjustedEndTime.setDate(adjustedStartTime.getDate() + rangeValue * 7);
+                        description = `${rangeValue} Week(s) (Aligned to Monday)`;
+                        break;
+                    case 'monthly':
+                        adjustedStartTime = new Date(startTime.getFullYear(), startTime.getMonth(), 1); // Align to the 1st of the month
+                        adjustedEndTime = new Date(adjustedStartTime);
+                        adjustedEndTime.setMonth(adjustedStartTime.getMonth() + rangeValue);
+                        description = `${rangeValue} Month(s) (Aligned to 1st)`;
+                        break;
+                    default:
+                        return;
+                }
+                
+                const startFormatted = formatDateTime（adjustedStartTime）;
+                const endFormatted = formatDateTime（adjustedEndTime）;
+            
+                // Update the display
+                adjustedRangeDisplay.textContent = `${startFormatted} ~ ${endFormatted}  |　(${description})`;
+            
+                // Also update the hidden input's value if needed for form submission
+                // document.getElementById('rangeValue').value = rangeValue;
+            } catch (error) {
+                console.error('Error in calculateAndDisplayAdjustedRange:', error);
+                const display = document.getElementById('adjustedRangeDisplay');
+                if (display) {
+                    display.textContent = 'Error calculating range';
+                }
+            }
+        }
+        // 新增函数：根据选择的时间单位更新滑块的范围、步长和显示
+        function updateRangeSliderSettings() {
+            const timeUnit = document.getElementById('timeUnit').value;
+            const rangeSlider = document.getElementById('rangeSlider');
+            const rangeValueDisplay = document.getElementById('rangeValueDisplay');
+        
+            switch (timeUnit) {
+                case 'hourly':
+                    rangeSlider.min = 8;
+                    rangeSlider.max = 48;
+                    rangeSlider.step = 1;
+                    rangeSlider.value = 24; // Default to 24 hours
+                    rangeValueDisplay.textContent = `${rangeSlider.value} Hours`;
+                    break;
+                case 'daily':
+                    rangeSlider.min = 7;
+                    rangeSlider.max = 31;
+                    rangeSlider.step = 1;
+                    rangeSlider.value = 7; // Default to 7 days
+                    rangeValueDisplay.textContent = `${rangeSlider.value} Days`;
+                    break;
+                case 'weekly':
+                    rangeSlider.min = 4;
+                    rangeSlider.max = 52;
+                    rangeSlider.step = 1;
+                    rangeSlider.value = 4; // Default to 4 weeks
+                    rangeValueDisplay.textContent = `${rangeSlider.value} Weeks`;
+                    break;
+                case 'monthly':
+                    rangeSlider.min = 4;
+                    rangeSlider.max = 12;
+                    rangeSlider.step = 1;
+                    rangeSlider.value = 6; // Default to 6 months
+                    rangeValueDisplay.textContent = `${rangeSlider.value} Months`;
+                    break;
+            }
+            // Recalculate the adjusted range whenever the unit changes
+            calculateAndDisplayAdjustedRange();
+        }
+        
+        // 新增函数：获取调整后的查询时间范围（用于API请求）
+        function getAdjustedTimeRange() {
+            const startTimeInput = document.getElementById('startTime');
+            const timeUnitSelect = document.getElementById('timeUnit');
+            const rangeSlider = document.getElementById('rangeSlider');
+        
+            if (!startTimeInput.value) {
+                alert('Please select a start time.');
+                return null;
+            }
+        
+            const startTime = new Date(startTimeInput.value);
+            const timeUnit = timeUnitSelect.value;
+            const rangeValue = parseInt(rangeSlider.value);
+        
+            let adjustedStartTime;
+            let adjustedEndTime;
+        
+            // Calculate the adjusted time range based on the time unit (same logic as display)
+            switch (timeUnit) {
+                case 'hourly':
+                    adjustedStartTime = new Date(startTime);
+                    adjustedEndTime = new Date(startTime.getTime() + rangeValue * 60 * 60 * 1000);
+                    break;
+                case 'daily':
+                    adjustedStartTime = new Date(startTime);
+                    adjustedStartTime.setHours(0, 0, 0, 0);
+                    adjustedEndTime = new Date(adjustedStartTime);
+                    adjustedEndTime.setDate(adjustedStartTime.getDate() + rangeValue);
+                    break;
+                case 'weekly':
+                    adjustedStartTime = new Date(startTime);
+                    const dayOfWeek = adjustedStartTime.getDay();
+                    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                    adjustedStartTime.setDate(adjustedStartTime.getDate() + diffToMonday);
+                    adjustedStartTime.setHours(0, 0, 0, 0);
+                    adjustedEndTime = new Date(adjustedStartTime);
+                    adjustedEndTime.setDate(adjustedStartTime.getDate() + rangeValue * 7);
+                    break;
+                case 'monthly':
+                    adjustedStartTime = new Date(startTime.getFullYear(), startTime.getMonth(), 1);
+                    adjustedEndTime = new Date(adjustedStartTime);
+                    adjustedEndTime.setMonth(adjustedStartTime.getMonth() + rangeValue);
+                    break;
+                default:
+                    return null;
+            }
+        
+            // Format to ISO string or the format your backend expects
+            return {
+                start: adjustedStartTime.toISOString(),
+                end: adjustedEndTime.toISOString()
+            };
         }
         
         // 从API获取数据
         async function fetchData() {
-            const startTime = document.getElementById('startTime').value;
-            const endTime = document.getElementById('endTime').value;
+            // Get the adjusted time range
+            const timeRange = getAdjustedTimeRange();
+            if (!timeRange) return; // Exit if range calculation failed
+        
             const timeUnit = document.getElementById('timeUnit').value;
-            
-            // 显示加载状态
+        
+            // Show loading state
             showLoading();
-            
+        
             try {
-                const apiUrl = `/statistics/intelligence_distribution/${timeUnit}?start=${startTime}&end=${endTime}`;
+                // Use the adjusted start and end times in the API URL
+                const apiUrl = `/statistics/intelligence_distribution/${timeUnit}?start=${encodeURIComponent(timeRange.start)}&end=${encodeURIComponent(timeRange.end)}`;
                 const response = await fetch(apiUrl);
                 const data = await response.json();
-                
-                // 处理数据并更新图表
+        
+                // Process data and update chart
                 processData(data, timeUnit);
-                
-                // 获取摘要信息
-                await fetchSummary(startTime, endTime);
+        
+                // Fetch summary (you might also adjust the summary endpoint to use the new range)
+                await fetchSummary(timeRange.start, timeRange.end);
             } catch (error) {
                 console.error('Error fetching data:', error);
                 alert('Failed to fetch data. Please check console for details.');
             } finally {
-                // 隐藏加载状态
+                // Hide loading state
                 hideLoading();
             }
         }
@@ -506,21 +749,8 @@ BASE_TEMPLATE = """<!DOCTYPE html>
         function formatDateRange(start, end) {
             const startDate = new Date(start);
             const endDate = new Date(end);
-            
-            const options = { year: 'numeric', month: 'short', day: 'numeric' };
-            return `${startDate.toLocaleDateString(undefined, options)} - ${endDate.toLocaleDateString(undefined, options)}`;
+            return `${formatDateTime(startDate, 'YYYY-MM-DD')} ~ ${formatDateTime(endDate, 'YYYY-MM-DD')}`;
         }
-        
-        // 添加事件监听器
-        document.getElementById('fetchData').addEventListener('click', fetchData);
-        
-        // 初始加载数据
-        fetchData();
-        
-        // 响应窗口大小变化
-        window.addEventListener('resize', function() {
-            myChart.resize();
-        });
     </script>
 </body>
 </html>

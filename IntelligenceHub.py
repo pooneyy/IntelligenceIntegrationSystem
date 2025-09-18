@@ -266,6 +266,11 @@ class IntelligenceHub:
         result = query_engine.aggregate(pipeline)
         return result
 
+    def count_documents(self, _filter) -> int:
+        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        result = query_engine.count_documents(_filter)
+        return result
+
     def get_recommendations(self):
         if not self.recommendations:
             self.recommendations = self._generate_recommendation()

@@ -296,6 +296,18 @@ class IntelligenceQueryEngine:
             logger.error(f"Error processing request: {str(e)}")
             return []
 
+    def count_documents(self, _filter: dict) -> int:
+        try:
+            collection = self.__mongo_db.collection
+            results = collection.count_documents(_filter)
+            return results
+        except ValueError:
+            logger.error("Invalid time format. Please use ISO format (e.g., '2024-01-01T00:00:00Z')")
+            return -1
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}")
+            return -1
+
     @staticmethod
     def build_common_conditions(conditions: Dict[str, Any], operator: str = "$and") -> dict:
         """
