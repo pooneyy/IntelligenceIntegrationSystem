@@ -366,12 +366,6 @@ class IntelligenceHubWebService:
         @app.route('/statistics/score_distribution', methods=['GET', 'POST'])
         @WebServiceAccessManager.login_required
         def get_score_distribution():
-            """
-            API endpoint to get score distribution within a specified time range
-            Expected query parameters:
-            - start_time: ISO format start timestamp (e.g., '2024-01-01T00:00:00Z')
-            - end_time: ISO format end timestamp (e.g., '2024-12-31T23:59:59Z')
-            """
             try:
                 # Get query parameters
                 start_time_str = request.args.get('start_time')
@@ -386,41 +380,8 @@ class IntelligenceHubWebService:
                 start_time = datetime.datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
                 end_time = datetime.datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
 
-                # MongoDB aggregation pipeline for score distribution[4,9](@ref)
-                pipeline = [
-                    {
-                        "$match": {
-                            f"APPENDIX.{APPENDIX_TIME_ARCHIVED}": {
-                                "$gte": start_time,
-                                "$lte": end_time
-                            },
-                            f"APPENDIX.{APPENDIX_MAX_RATE_SCORE}": {
-                                "$gte": 1,
-                                "$lte": 10
-                            }
-                        }
-                    },
-                    {
-                        "$group": {
-                            "_id": f"$APPENDIX.{APPENDIX_MAX_RATE_SCORE}",
-                            "count": {"$sum": 1}
-                        }
-                    },
-                    {
-                        "$sort": {"_id": 1}
-                    }
-                ]
-
-                # Execute aggregation query[4](@ref)
-                results = self.intelligence_hub.aggregate(pipeline)
-
-                # Format results for frontend
-                score_distribution = {str(i): 0 for i in range(1, 11)}  # Initialize all scores 1-10 with count 0
-
-                for result in results:
-                    score = str(result['_id'])
-                    if score in score_distribution:
-                        score_distribution[score] = result['count']
+                stat_engine = self.intelligence_hub.get_statistics_engine()
+                score_distribution = stat_engine.get_score_distribution(start_time, end_time)
 
                 # Convert to array format for charting
                 chart_data = [
@@ -455,38 +416,9 @@ class IntelligenceHubWebService:
             """Get record counts grouped by hour for the specified time range"""
             start_time, end_time = self.get_time_range_params()
 
-            # MongoDB aggregation pipeline for hourly statistics
-            pipeline = [
-                {
-                    "$match": {
-                        "APPENDIX.__TIME_ARCHIVED__": {
-                            "$gte": start_time,
-                            "$lte": end_time
-                        }
-                    }
-                },
-                {
-                    "$group": {
-                        "_id": {
-                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "day": {"$dayOfMonth": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "hour": {"$hour": "$APPENDIX.__TIME_ARCHIVED__"}
-                        },
-                        "count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {
-                        "_id.year": 1,
-                        "_id.month": 1,
-                        "_id.day": 1,
-                        "_id.hour": 1
-                    }
-                }
-            ]
+            stat_engine = self.intelligence_hub.get_statistics_engine()
+            result = stat_engine.get_hourly_stats(start_time, end_time)
 
-            result = list(self.intelligence_hub.aggregate(pipeline))
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/daily', methods=['GET'])
@@ -494,36 +426,9 @@ class IntelligenceHubWebService:
             """Get record counts grouped by day for the specified time range"""
             start_time, end_time = self.get_time_range_params()
 
-            # MongoDB aggregation pipeline for daily statistics
-            pipeline = [
-                {
-                    "$match": {
-                        "APPENDIX.__TIME_ARCHIVED__": {
-                            "$gte": start_time,
-                            "$lte": end_time
-                        }
-                    }
-                },
-                {
-                    "$group": {
-                        "_id": {
-                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "day": {"$dayOfMonth": "$APPENDIX.__TIME_ARCHIVED__"}
-                        },
-                        "count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {
-                        "_id.year": 1,
-                        "_id.month": 1,
-                        "_id.day": 1
-                    }
-                }
-            ]
+            stat_engine = self.intelligence_hub.get_statistics_engine()
+            result = stat_engine.get_daily_stats(start_time, end_time)
 
-            result = list(self.intelligence_hub.aggregate(pipeline))
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/weekly', methods=['GET'])
@@ -531,34 +436,9 @@ class IntelligenceHubWebService:
             """Get record counts grouped by week for the specified time range"""
             start_time, end_time = self.get_time_range_params()
 
-            # MongoDB aggregation pipeline for weekly statistics
-            pipeline = [
-                {
-                    "$match": {
-                        "APPENDIX.__TIME_ARCHIVED__": {
-                            "$gte": start_time,
-                            "$lte": end_time
-                        }
-                    }
-                },
-                {
-                    "$group": {
-                        "_id": {
-                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "week": {"$week": "$APPENDIX.__TIME_ARCHIVED__"}
-                        },
-                        "count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {
-                        "_id.year": 1,
-                        "_id.week": 1
-                    }
-                }
-            ]
+            stat_engine = self.intelligence_hub.get_statistics_engine()
+            result = stat_engine.get_weekly_stats(start_time, end_time)
 
-            result = list(self.intelligence_hub.aggregate(pipeline))
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/monthly', methods=['GET'])
@@ -566,34 +446,9 @@ class IntelligenceHubWebService:
             """Get record counts grouped by month for the specified time range"""
             start_time, end_time = self.get_time_range_params()
 
-            # MongoDB aggregation pipeline for monthly statistics
-            pipeline = [
-                {
-                    "$match": {
-                        "APPENDIX.__TIME_ARCHIVED__": {
-                            "$gte": start_time,
-                            "$lte": end_time
-                        }
-                    }
-                },
-                {
-                    "$group": {
-                        "_id": {
-                            "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                            "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"}
-                        },
-                        "count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {
-                        "_id.year": 1,
-                        "_id.month": 1
-                    }
-                }
-            ]
+            stat_engine = self.intelligence_hub.get_statistics_engine()
+            result = stat_engine.get_monthly_stats(start_time, end_time)
 
-            result = list(self.intelligence_hub.aggregate(pipeline))
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/summary', methods=['GET'])
@@ -601,39 +456,8 @@ class IntelligenceHubWebService:
             """Get overall statistics for the specified time range"""
             start_time, end_time = self.get_time_range_params()
 
-            # Total count in time range
-            total_count = self.intelligence_hub.count_documents({
-                "APPENDIX.__TIME_ARCHIVED__": {
-                    "$gte": start_time,
-                    "$lte": end_time
-                }
-            })
-
-            # Count by informant
-            informant_pipeline = [
-                {
-                    "$match": {
-                        "APPENDIX.__TIME_ARCHIVED__": {
-                            "$gte": start_time,
-                            "$lte": end_time
-                        }
-                    }
-                },
-                {
-                    "$group": {
-                        "_id": "$INFORMANT",
-                        "count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {"count": -1}
-                },
-                {
-                    "$limit": 10  # Top 10 informants
-                }
-            ]
-
-            informant_stats = list(self.intelligence_hub.aggregate(informant_pipeline))
+            stat_engine = self.intelligence_hub.get_statistics_engine()
+            total_count, informant_stats = stat_engine.get_stats_summary(start_time, end_time)
 
             return jsonify({
                 "total_count": total_count,

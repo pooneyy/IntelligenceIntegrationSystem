@@ -234,7 +234,7 @@ class IntelligenceStatisticsEngine:
 
         # return jsonify(result)
 
-    def get_stats_summary(self, start_time: datetime.datetime, end_time: datetime.datetime):
+    def get_stats_summary(self, start_time: datetime.datetime, end_time: datetime.datetime) -> Tuple[int, list]:
         """Get overall statistics for the specified time range"""
         collection = self.__mongo_db.collection
 
@@ -271,7 +271,8 @@ class IntelligenceStatisticsEngine:
         ]
 
         informant_stats = list(collection.aggregate(informant_pipeline))
-        return informant_stats
+
+        return total_count, informant_stats
 
         # return jsonify({
         #     "total_count": total_count,

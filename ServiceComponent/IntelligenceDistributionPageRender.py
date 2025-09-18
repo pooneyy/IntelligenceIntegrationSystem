@@ -519,8 +519,8 @@ BASE_TEMPLATE = """<!DOCTYPE html>
                         return;
                 }
                 
-                const startFormatted = formatDateTime（adjustedStartTime）;
-                const endFormatted = formatDateTime（adjustedEndTime）;
+                const startFormatted = formatDateTime(adjustedStartTime);
+                const endFormatted = formatDateTime(adjustedEndTime);
             
                 // Update the display
                 adjustedRangeDisplay.textContent = `${startFormatted} ~ ${endFormatted}  |　(${description})`;

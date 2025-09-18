@@ -10,6 +10,7 @@ from attr import dataclass
 from typing import Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
+from ServiceComponent.IntelligenceStatisticsEngine import IntelligenceStatisticsEngine
 from prompts import ANALYSIS_PROMPT, AGGRESSIVE_PROMPT, SUGGESTION_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
@@ -275,6 +276,14 @@ class IntelligenceHub:
         if not self.recommendations:
             self.recommendations = self._generate_recommendation()
         return self.recommendations
+
+    # ------------------------------------------------ Directly Access ------------------------------------------------
+
+    def get_query_engine(self) -> IntelligenceQueryEngine:
+        return IntelligenceQueryEngine(self.mongo_db_archive)
+
+    def get_statistics_engine(self) -> IntelligenceStatisticsEngine:
+        return IntelligenceStatisticsEngine(self.mongo_db_archive)
 
     # ---------------------------------------------------- Updates -----------------------------------------------------
 
