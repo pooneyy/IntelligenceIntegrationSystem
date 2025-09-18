@@ -345,7 +345,7 @@ class IntelligenceHubWebService:
                 traceback.print_exc()
                 return jsonify({"error": "Server error"}), 500
 
-        # --------------------------------------------------------------------------------------------------------------
+        # ---------------------------------------------- Management Pages ----------------------------------------------
 
         @app.route('/statistics/score_distribution.html', methods=['GET'])
         @WebServiceAccessManager.login_required
@@ -358,10 +358,11 @@ class IntelligenceHubWebService:
             return get_intelligence_statistics_page()
 
         @app.route('/maintenance/export_mongodb.html', methods=['GET'])
+        @WebServiceAccessManager.login_required
         def export_mongodb_page():
             return render_template('export_mongodb.html')
 
-    # ------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------- Management Service -----------------------------------------------
 
         @app.route('/statistics/score_distribution', methods=['GET', 'POST'])
         @WebServiceAccessManager.login_required
@@ -412,6 +413,7 @@ class IntelligenceHubWebService:
                 }), 500
 
         @app.route('/statistics/intelligence_distribution/hourly', methods=['GET'])
+        @WebServiceAccessManager.login_required
         def get_hourly_stats():
             """Get record counts grouped by hour for the specified time range"""
             start_time, end_time = self.get_time_range_params()
@@ -422,6 +424,7 @@ class IntelligenceHubWebService:
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/daily', methods=['GET'])
+        @WebServiceAccessManager.login_required
         def get_daily_stats():
             """Get record counts grouped by day for the specified time range"""
             start_time, end_time = self.get_time_range_params()
@@ -432,6 +435,7 @@ class IntelligenceHubWebService:
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/weekly', methods=['GET'])
+        @WebServiceAccessManager.login_required
         def get_weekly_stats():
             """Get record counts grouped by week for the specified time range"""
             start_time, end_time = self.get_time_range_params()
@@ -442,6 +446,7 @@ class IntelligenceHubWebService:
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/monthly', methods=['GET'])
+        @WebServiceAccessManager.login_required
         def get_monthly_stats():
             """Get record counts grouped by month for the specified time range"""
             start_time, end_time = self.get_time_range_params()
@@ -452,6 +457,7 @@ class IntelligenceHubWebService:
             return jsonify(result)
 
         @app.route('/statistics/intelligence_distribution/summary', methods=['GET'])
+        @WebServiceAccessManager.login_required
         def get_stats_summary():
             """Get overall statistics for the specified time range"""
             start_time, end_time = self.get_time_range_params()
@@ -552,7 +558,7 @@ class IntelligenceHubWebService:
                     'message': 'File not found'
                 }), 404
 
-    # ----------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def handle_error(self, error: str):
         print(f'Handle error in IntelligenceHubWebService: {error}')

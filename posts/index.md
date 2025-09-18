@@ -2,15 +2,29 @@
 
 ## IIS Links
 
-[Intelligence List](/intelligences?offset=0&count=50&threshold=8)
+-----------------------------------------------
 
-[Intelligence Query](/intelligences/query)
+#### Intelligence
 
-[Rate Statistics](/statistics/score_distribution.html)
++ [Intelligence List](/intelligences?offset=0&count=50&threshold=8)
 
-[Intelligence Statistics](/statistics/intelligence_statistics.html)
++ [Intelligence Query](/intelligences/query)
 
-[MongoDB Export](/maintenance/export_mongodb.html)
+-----------------------------------------------
+
+#### Statistics
+
++ [Rate Statistics](/statistics/score_distribution.html)
+
++ [Intelligence Statistics](/statistics/intelligence_statistics.html)
+
+-----------------------------------------------
+
+#### Maintenance
+
++ [MongoDB Export](/maintenance/export_mongodb.html)
+
+-----------------------------------------------
 
 
 ## Project Address (github)
