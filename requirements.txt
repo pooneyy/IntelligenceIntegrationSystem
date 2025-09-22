@@ -15,6 +15,7 @@ psutil
 # gunicorn                   # Only on Linux
 waitress                     # WSGI service
 apscheduler
+tzlocal
 
 ##############################
 ### Network Requests & Parsing
