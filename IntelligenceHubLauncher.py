@@ -16,7 +16,6 @@ import subprocess
 from abc import ABC, abstractmethod
 from IntelligenceHubStartup import wsgi_app
 
-
 # ==================== CONFIGURATION SECTION ====================
 
 # Server selection (auto-detection with manual override)
@@ -312,14 +311,6 @@ class ServerManager:
 
     def setup_logging(self):
         """Configure logging"""
-        logging.basicConfig(
-            level=LOG_LEVEL,
-            format=LOG_FORMAT,
-            handlers=[
-                logging.FileHandler(LOG_FILE),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
         self.logger = logging.getLogger("ServerManager")
 
     def determine_server_type(self):

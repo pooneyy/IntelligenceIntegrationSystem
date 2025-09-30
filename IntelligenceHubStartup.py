@@ -1,6 +1,7 @@
 import time
 import uuid
 import datetime
+import traceback
 from flask import Flask
 from typing import Tuple
 
@@ -9,6 +10,7 @@ from IntelligenceHub import IntelligenceHub
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.SystemMonotorLauncher import start_system_monitor
+from PyLoggingBackend import setup_logging, LoggerBackend
 from MyPythonUtility.easy_config import EasyConfig
 from ServiceComponent.UserManager import UserManager
 from ServiceComponent.RSSPublisher import RSSPublisher
@@ -104,6 +106,24 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
     return hub, hub_service
 
 
-ihub, ihub_service = start_intelligence_hub_service()
+# ----------------------------------------------------------------------------------------------------------------------
 
-start_system_monitor()
+def run():
+    log_file = 'iis.log'
+    setup_logging(log_file)
+
+    ihub, ihub_service = start_intelligence_hub_service()
+
+    log_backend = LoggerBackend(monitoring_file_path=log_file, cache_limit_count=100000)
+    log_backend.register_router(app=wsgi_app, wrapper=ihub_service.access_manager.login_required)
+
+    start_system_monitor()
+
+
+try:
+    run()
+except Exception as e:
+    print(str(e))
+    print(traceback.format_exc())
+finally:
+    pass
