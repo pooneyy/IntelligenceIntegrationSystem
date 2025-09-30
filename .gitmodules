@@ -2,3 +2,6 @@
 	path = MyPythonUtility
 	url = https://github.com/SleepySoft/MyPythonUtility.git
 	branch = main
+[submodule "PyLoggingBackend"]
+	path = PyLoggingBackend
+	url = https://github.com/SleepySoft/PyLoggingBackend.git
