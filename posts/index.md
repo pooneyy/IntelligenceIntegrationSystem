@@ -22,6 +22,10 @@
 
 #### Maintenance
 
++ [Logger Viewer](/logger/log_viewer)
+
++ [System Monitor](/monitor/api/dashboard)
+
 + [MongoDB Export](/maintenance/export_mongodb.html)
 
 -----------------------------------------------

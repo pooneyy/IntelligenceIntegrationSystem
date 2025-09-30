@@ -170,12 +170,12 @@ def run():
     log_backend.register_router(app=wsgi_app, wrapper=ihub_service.access_manager.login_required)
 
     # Monitor in the same process and the same service
-    # monitor_api = MonitorAPI(app=wsgi_app, wrapper=ihub_service.access_manager.login_required, prefix='/monitor')
-    # self_pid = os.getpid()
-    # monitor_api.monitor.add_process(self_pid)
+    monitor_api = MonitorAPI(app=wsgi_app, wrapper=ihub_service.access_manager.login_required, prefix='/monitor')
+    self_pid = os.getpid()
+    monitor_api.monitor.add_process(self_pid)
 
     # Monitor in standalone process
-    start_system_monitor()
+    # start_system_monitor()
 
     threading.Thread(target=partial(show_intelligence_hub_statistics_forever, ihub)).start()
 

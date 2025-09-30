@@ -153,26 +153,26 @@ class MonitorAPI:
     def _setup_routes(self):
         """Set up Flask routes for the API on the blueprint."""
 
-        @self.wrapper
         @self.blueprint.route('/api/stats', methods=['GET'])
+        @self.wrapper
         def get_all_stats():
             """Get complete system and process statistics."""
             return jsonify(self.monitor.get_all_stats())
 
-        @self.wrapper
         @self.blueprint.route('/api/system', methods=['GET'])
+        @self.wrapper
         def get_system_stats():
             """Get system-wide statistics."""
             return jsonify(self.monitor.get_system_stats())
 
-        @self.wrapper
         @self.blueprint.route('/api/processes', methods=['GET'])
+        @self.wrapper
         def get_processes():
             """Get list of monitored processes."""
             return jsonify(self.monitor.get_monitored_processes())
 
-        @self.wrapper
         @self.blueprint.route('/api/process/<int:pid>', methods=['GET'])
+        @self.wrapper
         def get_process_stats(pid: int):
             """Get statistics for specific process."""
             stats = self.monitor.get_process_stats(pid)
@@ -180,8 +180,8 @@ class MonitorAPI:
                 abort(404, description=f"Process {pid} not found or not monitored")
             return jsonify(stats)
 
-        @self.wrapper
         @self.blueprint.route('/api/process', methods=['POST'])
+        @self.wrapper
         def add_process():
             """Add a process to monitoring."""
             data = request.get_json()
@@ -194,8 +194,8 @@ class MonitorAPI:
             else:
                 abort(400, description=f"Could not monitor process {pid}")
 
-        @self.wrapper
         @self.blueprint.route('/api/process/<int:pid>', methods=['DELETE'])
+        @self.wrapper
         def remove_process(pid: int):
             """Remove a process from monitoring."""
             if self.monitor.remove_process(pid):
@@ -203,8 +203,8 @@ class MonitorAPI:
             else:
                 abort(404, description=f"Process {pid} not found in monitoring list")
 
-        @self.wrapper
         @self.blueprint.route('/api/dashboard', methods=['GET'])
+        @self.wrapper
         def get_dashboard():
             """Enhanced HTML dashboard with detailed process monitoring data."""
             stats = self.monitor.get_all_stats()
