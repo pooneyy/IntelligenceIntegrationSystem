@@ -140,8 +140,7 @@ class IntelligenceHub:
         self.post_process_thread.start()
 
     def shutdown(self, timeout=10):
-        """优雅关闭系统"""
-        logger.info("启动关闭流程...")
+        logger.info("Intelligence hub shutting down...")
 
         # 设置关闭标志
         self.shutdown_flag.set()
@@ -155,7 +154,7 @@ class IntelligenceHub:
 
         # 清理资源
         self._cleanup_resources()
-        logger.info("Service has stopped.")
+        logger.info("Intelligence hub has stopped.")
 
     # --------------------------------------- Shutdowns ---------------------------------------
 
@@ -256,12 +255,6 @@ class IntelligenceHub:
         summary = query_engine.get_intelligence_summary()
         return summary["total_count"], summary["base_uuid"]
 
-    def get_paginated_intelligences(self, base_uuid: Optional[str], offset: int, limit: int) -> List[dict]:
-        # TODO: Combine with query_intelligence()
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        result = query_engine.get_paginated_intelligences(base_uuid, offset, limit)
-        return result
-
     def aggregate(self, pipeline: list) -> list:
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
         result = query_engine.aggregate(pipeline)
@@ -291,8 +284,8 @@ class IntelligenceHub:
         if not isinstance(rating, dict):
             return IntelligenceHub.Error(error_list=['Invalid rating'])
 
-        self.mongo_db_archive.update({
-            'UUID': _uuid},
+        self.mongo_db_archive.update(
+            { 'UUID': _uuid },
             {f"APPENDIX.{APPENDIX_MANUAL_RATING}": rating})
 
         return True

@@ -1,10 +1,13 @@
 import os
 import shutil
+import threading
 import time
 import uuid
 import logging
 import datetime
 import traceback
+from functools import partial
+
 from flask import Flask
 from typing import Tuple
 
@@ -12,6 +15,7 @@ from GlobalConfig import *
 from IntelligenceHub import IntelligenceHub
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
+from Tools.SystemMonitorService import MonitorAPI
 from Tools.SystemMonotorLauncher import start_system_monitor
 from PyLoggingBackend import setup_logging, LoggerBackend
 from MyPythonUtility.easy_config import EasyConfig
@@ -31,11 +35,14 @@ wsgi_app.config.update(
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def show_intelligence_hub_statistics_forever(hub: IntelligenceHub):
     prev_statistics = {}
     while True:
         if hub.statistics != prev_statistics:
-            print(f'Hub queue size: {hub.statistics}')
+            logger.info(f'Hub queue size: {hub.statistics}')
             prev_statistics = hub.statistics
         time.sleep(2)
 
@@ -43,8 +50,8 @@ def show_intelligence_hub_statistics_forever(hub: IntelligenceHub):
 def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWebService]:
     config = EasyConfig()
 
-    print('Apply config: ')
-    print(config.dump_text())
+    logger.info('Apply config: ')
+    logger.info(config.dump_text())
 
     ai_service_url = config.get('intelligence_hub.ai_service.url', OPEN_AI_API_BASE_URL_SELECT)
     ai_service_token = config.get('intelligence_hub.ai_service.token', 'Sleepy')
@@ -120,7 +127,7 @@ def backup_and_clean_previous_log_file():
         history_dir = HISTORY_LOG_FOLDER
         if not os.path.exists(history_dir):
             os.makedirs(history_dir)
-            print(f"Built log archived dir: {history_dir}")
+            logger.info(f"Built log archived dir: {history_dir}")
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         archived_log_name = f"iis_{timestamp}.log"
@@ -128,13 +135,13 @@ def backup_and_clean_previous_log_file():
 
         try:
             shutil.copy2(IIS_LOG_FILE, archived_log_path)
-            print(f"Archived log file: {IIS_LOG_FILE} -> {archived_log_path}")
+            logger.info(f"Archived log file: {IIS_LOG_FILE} -> {archived_log_path}")
 
             os.remove(IIS_LOG_FILE)
-            print(f"Removed log file: {IIS_LOG_FILE}")
+            logger.info(f"Removed log file: {IIS_LOG_FILE}")
 
         except Exception as e:
-            print(f"Process log file exception: {e}")
+            logger.info(f"Process log file exception: {e}")
 
 
 def limit_logger_level(logger_name: str, level = logging.WARNING):
@@ -162,7 +169,15 @@ def run():
     log_backend = LoggerBackend(monitoring_file_path=IIS_LOG_FILE, cache_limit_count=100000)
     log_backend.register_router(app=wsgi_app, wrapper=ihub_service.access_manager.login_required)
 
+    # Monitor in the same process and the same service
+    # monitor_api = MonitorAPI(app=wsgi_app, wrapper=ihub_service.access_manager.login_required, prefix='/monitor')
+    # self_pid = os.getpid()
+    # monitor_api.monitor.add_process(self_pid)
+
+    # Monitor in standalone process
     start_system_monitor()
+
+    threading.Thread(target=partial(show_intelligence_hub_statistics_forever, ihub)).start()
 
 
 try:

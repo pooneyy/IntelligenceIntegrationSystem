@@ -103,14 +103,12 @@ All operations are protected with reentrant locks for thread safety.
 import os
 import sys
 import argparse
-
-from flask import Flask, jsonify, request, abort
+from flask import Flask, Blueprint, jsonify, request, abort
 
 root_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(root_path)
 
 from SystemMonitor import SystemMonitor
-
 
 DEFAULT_PORT = 8000
 
@@ -118,39 +116,63 @@ DEFAULT_PORT = 8000
 class MonitorAPI:
     """Web API for system monitoring data and management."""
 
-    def __init__(self, host: str = '0.0.0.0', port: int = DEFAULT_PORT):
+    def __init__(self, app=None, wrapper=None, host: str = '0.0.0.0', port: int = DEFAULT_PORT, prefix: str = ''):
         """
         Initialize the monitoring API.
 
         Args:
-            host: Host address to bind to
-            port: Port number to listen on
+            app: External Flask app instance (optional). If provided, routes will be registered to this app.
+            host: Host address to bind to (used only in standalone mode)
+            port: Port number to listen on (used only in standalone mode)
+            prefix: URL prefix for all routes (e.g., '/monitor')
         """
-        self.app = Flask(__name__)
         self.host = host
         self.port = port
+        self.prefix = prefix.rstrip('/')
         self.monitor = SystemMonitor()
+        self.wrapper = wrapper or (lambda fn: fn)
+
+        # Create a blueprint for all monitoring routes
+        self.blueprint = Blueprint('monitor', __name__)
+
+        # Setup routes on the blueprint
         self._setup_routes()
 
-    def _setup_routes(self):
-        """Set up Flask routes for the API."""
+        # Register blueprint with the provided app or create own app
+        if app is not None:
+            # External app mode: register blueprint to external app with prefix
+            self.app = app
+            app.register_blueprint(self.blueprint, url_prefix=self.prefix)
+            self._is_standalone = False
+        else:
+            # Standalone mode: create own app and register blueprint with prefix
+            self.app = Flask(__name__)
+            self.app.register_blueprint(self.blueprint, url_prefix=self.prefix)
+            self._is_standalone = True
 
-        @self.app.route('/api/stats', methods=['GET'])
+    def _setup_routes(self):
+        """Set up Flask routes for the API on the blueprint."""
+
+        @self.wrapper
+        @self.blueprint.route('/api/stats', methods=['GET'])
         def get_all_stats():
             """Get complete system and process statistics."""
             return jsonify(self.monitor.get_all_stats())
 
-        @self.app.route('/api/system', methods=['GET'])
+        @self.wrapper
+        @self.blueprint.route('/api/system', methods=['GET'])
         def get_system_stats():
             """Get system-wide statistics."""
             return jsonify(self.monitor.get_system_stats())
 
-        @self.app.route('/api/processes', methods=['GET'])
+        @self.wrapper
+        @self.blueprint.route('/api/processes', methods=['GET'])
         def get_processes():
             """Get list of monitored processes."""
             return jsonify(self.monitor.get_monitored_processes())
 
-        @self.app.route('/api/process/<int:pid>', methods=['GET'])
+        @self.wrapper
+        @self.blueprint.route('/api/process/<int:pid>', methods=['GET'])
         def get_process_stats(pid: int):
             """Get statistics for specific process."""
             stats = self.monitor.get_process_stats(pid)
@@ -158,7 +180,8 @@ class MonitorAPI:
                 abort(404, description=f"Process {pid} not found or not monitored")
             return jsonify(stats)
 
-        @self.app.route('/api/process', methods=['POST'])
+        @self.wrapper
+        @self.blueprint.route('/api/process', methods=['POST'])
         def add_process():
             """Add a process to monitoring."""
             data = request.get_json()
@@ -171,7 +194,8 @@ class MonitorAPI:
             else:
                 abort(400, description=f"Could not monitor process {pid}")
 
-        @self.app.route('/api/process/<int:pid>', methods=['DELETE'])
+        @self.wrapper
+        @self.blueprint.route('/api/process/<int:pid>', methods=['DELETE'])
         def remove_process(pid: int):
             """Remove a process from monitoring."""
             if self.monitor.remove_process(pid):
@@ -179,46 +203,95 @@ class MonitorAPI:
             else:
                 abort(404, description=f"Process {pid} not found in monitoring list")
 
-        @self.app.route('/api/dashboard', methods=['GET'])
+        @self.wrapper
+        @self.blueprint.route('/api/dashboard', methods=['GET'])
         def get_dashboard():
             """Enhanced HTML dashboard with detailed process monitoring data."""
             stats = self.monitor.get_all_stats()
 
             # Format memory values for human readability
             def format_memory(bytes_value):
+                if bytes_value is None:
+                    return "N/A"
                 for unit in ['B', 'KB', 'MB', 'GB']:
                     if bytes_value < 1024.0:
                         return f"{bytes_value:.1f} {unit}"
                     bytes_value /= 1024.0
                 return f"{bytes_value:.1f} TB"
 
-            # Create detailed process table
+            # Extract values with fallbacks for system stats
+            system_data = stats.get('system', {})
+            cpu_data = system_data.get('cpu', {})
+            memory_data = system_data.get('memory', {})
+            disk_data = system_data.get('disk', {})
+            disk_usage = disk_data.get('usage', {})
+
+            # Get values with safe fallbacks
+            cpu_percent = cpu_data.get('percent', 0)
+            memory_percent = memory_data.get('percent', 0)
+            disk_percent = disk_usage.get('percent', 0)
+            active_users = len(system_data.get('users', []))
+
+            total_memory = memory_data.get('total', 0)
+            available_memory = memory_data.get('available', 0)
+            used_memory = memory_data.get('used', 0)
+            free_memory = memory_data.get('free', 0)
+            disk_total = disk_usage.get('total', 0)
+            disk_free = disk_usage.get('free', 0)
+
+            timestamp = stats.get('timestamp', 'Unknown')
+
+            # Create detailed process table with safe field access
             process_rows = []
-            for pid, data in stats['processes'].items():
+            processes = stats.get('processes', {})
+
+            for pid, data in processes.items():
+                # Extract nested data with fallbacks
                 mem_info = data.get('memory_info', {})
                 cpu_times = data.get('cpu_times', {})
                 io_info = data.get('io_counters', {})
 
+                # Get all values with appropriate fallbacks
+                name = data.get('name', 'N/A')
+                status = data.get('status', 'N/A')
+                cpu_percent_val = data.get('cpu_percent', 0)
+                memory_percent_val = data.get('memory_percent', 0)
+                rss_memory = mem_info.get('rss', 0)
+                vms_memory = mem_info.get('vms', 0)
+                num_threads = data.get('num_threads', 'N/A')
+                num_handles = data.get('num_handles', 'N/A')
+                read_bytes = io_info.get('read_bytes', 0) // 1024
+                write_bytes = io_info.get('write_bytes', 0) // 1024
+                connections = data.get('connections', 0)
+                user_cpu = cpu_times.get('user', 0)
+                system_cpu = cpu_times.get('system', 0)
+
                 process_rows.append(f"""
                     <tr>
-                        <td>{data.get('name', 'N/A')}</td>
+                        <td>{name}</td>
                         <td>{pid}</td>
-                        <td>{data.get('status', 'N/A')}</td>
-                        <td>{data.get('cpu_percent', 0):.1f}%</td>
-                        <td>{data.get('memory_percent', 0):.1f}%</td>
-                        <td>{format_memory(mem_info.get('rss', 0))}</td>
-                        <td>{format_memory(mem_info.get('vms', 0))}</td>
-                        <td>{data.get('num_threads', 'N/A')}</td>
-                        <td>{data.get('num_handles', 'N/A')}</td>
-                        <td>{io_info.get('read_bytes', 0) // 1024} KB</td>
-                        <td>{io_info.get('write_bytes', 0) // 1024} KB</td>
-                        <td>{data.get('connections', 0)}</td>
-                        <td>{cpu_times.get('user', 0):.1f}s</td>
-                        <td>{cpu_times.get('system', 0):.1f}s</td>
+                        <td>{status}</td>
+                        <td>{cpu_percent_val:.1f}%</td>
+                        <td>{memory_percent_val:.1f}%</td>
+                        <td>{format_memory(rss_memory)}</td>
+                        <td>{format_memory(vms_memory)}</td>
+                        <td>{num_threads}</td>
+                        <td>{num_handles}</td>
+                        <td>{read_bytes} KB</td>
+                        <td>{write_bytes} KB</td>
+                        <td>{connections}</td>
+                        <td>{user_cpu:.1f}s</td>
+                        <td>{system_cpu:.1f}s</td>
                     </tr>
                 """)
 
             process_table = "".join(process_rows)
+
+            base_path = self.prefix if self.prefix else ''
+            stats_url = f"{base_path}/api/stats" if base_path else "/api/stats"
+            system_url = f"{base_path}/api/system" if base_path else "/api/system"
+            processes_url = f"{base_path}/api/processes" if base_path else "/api/processes"
+            add_process_url = f"{base_path}/api/process" if base_path else "/api/process"
 
             return f"""
             <html>
@@ -299,25 +372,25 @@ class MonitorAPI:
                 <body>
                     <div class="dashboard-container">
                         <h1>Enhanced System Monitoring Dashboard</h1>
-                        <p>Last updated: {stats['timestamp']}</p>
+                        <p>Last updated: {timestamp}</p>
 
                         <div class="card system-stats">
                             <h2>📊 System Statistics</h2>
                             <div class="metric-grid">
                                 <div class="metric-card">
-                                    <div class="metric-value">{stats['system']['cpu']['percent']}%</div>
+                                    <div class="metric-value">{cpu_percent}%</div>
                                     <div class="metric-label">CPU Usage</div>
                                 </div>
                                 <div class="metric-card">
-                                    <div class="metric-value">{stats['system']['memory']['percent']}%</div>
+                                    <div class="metric-value">{memory_percent}%</div>
                                     <div class="metric-label">Memory Usage</div>
                                 </div>
                                 <div class="metric-card">
-                                    <div class="metric-value">{stats['system']['disk']['usage']['percent']}%</div>
+                                    <div class="metric-value">{disk_percent}%</div>
                                     <div class="metric-label">Disk Usage</div>
                                 </div>
                                 <div class="metric-card">
-                                    <div class="metric-value">{len(stats['system'].get('users', []))}</div>
+                                    <div class="metric-value">{active_users}</div>
                                     <div class="metric-label">Active Users</div>
                                 </div>
                             </div>
@@ -332,27 +405,27 @@ class MonitorAPI:
                                 </tr>
                                 <tr>
                                     <td>Total Memory</td>
-                                    <td>{format_memory(stats['system']['memory']['total'])}</td>
+                                    <td>{format_memory(total_memory)}</td>
                                     <td>Available Memory</td>
-                                    <td>{format_memory(stats['system']['memory']['available'])}</td>
+                                    <td>{format_memory(available_memory)}</td>
                                 </tr>
                                 <tr>
                                     <td>Used Memory</td>
-                                    <td>{format_memory(stats['system']['memory']['used'])}</td>
+                                    <td>{format_memory(used_memory)}</td>
                                     <td>Free Memory</td>
-                                    <td>{format_memory(stats['system']['memory']['free'])}</td>
+                                    <td>{format_memory(free_memory)}</td>
                                 </tr>
                                 <tr>
                                     <td>Disk Total</td>
-                                    <td>{format_memory(stats['system']['disk']['usage']['total'])}</td>
+                                    <td>{format_memory(disk_total)}</td>
                                     <td>Disk Free</td>
-                                    <td>{format_memory(stats['system']['disk']['usage']['free'])}</td>
+                                    <td>{format_memory(disk_free)}</td>
                                 </tr>
                             </table>
                         </div>
 
                         <div class="card process-stats">
-                            <h2>🔄 Monitored Processes ({len(stats['processes'])})</h2>
+                            <h2>🔄 Monitored Processes ({len(processes)})</h2>
 
                             <table class="info-table">
                                 <thead>
@@ -381,7 +454,7 @@ class MonitorAPI:
 
                         <div class="card">
                             <h2>⚙️ Process Management</h2>
-                            <form action="/api/process" method="post" style="margin: 15px 0;">
+                            <form action="{add_process_url}" method="post" style="margin: 15px 0;">
                                 <input type="number" name="pid" placeholder="Enter PID" required 
                                        style="padding: 10px; margin-right: 10px; border: 1px solid #ddd; border-radius: 4px;">
                                 <button type="submit" style="padding: 10px 20px; background-color: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer;">
@@ -391,13 +464,13 @@ class MonitorAPI:
 
                             <h3>Quick Actions</h3>
                             <div style="display: flex; gap: 10px;">
-                                <a href="/api/stats" target="_blank" style="padding: 10px; background-color: #2196f3; color: white; text-decoration: none; border-radius: 4px;">
+                                <a href="{stats_url}" target="_blank" style="padding: 10px; background-color: #2196f3; color: white; text-decoration: none; border-radius: 4px;">
                                     View Raw JSON
                                 </a>
-                                <a href="/api/system" target="_blank" style="padding: 10px; background-color: #ff9800; color: white; text-decoration: none; border-radius: 4px;">
+                                <a href="{system_url}" target="_blank" style="padding: 10px; background-color: #ff9800; color: white; text-decoration: none; border-radius: 4px;">
                                     System Stats
                                 </a>
-                                <a href="/api/processes" target="_blank" style="padding: 10px; background-color: #9c27b0; color: white; text-decoration: none; border-radius: 4px;">
+                                <a href="{processes_url}" target="_blank" style="padding: 10px; background-color: #9c27b0; color: white; text-decoration: none; border-radius: 4px;">
                                     Process List
                                 </a>
                             </div>
@@ -408,11 +481,15 @@ class MonitorAPI:
             """
 
     def start(self):
-        """Start the monitoring system and web server."""
+        """Start the monitoring system and web server (only in standalone mode)."""
         self.monitor.start_monitoring()
-        print(f"Starting monitoring API on http://{self.host}:{self.port}")
-        print(f" - Dash board: http://{self.host}:{self.port}/api/dashboard")
-        self.app.run(host=self.host, port=self.port, debug=False)
+        if self._is_standalone:
+            base_url = f"http://{self.host}:{self.port}{self.prefix}"
+            print(f"Starting monitoring API on {base_url}")
+            print(f" - Dashboard: {base_url}/api/dashboard")
+            self.app.run(host=self.host, port=self.port, debug=False)
+        else:
+            print(f"Monitoring routes registered to external Flask application with prefix: {self.prefix}")
 
     def stop(self):
         """Stop the monitoring system."""
@@ -430,9 +507,10 @@ def parse_arguments():
 
 
 def main():
-    """Main entry point for the monitoring API."""
+    """Main entry point for the monitoring API (standalone mode)."""
     args = parse_arguments()
 
+    # Create MonitorAPI instance in standalone mode (no external app provided)
     api = MonitorAPI(host=args.host, port=args.port)
 
     # Add initial PIDs if specified
@@ -445,7 +523,6 @@ def main():
 
     # Add self if requested
     if args.add_self:
-        import os
         self_pid = os.getpid()
         if api.monitor.add_process(self_pid):
             print(f"Added self (PID {self_pid}) to monitoring")
