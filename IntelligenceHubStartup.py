@@ -1,5 +1,8 @@
+import os
+import shutil
 import time
 import uuid
+import logging
 import datetime
 import traceback
 from flask import Flask
@@ -108,13 +111,55 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+IIS_LOG_FILE = 'iis.log'
+HISTORY_LOG_FOLDER = 'history_log'
+
+
+def backup_and_clean_previous_log_file():
+    if os.path.exists(IIS_LOG_FILE):
+        history_dir = HISTORY_LOG_FOLDER
+        if not os.path.exists(history_dir):
+            os.makedirs(history_dir)
+            print(f"Built log archived dir: {history_dir}")
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        archived_log_name = f"iis_{timestamp}.log"
+        archived_log_path = os.path.join(history_dir, archived_log_name)
+
+        try:
+            shutil.copy2(IIS_LOG_FILE, archived_log_path)
+            print(f"Archived log file: {IIS_LOG_FILE} -> {archived_log_path}")
+
+            os.remove(IIS_LOG_FILE)
+            print(f"Removed log file: {IIS_LOG_FILE}")
+
+        except Exception as e:
+            print(f"Process log file exception: {e}")
+
+
+def limit_logger_level(logger_name: str, level = logging.WARNING):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.WARNING)
+
+
+def config_log():
+    backup_and_clean_previous_log_file()
+
+    setup_logging(IIS_LOG_FILE)
+
+    # Disable 3-party library's log
+
+    limit_logger_level("pymongo")
+    limit_logger_level("waitress")
+    limit_logger_level("WaitressServer")
+
+
 def run():
-    log_file = 'iis.log'
-    setup_logging(log_file)
+    config_log()
 
     ihub, ihub_service = start_intelligence_hub_service()
 
-    log_backend = LoggerBackend(monitoring_file_path=log_file, cache_limit_count=100000)
+    log_backend = LoggerBackend(monitoring_file_path=IIS_LOG_FILE, cache_limit_count=100000)
     log_backend.register_router(app=wsgi_app, wrapper=ihub_service.access_manager.login_required)
 
     start_system_monitor()
