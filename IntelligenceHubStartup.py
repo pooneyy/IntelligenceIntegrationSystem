@@ -172,13 +172,14 @@ def run():
     # Monitor in the same process and the same service
     monitor_api = MonitorAPI(app=wsgi_app, wrapper=ihub_service.access_manager.login_required, prefix='/monitor')
     self_pid = os.getpid()
+    logger.info(f'Service PID: {self_pid}')
     monitor_api.monitor.add_process(self_pid)
+    monitor_api.start()
 
     # Monitor in standalone process
-    # start_system_monitor()
+    start_system_monitor()
 
     threading.Thread(target=partial(show_intelligence_hub_statistics_forever, ihub)).start()
-
 
 try:
     run()
