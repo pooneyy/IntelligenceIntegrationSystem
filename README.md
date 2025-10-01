@@ -137,6 +137,18 @@
 ## 环境配置及部署运行
 
 ```
+# Clone this project to your local
+git clone https://github.com/SleepySoft/IntelligenceIntegrationSystem.git
+
+# Enter this project dir
+cd IntelligenceIntegrationSystem
+
+# Check development branch
+git checkout dev
+
+# Important: Fetch sub modules
+git submodule update --init --recursive
+
 # Suggest python 3.10
 python -m venv .venv
 
