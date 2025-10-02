@@ -17,12 +17,12 @@ from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.SystemMonitorService import MonitorAPI
 from Tools.SystemMonotorLauncher import start_system_monitor
-from PyLoggingBackend import setup_logging, LoggerBackend
 from MyPythonUtility.easy_config import EasyConfig
 from ServiceComponent.UserManager import UserManager
 from ServiceComponent.RSSPublisher import RSSPublisher
 # from Tools.VectorDatabase import VectorDatabase
 from IntelligenceHubWebService import IntelligenceHubWebService, WebServiceAccessManager
+from PyLoggingBackend import setup_logging, backup_and_clean_previous_log_file, limit_logger_level, LoggerBackend
 
 
 wsgi_app = Flask(__name__)
@@ -122,35 +122,8 @@ IIS_LOG_FILE = 'iis.log'
 HISTORY_LOG_FOLDER = 'history_log'
 
 
-def backup_and_clean_previous_log_file():
-    if os.path.exists(IIS_LOG_FILE):
-        history_dir = HISTORY_LOG_FOLDER
-        if not os.path.exists(history_dir):
-            os.makedirs(history_dir)
-            logger.info(f"Built log archived dir: {history_dir}")
-
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        archived_log_name = f"iis_{timestamp}.log"
-        archived_log_path = os.path.join(history_dir, archived_log_name)
-
-        try:
-            shutil.copy2(IIS_LOG_FILE, archived_log_path)
-            logger.info(f"Archived log file: {IIS_LOG_FILE} -> {archived_log_path}")
-
-            os.remove(IIS_LOG_FILE)
-            logger.info(f"Removed log file: {IIS_LOG_FILE}")
-
-        except Exception as e:
-            logger.info(f"Process log file exception: {e}")
-
-
-def limit_logger_level(logger_name: str, level = logging.WARNING):
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.WARNING)
-
-
 def config_log():
-    backup_and_clean_previous_log_file()
+    backup_and_clean_previous_log_file(IIS_LOG_FILE, HISTORY_LOG_FOLDER)
 
     setup_logging(IIS_LOG_FILE)
 
