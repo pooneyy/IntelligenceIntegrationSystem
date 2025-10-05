@@ -1,4 +1,3 @@
-import datetime
 import time
 import uuid
 import queue
@@ -11,7 +10,7 @@ from typing import Tuple, Optional
 from pymongo.errors import ConnectionFailure
 
 from ServiceComponent.IntelligenceStatisticsEngine import IntelligenceStatisticsEngine
-from prompts import ANALYSIS_PROMPT, AGGRESSIVE_PROMPT, SUGGESTION_PROMPT
+from prompts import ANALYSIS_PROMPT, SUGGESTION_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.DateTimeUtility import time_str_to_datetime
@@ -107,25 +106,24 @@ class IntelligenceHub:
     # ----------------------------------------------------- Setups -----------------------------------------------------
 
     def _init_scheduler(self):
-        for hour in range(24):
-            self.scheduler.add_daily_task(
-                func=self._do_generate_recommendation,
-                task_id=f'generate_recommendation_at_{hour}',
-                hour=hour,
-                use_new_thread=True
-            )
+        self.scheduler.add_hourly_task(
+            func=self._do_generate_recommendation,
+            task_id=f'generate_recommendation_task',
+            use_new_thread=True
+        )
         self.scheduler.add_weekly_task(
             func=self._do_export_mongodb_weekly,
-            task_id = 'export_mongodb_weekly',
+            task_id = 'export_mongodb_weekly_task',
             day_of_week='sun',
             use_new_thread=True
         )
         self.scheduler.add_monthly_task(
             func=self._do_export_mongodb_monthly,
-            task_id = '_do_export_mongodb_monthly',
+            task_id = '_do_export_mongodb_monthly_task',
             day=1,
             use_new_thread=True
         )
+        self.scheduler.start_scheduler()
 
     def _load_vector_db(self):
         if self.vector_db_idx:
@@ -480,7 +478,12 @@ class IntelligenceHub:
     def _do_generate_recommendation(self):
         now = datetime.datetime.now()
         logger.info(f'Generate recommendation start at: {now}')
-        self._generate_recommendation(period=(now- datetime.timedelta(hours=24), now), threshold=6, limit=5000)
+
+        # TODO: Test, so using a wide datetime range.
+        period = (now - datetime.timedelta(days=60), now)
+        # period = (now- datetime.timedelta(hours=24), now)
+
+        self._generate_recommendation(period=period, threshold=6, limit=5000)
         logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')
 
     # ------------------------------------------------ Helpers ------------------------------------------------
@@ -606,14 +609,7 @@ class IntelligenceHub:
     def _generate_recommendation_immediately(self):
         now = datetime.datetime.now()
         logger.info(f'Trigger recommendation generation at: {now}')
-
-        self.scheduler.add_once_task(
-            func=self._do_generate_recommendation,
-            task_id=f'generate_recommendation_once',
-            replace=True,
-            delay_seconds=10,
-            use_new_thread=True
-        )
+        self.scheduler.execute_task('generate_recommendation_task', 2)
 
     def _generate_recommendation(self,
                                  period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
@@ -627,8 +623,8 @@ class IntelligenceHub:
 
         if not result:
             return []
-        if total > 2000:
-            logger.info(f'Total intelligence is larger than limit {limit}.')
+        if total > limit:
+            logger.warning(f'Total intelligence is larger than limit {limit}.')
 
         title_brief = [{
             'UUID': item['UUID'],

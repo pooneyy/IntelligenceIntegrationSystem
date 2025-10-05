@@ -21,3 +21,13 @@
 所有情报均来源于媒体发布信息，不代表本人立场。据我观察，某些国外媒体（特别是德国之声，dw）的新闻较为反华，请仔细鉴别。
 
 情报的原始来源如果不使用梯子很有可能打不开，理由大概率因为上面一条。
+
+## 数据下载
+
+通过MongoDB的mongoimport工具导入：
+
+```mongoimport --uri=mongodb://localhost:27017 --db=IntelligenceIntegrationSystem --collection=intelligence_archived --file=intelligence_archived.json```
+
++ [2025年8月](https://pan.baidu.com/s/1IiuH13NqEd4XOZnlFLhCWQ?pwd=v94e)
+
++ [2025年9月](https://pan.baidu.com/s/1r9T0joS2JdUIb4hvrMa_Sw?pwd=k4ay)
