@@ -27,6 +27,7 @@ from ServiceComponent.ArticleRender import default_article_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleListRender import default_article_list_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData, APPENDIX_TIME_ARCHIVED
+from Tools.RequestTracer import RequestTracer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -118,11 +119,17 @@ class IntelligenceHubWebService:
             error_handler=self.handle_error
         )
 
+        # ------------- Other Components -------------
+
+        self.request_tracer = None
+        threading.Timer(30.0, self.dump_request_connection_periodically).start()
+
     # ---------------------------------------------------- Routers -----------------------------------------------------
 
     def register_routers(self, app: Flask):
 
         self.wsgi_app = app
+        self.request_tracer = RequestTracer(app)
 
         # --------------------------------------------------- Config --------------------------------------------------
 
@@ -170,39 +177,6 @@ class IntelligenceHubWebService:
         def logout():
             session.clear()
             return redirect(url_for('login'))
-
-        # --------------------------------------------------- Timing ---------------------------------------------------
-
-        @app.before_request
-        def start_timer():
-            print("Executing: start_timer")
-            g.start_time = time.time()
-
-        @app.after_request
-        def log_request_time(response):
-            if hasattr(g, 'start_time'):
-                # 1. 计算耗时
-                duration = time.time() - g.start_time
-
-                # 2. 从 request 对象获取请求方法和路径
-                path = request.path
-                method = request.method
-
-                # 3. 从 response 对象获取状态码
-                status_code = response.status_code
-
-                # 4. 打印包含所有信息的日志
-                #    可以设置一个阈值，比如只对超过 0.5 秒的请求发出警告
-                if duration > 0.5:
-                    app.logger.warning(
-                        f"!!! SLOW REQUEST: {duration:.4f}s | {method} {path} | Status: {status_code}"
-                    )
-                else:
-                    app.logger.info(
-                        f"Request: {duration:.4f}s | {method} {path} | Status: {status_code}"
-                    )
-
-            return response
 
         # ---------------------------------------------- Post and Article ----------------------------------------------
 
@@ -666,4 +640,8 @@ class IntelligenceHubWebService:
             end_time = datetime.datetime.now()
 
         return start_time, end_time
+
+    def dump_request_connection_periodically(self):
+        self.request_tracer.dump_long_running_requests()
+        threading.Timer(30.0, self.dump_request_connection_periodically).start()
 

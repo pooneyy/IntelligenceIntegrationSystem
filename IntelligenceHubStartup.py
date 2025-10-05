@@ -133,6 +133,7 @@ def config_log():
     limit_logger_level("WaitressServer")
 
     # My modules
+    limit_logger_level("RequestTracer")
     limit_logger_level("DateTimeUtility")
 
 
