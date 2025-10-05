@@ -128,10 +128,12 @@ def config_log():
     setup_logging(IIS_LOG_FILE)
 
     # Disable 3-party library's log
-
     limit_logger_level("pymongo")
     limit_logger_level("waitress")
     limit_logger_level("WaitressServer")
+
+    # My modules
+    limit_logger_level("DateTimeUtility")
 
 
 def run():

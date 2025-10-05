@@ -5,8 +5,6 @@ from typing import Union, Optional
 
 import pytz
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Default format constants
@@ -119,7 +117,7 @@ def time_str_to_datetime(text: str) -> Optional[datetime.datetime]:
     cleaned_text = re.sub(r"\s*(?:[A-Z]{3,4})\s*$", "", text)
     formats = [
         '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y%m%dT%H%M%S',
-        '%Y-%m-%d', '%Y%m%d', '%H:%M:%S', '%m/%d/%Y %I:%M %p',
+        '%Y-%m', '%Y %m', '%Y-%m-%d', '%Y%m%d', '%H:%M:%S', '%m/%d/%Y %I:%M %p',
         '%d %b %Y', '%d %B %Y', '%b %d, %Y', '%B %d, %Y',
         '%Y-%m-%d %H:%M', '%m/%d/%Y', '%d.%m.%Y', '%Y年%m月%d日 %H时%M分%S秒'
     ]
