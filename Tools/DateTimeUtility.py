@@ -20,10 +20,10 @@ LOCAL_TIMEZONE = pytz.timezone('Asia/Shanghai')
 def ensure_local_timezone(dt: datetime.datetime) -> datetime.datetime:
     """将datetime对象转换为本地时区(北京时间)"""
     if dt.tzinfo is None:
-        # Naive时间视为本地时区[3,7](@ref)
+        # Naive时间视为本地时区
         return LOCAL_TIMEZONE.localize(dt)
     else:
-        # Aware时间直接转换到本地时区[1,4](@ref)
+        # Aware时间直接转换到本地时区
         return dt.astimezone(LOCAL_TIMEZONE)
 
 
@@ -40,7 +40,7 @@ def any_time_to_time_str(dt: Union[datetime.datetime, datetime.date, int, float,
         # 处理datetime对象
         if isinstance(dt, datetime.datetime):
             logger.debug(f"Processing datetime object: {dt}")
-            # 确保转换到本地时区再格式化[1,7](@ref)
+            # 确保转换到本地时区再格式化
             dt_local = ensure_local_timezone(dt)
             return dt_local.strftime(DEFAULT_DATE_TIME_FORMAT if show_time else DEFAULT_DATE_FORMAT)
 
@@ -53,7 +53,7 @@ def any_time_to_time_str(dt: Union[datetime.datetime, datetime.date, int, float,
         # 处理时间戳（整数/浮点数）
         elif isinstance(dt, (int, float)):
             logger.debug(f"Processing timestamp: {dt}")
-            # 时间戳视为UTC时间，再转换到本地时区[1,5](@ref)
+            # 时间戳视为UTC时间，再转换到本地时区
             utc_dt = datetime.datetime.utcfromtimestamp(dt).replace(tzinfo=pytz.utc)
             dt_local = ensure_local_timezone(utc_dt)
             return dt_local.strftime(DEFAULT_DATE_TIME_FORMAT if show_time else DEFAULT_DATE_FORMAT)

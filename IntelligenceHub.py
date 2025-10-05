@@ -16,6 +16,7 @@ from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.DateTimeUtility import time_str_to_datetime
 from MyPythonUtility.DictTools import check_sanitize_dict
+from MyPythonUtility.AdvancedScheduler import AdvancedScheduler
 from ServiceComponent.IntelligenceHubDefines import *
 from ServiceComponent.IntelligenceCache import IntelligenceCache
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
@@ -78,6 +79,7 @@ class IntelligenceHub:
 
         # --------------- Components ----------------
 
+        self.scheduler = AdvancedScheduler(logger=logging.getLogger('Scheduler'))
         self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
         self.recommendations = []
 
@@ -95,9 +97,35 @@ class IntelligenceHub:
         self.analysis_thread = threading.Thread(target=self._ai_analysis_thread, daemon=True)
         self.post_process_thread = threading.Thread(target=self._post_process_worker, daemon=True)
 
+        # ------------------ Tasks ------------------
+
+        self._init_scheduler()
+        self._generate_recommendation_immediately()
+
         logger.info('***** IntelligenceHub init complete *****')
 
     # ----------------------------------------------------- Setups -----------------------------------------------------
+
+    def _init_scheduler(self):
+        for hour in range(24):
+            self.scheduler.add_daily_task(
+                func=self._do_generate_recommendation,
+                task_id=f'generate_recommendation_at_{hour}',
+                hour=hour,
+                use_new_thread=True
+            )
+        self.scheduler.add_weekly_task(
+            func=self._do_export_mongodb_weekly,
+            task_id = 'export_mongodb_weekly',
+            day_of_week='sun',
+            use_new_thread=True
+        )
+        self.scheduler.add_monthly_task(
+            func=self._do_export_mongodb_monthly,
+            task_id = '_do_export_mongodb_monthly',
+            day=1,
+            use_new_thread=True
+        )
 
     def _load_vector_db(self):
         if self.vector_db_idx:
@@ -435,6 +463,26 @@ class IntelligenceHub:
             except queue.Empty:
                 continue
 
+    # ------------------------------------------------ Scheduled Tasks -------------------------------------------------
+
+    def _do_export_mongodb_weekly(self):
+        now = datetime.datetime.now()
+        logger.info(f'Export mongodb weekly start at: {now}')
+        # TODO: Export mongodb.
+        logger.info(f'Export mongodb weekly finished at: {datetime.datetime.now()}')
+
+    def _do_export_mongodb_monthly(self):
+        now = datetime.datetime.now()
+        logger.info(f'Export mongodb monthly start at: {now}')
+        # TODO: Export mongodb.
+        logger.info(f'Export mongodb monthly finished at: {datetime.datetime.now()}')
+
+    def _do_generate_recommendation(self):
+        now = datetime.datetime.now()
+        logger.info(f'Generate recommendation start at: {now}')
+        self._generate_recommendation(period=(now- datetime.timedelta(hours=24), now), threshold=6, limit=5000)
+        logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')
+
     # ------------------------------------------------ Helpers ------------------------------------------------
 
     # ---------------------------- Before Process ----------------------------
@@ -554,6 +602,18 @@ class IntelligenceHub:
 
     def _aggressive_intelligence(self, article: dict):
         pass
+
+    def _generate_recommendation_immediately(self):
+        now = datetime.datetime.now()
+        logger.info(f'Trigger recommendation generation at: {now}')
+
+        self.scheduler.add_once_task(
+            func=self._do_generate_recommendation,
+            task_id=f'generate_recommendation_once',
+            replace=True,
+            delay_seconds=10,
+            use_new_thread=True
+        )
 
     def _generate_recommendation(self,
                                  period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,

@@ -1967,3 +1967,40 @@ Waitress
 
 
 
+
+
+
+
+
+
+我期望这样设计一个request计时机制：
+1. 在before_request时记录当前时间及访问路径，并生成一个uuid，作为key，记录到g里，且记录到一个dict中。
+2. 在after_request，如果g中存在上文所述key，则移除，同时对于请求时间超过阈值的打印warning。
+3. 提供一个函数，dump上文所述dict中，持续时间超过阈值10倍的记录到logger.warning，超过100倍的记录到logger.error。
+4. 其它任何你认为有助于调试的特定。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

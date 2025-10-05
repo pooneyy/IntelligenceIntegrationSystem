@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import traceback
 import uuid
 import logging
@@ -10,7 +11,7 @@ import datetime
 import threading
 
 import dateutil
-from flask import Flask, request, jsonify, session, redirect, url_for, render_template, abort, send_file
+from flask import Flask, g, request, jsonify, session, redirect, url_for, render_template, abort, send_file
 
 from GlobalConfig import *
 from Scripts.mongodb_exporter import export_mongodb_data
@@ -169,6 +170,39 @@ class IntelligenceHubWebService:
         def logout():
             session.clear()
             return redirect(url_for('login'))
+
+        # --------------------------------------------------- Timing ---------------------------------------------------
+
+        @app.before_request
+        def start_timer():
+            print("Executing: start_timer")
+            g.start_time = time.time()
+
+        @app.after_request
+        def log_request_time(response):
+            if hasattr(g, 'start_time'):
+                # 1. 计算耗时
+                duration = time.time() - g.start_time
+
+                # 2. 从 request 对象获取请求方法和路径
+                path = request.path
+                method = request.method
+
+                # 3. 从 response 对象获取状态码
+                status_code = response.status_code
+
+                # 4. 打印包含所有信息的日志
+                #    可以设置一个阈值，比如只对超过 0.5 秒的请求发出警告
+                if duration > 0.5:
+                    app.logger.warning(
+                        f"!!! SLOW REQUEST: {duration:.4f}s | {method} {path} | Status: {status_code}"
+                    )
+                else:
+                    app.logger.info(
+                        f"Request: {duration:.4f}s | {method} {path} | Status: {status_code}"
+                    )
+
+            return response
 
         # ---------------------------------------------- Post and Article ----------------------------------------------
 
