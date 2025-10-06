@@ -1,14 +1,33 @@
 import re
+import traceback
+
 import pytz  # Time zone handling
 import logging
 import pymongo
 import datetime
+from bson.objectid import ObjectId
+from tzlocal import get_localzone
 from typing import Optional, List, Tuple, Union, Dict, Any
 
 from Tools.MongoDBAccess import MongoDBStorage
 
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_aware_datetime(dt: datetime.datetime) -> datetime.datetime:
+    """
+    Ensures a datetime object is timezone-aware.
+    If it's naive, it assumes the system's local timezone using the
+    modern `zoneinfo` compatible method.
+    """
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        # It's a naive datetime, assume local timezone.
+        local_tz = get_localzone()
+        # Use .replace() for modern zoneinfo objects
+        return dt.replace(tzinfo=local_tz)
+    # It's already an aware datetime
+    return dt
 
 
 class IntelligenceQueryEngine:
@@ -182,6 +201,8 @@ class IntelligenceQueryEngine:
                 threshold=threshold
             )
 
+            logger.debug(self.convert_to_compass_query(query))
+
             # Execute query and return results with limit
             data = self.execute_query(collection, query, skip=skip, limit=limit)
             total = collection.count_documents(query)
@@ -192,6 +213,7 @@ class IntelligenceQueryEngine:
             logger.error(f"Intelligence query failed: {str(e)}")
             return [], 0
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Intelligence query error: {str(e)}", stack_info=True)
             return [], 0
 
@@ -387,11 +409,35 @@ class IntelligenceQueryEngine:
 
         return doc
 
-    def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
-        # 转换为UTC时间并格式化为ISO字符串
-        utc_start = start_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        utc_end = end_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    # def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
+    #     # 转换为UTC时间并格式化为ISO字符串
+    #     utc_start = start_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    #     utc_end = end_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    #
+    #     return {key: {"$gte": utc_start, "$lte": utc_end}}
 
+    def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
+        """
+        Builds a MongoDB time condition dictionary, correctly handling timezones
+        and returning proper datetime objects for the query.
+
+        Args:
+            key: The document field key to apply the condition to.
+            start_time: The start of the time range (can be naive or aware).
+            end_time: The end of the time range (can be naive or aware).
+
+        Returns:
+            A dictionary for MongoDB query with the correct BSON Date type.
+        """
+        # 1. Ensure both datetime objects are timezone-aware
+        aware_start = _ensure_aware_datetime(start_time)
+        aware_end = _ensure_aware_datetime(end_time)
+
+        # 2. Convert both to UTC, keeping them as datetime objects
+        utc_start = aware_start.astimezone(pytz.utc)
+        utc_end = aware_end.astimezone(pytz.utc)
+
+        # 3. Return the dictionary with the actual datetime objects
         return {key: {"$gte": utc_start, "$lte": utc_end}}
 
     def build_list_condition(self, field: str, values: Union[str, List[str]]) -> dict:
@@ -480,3 +526,71 @@ class IntelligenceQueryEngine:
             logger.error(f"Unexpected error during query execution: {str(e)}", stack_info=True)
             return []
 
+    @staticmethod
+    def convert_to_compass_query(query_dict: dict) -> str:
+        """
+        Converts a Python dictionary to a MongoDB Compass query string.
+
+        This function recursively formats the dictionary and its values to match
+        the MongoDB Shell/Compass syntax, properly handling types like
+        datetime objects, ObjectIds, strings, numbers, and booleans.
+
+        Args:
+            query_dict: A Python dictionary representing the MongoDB query.
+
+        Returns:
+            A string that can be directly used in the MongoDB Compass filter bar.
+        """
+
+        def format_value(value):
+            """Recursively formats a Python value into a Compass-compatible string."""
+            if isinstance(value, dict):
+                # Recursively format key-value pairs for sub-documents
+                items = []
+                for k, v in value.items():
+                    # Keys in MongoDB are strings, so we quote them.
+                    key_str = f'"{k}"'
+                    value_str = format_value(v)
+                    items.append(f"{key_str}: {value_str}")
+                return f"{{ {', '.join(items)} }}"
+
+            elif isinstance(value, list):
+                # Recursively format each item in a list
+                items = [format_value(item) for item in value]
+                return f"[{', '.join(items)}]"
+
+            elif isinstance(value, str):
+                # Escape backslashes and double quotes, then wrap in double quotes
+                escaped_value = value.replace('\\', '\\\\').replace('"', '\\"')
+                return f'"{escaped_value}"'
+
+            elif isinstance(value, datetime.datetime):
+                # Format datetime objects into ISODate("...")
+                # Ensure it's in UTC format with 'Z'
+                iso_string = value.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                return f'ISODate("{iso_string}")'
+
+            elif isinstance(value, ObjectId):
+                # Format ObjectId objects into ObjectId("...")
+                return f'ObjectId("{str(value)}")'
+
+            elif isinstance(value, bool):
+                # Format booleans as lowercase true/false
+                return "true" if value else "false"
+
+            elif isinstance(value, (int, float)):
+                # Numbers are converted directly to string
+                return str(value)
+
+            elif value is None:
+                # None becomes null
+                return "null"
+
+            else:
+                # For any other unhandled type, convert to a simple string representation
+                return f'"{str(value)}"'
+
+        if not isinstance(query_dict, dict):
+            raise TypeError("Input must be a dictionary.")
+
+        return format_value(query_dict)

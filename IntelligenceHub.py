@@ -480,10 +480,11 @@ class IntelligenceHub:
         logger.info(f'Generate recommendation start at: {now}')
 
         # TODO: Test, so using a wide datetime range.
-        period = (now - datetime.timedelta(days=60), now)
+        # period = (now - datetime.timedelta(days=60), now)
+        period = (now - datetime.timedelta(days=14), now)
         # period = (now- datetime.timedelta(hours=24), now)
 
-        self._generate_recommendation(period=period, threshold=6, limit=5000)
+        self._generate_recommendation(period=period, threshold=6, limit=2000)
         logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')
 
     # ------------------------------------------------ Helpers ------------------------------------------------
@@ -619,12 +620,12 @@ class IntelligenceHub:
             period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
 
         query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        result, total = query_engine.query_intelligence(period = period, threshold=threshold, limit=limit)
+        result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)
 
         if not result:
             return []
         if total > limit:
-            logger.warning(f'Total intelligence is larger than limit {limit}.')
+            logger.warning(f'Total intelligence ({total}) is larger than limit ({limit}).')
 
         title_brief = [{
             'UUID': item['UUID'],
