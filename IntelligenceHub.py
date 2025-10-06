@@ -6,7 +6,7 @@ import pymongo
 import threading
 
 from attr import dataclass
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 from pymongo.errors import ConnectionFailure
 
 from ServiceComponent.IntelligenceStatisticsEngine import IntelligenceStatisticsEngine
@@ -81,6 +81,7 @@ class IntelligenceHub:
         self.scheduler = AdvancedScheduler(logger=logging.getLogger('Scheduler'))
         self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
         self.recommendations = []
+        self.generating_recommendation = False
 
         # ------------------ Loads ------------------
 
@@ -291,9 +292,7 @@ class IntelligenceHub:
         result = query_engine.count_documents(_filter)
         return result
 
-    def get_recommendations(self):
-        if not self.recommendations:
-            self.recommendations = self._generate_recommendation()
+    def get_recommendations(self) -> List[Dict]:
         return self.recommendations
 
     # ------------------------------------------------ Directly Access ------------------------------------------------
@@ -484,7 +483,7 @@ class IntelligenceHub:
         period = (now - datetime.timedelta(days=14), now)
         # period = (now- datetime.timedelta(hours=24), now)
 
-        self._generate_recommendation(period=period, threshold=6, limit=2000)
+        self._generate_recommendation(period=period, threshold=6, limit=1000)
         logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')
 
     # ------------------------------------------------ Helpers ------------------------------------------------
@@ -615,34 +614,47 @@ class IntelligenceHub:
     def _generate_recommendation(self,
                                  period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
                                  threshold: int = 6,
-                                 limit: int = 2000) -> List:
-        if not period:
-            period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
+                                 limit: int = 2000):
+        with self.lock:
+            if self.generating_recommendation:
+                return
+        try:
+            with self.lock:
+                self.generating_recommendation = True
 
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
-        result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)
+            if not period:
+                period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
 
-        if not result:
-            return []
-        if total > limit:
-            logger.warning(f'Total intelligence ({total}) is larger than limit ({limit}).')
+            query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+            result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)
 
-        title_brief = [{
-            'UUID': item['UUID'],
-            'EVENT_TITLE': item['EVENT_TITLE'],
-            'EVENT_BRIEF': item['EVENT_BRIEF'],
-        } for item in result]
+            if not result:
+                return []
+            if total > limit:
+                logger.warning(f'Total intelligence ({total}) is larger than limit ({limit}).')
 
-        recommendation_uuids = generate_recommendation_by_ai(self.open_ai_client, SUGGESTION_PROMPT, title_brief)
+            title_brief = [{
+                'UUID': item['UUID'],
+                'EVENT_TITLE': item['EVENT_TITLE'],
+                'EVENT_BRIEF': item['EVENT_BRIEF'],
+            } for item in result]
 
-        if not recommendation_uuids:
-            return []
+            recommendation_uuids = generate_recommendation_by_ai(self.open_ai_client, SUGGESTION_PROMPT, title_brief)
 
-        uuid_set = set(recommendation_uuids)
+            if not recommendation_uuids:
+                return []
 
-        recommendation_intelligences = [
-            item for item in result
-            if item['UUID'] in uuid_set
-        ]
+            uuid_set = set(recommendation_uuids)
 
-        return recommendation_intelligences
+            recommendation_intelligences = [
+                item for item in result
+                if item['UUID'] in uuid_set
+            ]
+
+            with self.lock:
+                self.recommendations = recommendation_intelligences
+        except Exception as e:
+            logger.error(f'generate_recommendation exception: {str(e)}')
+        finally:
+            with self.lock:
+                self.generating_recommendation = False

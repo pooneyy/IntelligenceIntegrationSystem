@@ -293,6 +293,12 @@ class IntelligenceHubWebService:
                 logger.error(f'intelligences_list_api() error: {str(e)}', stack_info=True)
                 return jsonify({"error": "Server error"}), 500
 
+        @app.route('/recommendations', methods=['GET'])
+        def intelligences_recommendations_page():
+            recommendations = self.intelligence_hub.get_recommendations()
+            return default_article_list_render(
+                recommendations, offset=0, count=len(recommendations), total_count=len(recommendations))
+
         @app.route('/intelligences/query', methods=['GET', 'POST'])
         @WebServiceAccessManager.login_required
         def intelligences_query_api():
