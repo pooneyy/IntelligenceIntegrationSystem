@@ -78,7 +78,12 @@ class IntelligenceHub:
 
         # --------------- Components ----------------
 
+        self.cache_db_query_engine = IntelligenceQueryEngine(self.mongo_db_cache)
+        self.archive_db_query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        self.archive_db_statistics_engine = IntelligenceStatisticsEngine(self.mongo_db_archive)
+
         self.scheduler = AdvancedScheduler(logger=logging.getLogger('Scheduler'))
+        # TODO: This cache seems to be ugly.
         self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
         self.recommendations = []
         self.generating_recommendation = False
@@ -252,7 +257,7 @@ class IntelligenceHub:
     # -------------------------------------- Gets and Queries --------------------------------------
 
     def get_intelligence(self, _uuid: str) -> dict:
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        query_engine = self.archive_db_query_engine
         return query_engine.get_intelligence(_uuid)
 
     def query_intelligence(self,
@@ -268,9 +273,9 @@ class IntelligenceHub:
                            limit: int = 100,
                            ) -> Tuple[List[dict], int]:
         if db == 'cache':
-            query_engine = IntelligenceQueryEngine(self.mongo_db_cache)
+            query_engine = self.cache_db_query_engine
         else:
-            query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+            query_engine = self.archive_db_query_engine
         result, total = query_engine.query_intelligence(
             period = period, locations = locations, peoples = peoples,
             organizations = organizations, keywords = keywords,
@@ -278,17 +283,17 @@ class IntelligenceHub:
         return result, total
 
     def get_intelligence_summary(self) -> Tuple[int, str]:
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        query_engine = self.archive_db_query_engine
         summary = query_engine.get_intelligence_summary()
         return summary["total_count"], summary["base_uuid"]
 
     def aggregate(self, pipeline: list) -> list:
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        query_engine = self.archive_db_query_engine
         result = query_engine.aggregate(pipeline)
         return result
 
     def count_documents(self, _filter) -> int:
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        query_engine = self.archive_db_query_engine
         result = query_engine.count_documents(_filter)
         return result
 
@@ -298,7 +303,7 @@ class IntelligenceHub:
     # ------------------------------------------------ Directly Access ------------------------------------------------
 
     def get_query_engine(self) -> IntelligenceQueryEngine:
-        return IntelligenceQueryEngine(self.mongo_db_archive)
+        return self.archive_db_query_engine
 
     def get_statistics_engine(self) -> IntelligenceStatisticsEngine:
         return IntelligenceStatisticsEngine(self.mongo_db_archive)
@@ -502,7 +507,7 @@ class IntelligenceHub:
 
         conditions = { 'UUID': _uuid, 'INFORMANT': informant } if informant else { 'UUID': _uuid }
 
-        query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+        query_engine = self.archive_db_query_engine
         exists_record = query_engine.common_query(conditions=conditions, operator="$or")
 
         return bool(exists_record)
@@ -625,7 +630,7 @@ class IntelligenceHub:
             if not period:
                 period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
 
-            query_engine = IntelligenceQueryEngine(self.mongo_db_archive)
+            query_engine = self.archive_db_query_engine
             result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)
 
             if not result:
