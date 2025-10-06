@@ -2,7 +2,7 @@ import time
 import uuid
 import logging
 import threading
-from flask import Flask, g, request, jsonify
+from flask import g, request
 
 
 logger = logging.getLogger(__name__)
