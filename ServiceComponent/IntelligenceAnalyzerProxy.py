@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-conversation_db = HybridDB('conversation')
+CONVERSATION_PATH = 'conversation'
+conversation_db = HybridDB(CONVERSATION_PATH)
 
 
 class AIMessage(BaseModel):
@@ -90,8 +91,20 @@ def conversation_common_process(category, messages, response) -> dict:
     record_index = record_conversation(category, messages, response)
     ai_json = parse_ai_response(response)
 
+    record = conversation_db.get_by_index(record_index, False)
+    if record:
+        record_file_rel_path = record['path']
+        record_file_web_path = f"{CONVERSATION_PATH}/{record_file_rel_path}"
+        record_file_web_path = record_file_web_path.replace('\\', '/')
+    else:
+        record_file_rel_path = ''
+        record_file_web_path = ''
+
     if isinstance(ai_json, dict) and 'error' in ai_json:
-        ai_json['record_file'] = conversation_db.get_by_index(record_index, True)
+        ai_json['record_file'] = record_file_rel_path
+        logger.error(f'AI {category} conversation fail.', extra={'link_file': record_file_web_path})
+    else:
+        logger.error(f'AI {category} conversation successful.', extra={'link_file': record_file_web_path})
 
     return ai_json
 
