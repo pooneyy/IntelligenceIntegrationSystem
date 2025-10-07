@@ -104,7 +104,7 @@ def conversation_common_process(category, messages, response) -> dict:
         ai_json['record_file'] = record_file_rel_path
         logger.error(f'AI {category} conversation fail.', extra={'link_file': record_file_web_path})
     else:
-        logger.error(f'AI {category} conversation successful.', extra={'link_file': record_file_web_path})
+        logger.debug(f'AI {category} conversation successful.', extra={'link_file': record_file_web_path})
 
     return ai_json
 

@@ -8,6 +8,8 @@
 
 + [Intelligence List](/intelligences?offset=0&count=50&threshold=8)
 
++ [Recommendations List](/recommendations)
+
 + [Intelligence Query](/intelligences/query)
 
 -----------------------------------------------
