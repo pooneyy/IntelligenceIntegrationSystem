@@ -99,6 +99,39 @@ article_table_style = """
 .debug-link:hover {
     text-decoration: underline;
 }
+.article-source {
+    /* 使用flex布局，确保 "Source:"、图标、URL能良好对齐 */
+    display: flex;
+    align-items: baseline; /* 基线对齐，视觉效果更佳 */
+    flex-wrap: nowrap; /* 不允许 "Source:" 和图标换行 */
+}
+
+.source-link-container {
+    /* 这个容器将包裹图标和链接，以便它们能作为一个整体换行 */
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap; /* 允许URL过长时换行 */
+}
+
+.source-prefix {
+    /* 图标的前缀样式 */
+    display: inline-block; /* 确保图标能和文字同行 */
+    margin-right: 6px; /* 和URL之间增加一点间距 */
+    font-size: 1.1em;  /* 让图标稍微大一点，更清晰 */
+    vertical-align: middle; /* 垂直居中对齐 */
+}
+
+.domain-highlight {
+    /* 域名高亮样式 */
+    background-color: #FFFF00; /* 亮黄色，类似荧光笔 */
+    padding: 1px 2px;
+    border-radius: 3px;
+}
+
+/* 确保链接本身在容器内可以正常表现 */
+.source-link {
+    word-break: break-all; /* 允许长URL在任意位置断开换行 */
+}
 """
 
 
@@ -126,6 +159,150 @@ function updateTimeBackgrounds() {
 
 document.addEventListener('DOMContentLoaded', updateTimeBackgrounds);
 setInterval(updateTimeBackgrounds, 60000);
+</script>
+"""
+
+
+article_source_enhancer_script = """
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // 媒体来源数据库
+    // domain: 用于匹配的关键域名
+    // country: 所属国家/地区
+    // flag: 对应的 Emoji 国旗
+    // accessibleInChina: 在中国大陆是否可直接访问 (true: 是, false: 否)
+    const mediaSources = [
+        // 美国
+        { domain: "wsj.com", country: "USA", flag: "🇺🇸", accessibleInChina: false },
+        { domain: "nytimes.com", country: "USA", flag: "🇺🇸", accessibleInChina: false },
+        { domain: "voanews.com", country: "USA", flag: "🇺🇸", accessibleInChina: false },
+        // 英国
+        { domain: "bbc.com", country: "UK", flag: "🇬🇧", accessibleInChina: false },
+        // 加拿大
+        { domain: "rcinet.ca", country: "Canada", flag: "🇨🇦", accessibleInChina: false },
+        // 法国
+        { domain: "rfi.fr", country: "France", flag: "🇫🇷", accessibleInChina: false },
+        // 德国
+        { domain: "dw.com", country: "Germany", flag: "🇩🇪", accessibleInChina: false },
+        // 澳大利亚
+        { domain: "abc.net.au", country: "Australia", flag: "🇦🇺", accessibleInChina: false },
+        // 卡塔尔
+        { domain: "aljazeera.com", country: "Qatar", flag: "🇶🇦", accessibleInChina: true },
+        // 俄罗斯
+        { domain: "sputniknews.com", country: "Russia", flag: "🇷🇺", accessibleInChina: true },
+        { domain: "rt.com", country: "Russia", flag: "🇷🇺", accessibleInChina: true },
+        // 日本
+        { domain: "nhk.or.jp", country: "Japan", flag: "🇯🇵", accessibleInChina: true },
+        { domain: "kyodonews.net", country: "Japan", flag: "🇯🇵", accessibleInChina: true },
+        { domain: "nikkei.com", country: "Japan", flag: "🇯🇵", accessibleInChina: true },
+        // 新加坡
+        { domain: "zaobao.com", country: "Singapore", flag: "🇸🇬", accessibleInChina: true },
+        // 韩国
+        { domain: "chosun.com", country: "South Korea", flag: "🇰🇷", accessibleInChina: true },
+        { domain: "joongang.co.kr", country: "South Korea", flag: "🇰🇷", accessibleInChina: true },
+        // 国际
+        { domain: "investing.com", country: "International", flag: "🌍", accessibleInChina: true },
+        { domain: "reuters.com", country: "International", flag: "🌍", accessibleInChina: false },
+        { domain: "apnews.com", country: "International", flag: "🌍", accessibleInChina: false },
+        // 中国大陆
+        { domain: "jiemian.com", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "thepaper.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "infzm.com", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "people.com.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "gmw.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "ce.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "81.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "qstheory.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "xinhuanet.com", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "bjnews.com.cn", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        { domain: "chinanews.com", country: "China", flag: "🇨🇳", accessibleInChina: true },
+        // 中国台湾
+        { domain: "cna.com.tw", country: "Taiwan", flag: "🇹🇼", accessibleInChina: true },
+    ];
+
+    /**
+     * 根据主机名在媒体库中查找匹配项
+     * @param {string} hostname - 链接的主机名 (e.g., "www.wsj.com")
+     * @returns {object|null} - 匹配到的媒体对象或null
+     */
+    function findSourceInfo(hostname) {
+        // 先完全匹配
+        let source = mediaSources.find(s => s.domain === hostname);
+        if (source) return source;
+        // 再匹配子域名
+        source = mediaSources.find(s => hostname.endsWith('.' + s.domain));
+        return source || null;
+    }
+
+    /**
+     * 提取顶级域名部分用于高亮
+     * @param {string} hostname - 链接的主机名
+     * @returns {string|null} - 顶级域名 (e.g., "wsj.com", "bbc.co.uk")
+     */
+    function getHighlightDomain(hostname) {
+        // 匹配常见的二级域名后缀，如 .co.uk, .com.cn
+        const complexTldMatch = hostname.match(/[^.]+\.(?:co|com|net|org|gov|edu)\.[^.]+$/);
+        if (complexTldMatch) {
+            return complexTldMatch[0];
+        }
+        // 匹配标准的顶级域名
+        const simpleTldMatch = hostname.match(/[^.]+\.[^.]+$/);
+        return simpleTldMatch ? simpleTldMatch[0] : hostname;
+    }
+
+    // 遍历页面上所有的 .article-source 元素
+    document.querySelectorAll('.article-source').forEach(sourceElement => {
+        const link = sourceElement.querySelector('a.source-link');
+        if (!link || !link.href) return;
+
+        try {
+            const url = new URL(link.href);
+            const hostname = url.hostname;
+            const sourceInfo = findSourceInfo(hostname);
+
+            // 创建一个容器来包裹图标和链接，以便统一处理换行
+            const container = document.createElement('div');
+            container.className = 'source-link-container';
+
+            // 1. 创建图标前缀
+            const prefixSpan = document.createElement('span');
+            prefixSpan.className = 'source-prefix';
+
+            if (sourceInfo) {
+                const accessibilityIcon = sourceInfo.accessibleInChina ? '✅' : '🚫';
+                prefixSpan.textContent = ` ${accessibilityIcon} ${sourceInfo.flag}`;
+            } else {
+                prefixSpan.textContent = ' ❔  🌍'; // 默认地球图标
+            }
+
+            // 2. 高亮域名
+            const highlightPart = getHighlightDomain(hostname);
+            const originalText = link.textContent;
+
+            if (originalText.includes(highlightPart)) {
+                const highlightedHTML = originalText.replace(
+                    highlightPart,
+                    `<span class="domain-highlight">${highlightPart}</span>`
+                );
+                link.innerHTML = highlightedHTML;
+            }
+
+            // 3. 更新DOM结构
+            // 将图标和链接移入新容器
+            container.appendChild(prefixSpan);
+            container.appendChild(link);
+
+            // 将原来的 "Source: " 文本节点和新容器一起放回
+            const sourceTextNode = sourceElement.firstChild;
+            sourceElement.innerHTML = ''; // 清空原有内容
+            sourceElement.appendChild(sourceTextNode);
+            sourceElement.appendChild(container);
+
+        } catch (e) {
+            console.error('Error processing source link:', e);
+        }
+    });
+});
 </script>
 """
 
@@ -236,122 +413,3 @@ def generate_articles_table(articles: List[dict]):
 
     return articles_html
 
-
-# ----------------------------------------------------------------------------------------------------------------------
-
-def main():
-    articles = [
-        # 完整特性：含归档时间、最高评分、有效URL来源
-        {
-            "UUID": "a1b2c3d4-5678-90ef-ghij-klmnopqrstuv",
-            "INFORMANT": "https://news.example.com/article/123",
-            "PUB_TIME": "2025-08-10",
-            "EVENT_TITLE": "全球人工智能大会发布伦理新框架",
-            "EVENT_BRIEF": "国际组织联合提出AI治理原则，强调透明性与问责机制。",
-            "APPENDIX": {
-                APPENDIX_TIME_ARCHIVED: "2025-08-12 14:30:00",
-                APPENDIX_MAX_RATE_CLASS: "技术可行性",
-                APPENDIX_MAX_RATE_SCORE: 8.5
-            }
-        },
-
-        # 部分特性：含最高评分但无归档时间，纯文本来源
-        {
-            "UUID": "b2c3d4e5-6789-01fg-hijk-lmnopqrstuvw",
-            "INFORMANT": "内部调研报告",
-            "PUB_TIME": "2025-08-11",
-            "EVENT_TITLE": "量子计算突破：新型超导材料稳定性提升200%",
-            "EVENT_BRIEF": "实验室成功验证新型材料在极端环境下的量子比特保持能力。",
-            "APPENDIX": {
-                APPENDIX_MAX_RATE_CLASS: "创新性",
-                APPENDIX_MAX_RATE_SCORE: 9.0
-            }
-        },
-
-        # 边界情况：无APPENDIX字段，来源为无效URL（视为纯文本）
-        {
-            "UUID": "c3d4e5f6-7890-12gh-ijkl-mnopqrstuvwx",
-            "INFORMANT": "ftp://invalid-url.example.org",
-            "PUB_TIME": "2025-08-13",
-            "EVENT_TITLE": "可再生能源补贴政策调整解读",
-            "EVENT_BRIEF": "财政部宣布2026年起逐步取消光伏发电补贴，转向市场化机制。"
-        },
-
-        # 特殊特性：含归档时间但无评分，来源为有效URL
-        {
-            "UUID": "d4e5f6g7-8901-23hi-jklm-nopqrstuvxyz",
-            "INFORMANT": "https://finance.example.com/policy/456",
-            "PUB_TIME": "2025-08-14",
-            "EVENT_TITLE": "央行数字货币试点扩展至跨境贸易",
-            "EVENT_BRIEF": "首批试点银行完成多边央行数字货币桥接测试。",
-            "APPENDIX": {
-                APPENDIX_TIME_ARCHIVED: "2025-08-14 09:15:00"
-            }
-        }
-    ]
-
-    html_text = generate_articles_table(articles)
-    html_page = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-            
-            <meta charset="UTF-8">
-            <title>Intelligence Integration System (IIS)</title>
-            <style>
-                body {{ 
-                    font-family: 'Segoe UI', system-ui, sans-serif; 
-                    padding: 20px; 
-                    background-color: #f8f9fa;
-                }}
-                
-                {article_table_style}
-            
-                .pagination {{
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    margin-top: 10px;
-                    margin-bottom: 40px;
-                    gap: 15px;
-                }}
-                .page-btn {{
-                    padding: 8px 25px;
-                    background-color: #e3f2fd;
-                    border: 1px solid #bbdefb;
-                    border-radius: 6px;
-                    text-decoration: none;
-                    color: #0d47a1;
-                    transition: all 0.3s;
-                    font-weight: 500;
-                }}
-                .page-btn:hover {{
-                    background-color: #bbdefb;
-                    transform: translateY(-2px);
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                }}
-                .page-info {{
-                    color: #546e7a;
-                    font-size: 0.95rem;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="article-list">
-                <h1>Intelligences</h1>
-                <div class="articles-container">
-                    {html_text}
-                </div>
-            </div>
-        </body>
-        </html>
-    """
-
-    with open('ArticleTableRender.html', 'w', encoding='utf-8') as f:
-        f.write(html_page)
-
-
-if __name__ == "__main__":
-    main()

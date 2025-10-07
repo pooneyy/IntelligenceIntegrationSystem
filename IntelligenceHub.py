@@ -485,8 +485,8 @@ class IntelligenceHub:
 
         # TODO: Test, so using a wide datetime range.
         # period = (now - datetime.timedelta(days=60), now)
-        period = (now - datetime.timedelta(days=14), now)
-        # period = (now- datetime.timedelta(hours=24), now)
+        # period = (now - datetime.timedelta(days=14), now)
+        period = (now- datetime.timedelta(hours=24), now)
 
         self._generate_recommendation(period=period, threshold=6, limit=1000)
         logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')

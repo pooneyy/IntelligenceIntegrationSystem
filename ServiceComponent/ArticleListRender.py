@@ -1,5 +1,5 @@
 from ServiceComponent.ArticleTableRender import generate_articles_table, article_table_style, \
-    article_table_color_gradient_script
+    article_table_color_gradient_script, article_source_enhancer_script
 
 
 def default_article_list_render(articles, offset, count, total_count):
@@ -91,6 +91,7 @@ def default_article_list_render(articles, offset, count, total_count):
         </div>
         
         {article_table_color_gradient_script}
+        {article_source_enhancer_script}
     </body>
     </html>
     """
