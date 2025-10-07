@@ -646,7 +646,7 @@ class IntelligenceHub:
 
             recommendation_uuids = generate_recommendation_by_ai(self.open_ai_client, SUGGESTION_PROMPT, title_brief)
 
-            if not recommendation_uuids:
+            if not recommendation_uuids or 'error' in recommendation_uuids:
                 return []
 
             uuid_set = set(recommendation_uuids)

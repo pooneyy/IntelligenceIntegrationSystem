@@ -12,7 +12,7 @@ from Workflow.CommonFeedsCrawFlow import set_intelligence_sink, fetch_process_ar
 
 
 def drive_module(module):
-    set_intelligence_sink(None)
+    # set_intelligence_sink(None)
 
     stop_event = threading.Event()
     service_context = ServiceContext()
@@ -67,8 +67,8 @@ def main():
     # from CrawlTasks import task_crawl_dw
     # drive_module(task_crawl_dw)
 
-    # from CrawlTasks import task_crawl_abc
-    # drive_module(task_crawl_abc)
+    from CrawlTasks import task_crawl_abc
+    drive_module(task_crawl_abc)
 
     # from CrawlTasks import task_crawl_aljazeera
     # drive_module(task_crawl_aljazeera)
@@ -76,8 +76,8 @@ def main():
     # from CrawlTasks import task_crawl_sputniknews_cn
     # drive_module(task_crawl_sputniknews_cn)
 
-    from CrawlTasks import task_crawl_nhk
-    drive_module(task_crawl_nhk)
+    # from CrawlTasks import task_crawl_nhk
+    # drive_module(task_crawl_nhk)
 
     # fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
 

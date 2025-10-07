@@ -1,20 +1,23 @@
-import datetime
 import os
-import re
 import json
 import time
 import uuid
 import logging
+import datetime
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, ValidationError
 
-from MyPythonUtility.DictTools import dict_list_to_markdown
 from prompts import ANALYSIS_PROMPT
 from Tools.OpenAIClient import OpenAICompatibleAPI
+from MyPythonUtility.FileSqliteHyridDB import HybridDB
+from MyPythonUtility.DictTools import dict_list_to_markdown
 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+conversation_db = HybridDB('conversation')
 
 
 class AIMessage(BaseModel):
@@ -39,12 +42,19 @@ def extract_pure_json_text(text: str):
     return text.strip().removeprefix('```json').removesuffix('```').strip()
 
 
-def record_conversation(folder: str, messages: list, response: dict):
-    folder_path = os.path.join('conversation', folder)
-    os.makedirs(folder_path, exist_ok=True)
-    file_path = os.path.join(folder_path, f"conversation_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.txt")
+def record_conversation(category: str, messages: list, response: dict) -> int:
+    # folder_path = os.path.join('conversation', folder)
+    # os.makedirs(folder_path, exist_ok=True)
+    # file_path = os.path.join(folder_path, f"conversation_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.txt")
+    #
+    # with open(file_path, 'wt', encoding='utf-8') as f:
 
-    with open(file_path, 'wt', encoding='utf-8') as f:
+    writer = conversation_db.raw_file(
+        content_type='text',
+        category=category,
+        name=category)
+
+    with writer as f:
         f.write("[system]\n\n")
         f.write(messages[0]['content'])
 
@@ -59,8 +69,10 @@ def record_conversation(folder: str, messages: list, response: dict):
         else:
             f.write('<None>')
 
+    return writer.index
 
-def parse_ai_response(response: dict):
+
+def parse_ai_response(response: dict) -> dict:
     if isinstance(response, Dict) and "choices" in response:
         ai_output = response["choices"][0]["message"]["content"]
         ai_answer = extract_pure_response(ai_output)
@@ -72,6 +84,16 @@ def parse_ai_response(response: dict):
             return {'error': "Cannot parse AI response to JSON."}
     else:
         return {'error': "Invalid AI response."}
+
+
+def conversation_common_process(category, messages, response) -> dict:
+    record_index = record_conversation(category, messages, response)
+    ai_json = parse_ai_response(response)
+
+    if isinstance(ai_json, dict) and 'error' in ai_json:
+        ai_json['record_file'] = conversation_db.get_by_index(record_index, True)
+
+    return ai_json
 
 
 def analyze_with_ai(
@@ -121,8 +143,7 @@ def analyze_with_ai(
     elapsed = time.time() - start
     print(f"AI response spends {elapsed} s")
 
-    record_conversation('analysis', messages, response)
-    return parse_ai_response(response)
+    return conversation_common_process('analysis', messages, response)
 
 
 def aggressive_by_ai(
@@ -155,15 +176,14 @@ def aggressive_by_ai(
     elapsed = time.time() - start
     print(f"AI response spends {elapsed} s")
 
-    record_conversation('aggressive', messages, response)
-    return parse_ai_response(response)
+    return conversation_common_process('aggressive', messages, response)
 
 
 def generate_recommendation_by_ai(
         api_client: OpenAICompatibleAPI,
         prompt: str,
         intelligence_list: List[Dict[str, str]]
-) -> List[str]:
+) -> List[str] or Dict:
 
     intelligence_table = dict_list_to_markdown(intelligence_list)
     messages = [
@@ -181,8 +201,7 @@ def generate_recommendation_by_ai(
     elapsed = time.time() - start
     print(f"AI response spends {elapsed} s")
 
-    record_conversation('recommend', messages, response)
-    return parse_ai_response(response)
+    return conversation_common_process('recommendation', messages, response)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
