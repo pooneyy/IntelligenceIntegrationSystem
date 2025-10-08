@@ -315,7 +315,7 @@ def main():
     model_list = client.get_model_list()
     print(f'Model list of {client.api_base_url}')
 
-    if DictPrinter:
+    if isinstance(model_list, dict) and DictPrinter:
         print(DictPrinter.pretty_print(model_list))
     else:
         print(model_list)
