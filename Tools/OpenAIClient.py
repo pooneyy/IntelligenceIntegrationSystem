@@ -190,7 +190,7 @@ class OpenAICompatibleAPI:
 
         # Use async POST request to send the completion request
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data, proxies=self.proxies) as response:
+            async with session.post(url, headers=self.headers, json=data, proxy=self._get_url_proxy(url)) as response:
                 return await response.json()
 
     def create_completion_sync(self,
@@ -256,8 +256,15 @@ class OpenAICompatibleAPI:
 
         # Use async POST request to send the completion request
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data, proxies=self.proxies) as response:
+            async with session.post(url, headers=self.headers, json=data, proxy=self._get_url_proxy(url)) as response:
                 return await response.json()
+
+    def _get_url_proxy(self, url) -> str:
+        if self.proxies:
+            proxy_url = self.proxies.get("https") if url.startswith("https") else self.proxies.get("http")
+        else:
+            proxy_url = ''
+        return proxy_url
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -294,12 +301,24 @@ def create_gemini_client():
 
 
 def main():
+    try:
+        from MyPythonUtility.DictTools import DictPrinter
+    except Exception as e:
+        print(str(e))
+        DictPrinter = None
+    finally:
+        pass
+
     # Initialize the client - token can be passed directly or will be fetched from environment
     client = create_gemini_client()
 
     model_list = client.get_model_list()
     print(f'Model list of {client.api_base_url}')
-    print(model_list)
+
+    if DictPrinter:
+        print(DictPrinter.pretty_print(model_list))
+    else:
+        print(model_list)
 
     # Example synchronous chat completion
     messages = [
