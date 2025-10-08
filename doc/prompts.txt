@@ -2059,19 +2059,21 @@ emoji图标和url显示要协调，美观，注意url有过长从而折行的可
 
 
 
-使用python写一个RecommendationManager类，用来通过AI根据一段时间的情报内容生成推荐列表并管理该列表。
 
 
 
+写一个python程序，使用selenium操作chrome浏览器，打开一个AI对话网页，模拟输入并发送，等待输出并提取回复内容。
 
+选择器参考如下：
 
+GEMINI_SELECTORS = {
+    "input_box": '[aria-label="在此处输入提示"]',
+    "send_button": '[aria-label="发送"]',
+    "indicator": '[aria-label="发送"][disabled]',
+    "response_content": ".markdown.markdown-main-panel:last-child"
+}
 
-
-
-
-
-
-
+给出代码，注释和详细的部署方法。
 
 
 
