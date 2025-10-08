@@ -2059,6 +2059,7 @@ emoji图标和url显示要协调，美观，注意url有过长从而折行的可
 
 
 
+使用python写一个RecommendationManager类，用来通过AI根据一段时间的情报内容生成推荐列表并管理该列表。
 
 
 

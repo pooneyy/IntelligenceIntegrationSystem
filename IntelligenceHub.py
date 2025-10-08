@@ -1,3 +1,4 @@
+import datetime
 import time
 import uuid
 import queue
@@ -10,6 +11,7 @@ from typing import Tuple, Optional, Dict
 from pymongo.errors import ConnectionFailure
 
 from ServiceComponent.IntelligenceStatisticsEngine import IntelligenceStatisticsEngine
+from ServiceComponent.RecommendationManager import RecommendationManager
 from prompts import ANALYSIS_PROMPT, SUGGESTION_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
@@ -20,6 +22,7 @@ from ServiceComponent.IntelligenceHubDefines import *
 from ServiceComponent.IntelligenceCache import IntelligenceCache
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
 from ServiceComponent.IntelligenceAnalyzerProxy import analyze_with_ai, aggressive_by_ai, generate_recommendation_by_ai
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -50,7 +53,8 @@ class IntelligenceHub:
                  db_vector: Optional[object] = None,
                  db_cache: Optional[MongoDBStorage] = None,
                  db_archive: Optional[MongoDBStorage] = None,
-                 ai_client: OpenAICompatibleAPI):
+                 db_recommendation: Optional[MongoDBStorage] = None,
+                 ai_client: OpenAICompatibleAPI = None):
         """
         Init IntelligenceHub.
         :param ref_url: The reference url for sub-resource url generation.
@@ -66,6 +70,7 @@ class IntelligenceHub:
         self.vector_db_idx = db_vector
         self.mongo_db_cache = db_cache
         self.mongo_db_archive = db_archive
+        self.mongo_db_recommendation = db_recommendation
         self.open_ai_client = ai_client
 
         # -------------- Queues Related --------------
@@ -84,15 +89,23 @@ class IntelligenceHub:
 
         self.scheduler = AdvancedScheduler(logger=logging.getLogger('Scheduler'))
         # TODO: This cache seems to be ugly.
-        self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
+        # self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
+
         self.recommendations = []
+        self.recommendation_data = []       # List of dict: ''
         self.generating_recommendation = False
+
+        self.recommendations_manager = RecommendationManager(
+            query_engine = self.archive_db_query_engine,
+            open_ai_client=self.open_ai_client,
+            db_storage=self.mongo_db_recommendation
+        )
 
         # ------------------ Loads ------------------
 
         self._load_vector_db()
         self._load_unarchived_data()
-        self.intelligence_cache.load_cache()
+        # self.intelligence_cache.load_cache()
 
         # ----------------- Threads -----------------
 
@@ -105,7 +118,7 @@ class IntelligenceHub:
         # ------------------ Tasks ------------------
 
         self._init_scheduler()
-        self._generate_recommendation_immediately()
+        self._trigger_generate_recommendation()
 
         logger.info('***** IntelligenceHub init complete *****')
 
@@ -485,11 +498,17 @@ class IntelligenceHub:
 
         # TODO: Test, so using a wide datetime range.
         # period = (now - datetime.timedelta(days=60), now)
-        # period = (now - datetime.timedelta(days=14), now)
-        period = (now- datetime.timedelta(hours=24), now)
+        period = (now - datetime.timedelta(days=14), now)
+        # period = (now- datetime.timedelta(hours=24), now)
 
-        self._generate_recommendation(period=period, threshold=6, limit=1000)
+        self.recommendations_manager.generate_recommendation(period=period, threshold=6, limit=500)
+        # self._generate_recommendation(period=period, threshold=6, limit=1000)
         logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')
+
+    def _trigger_generate_recommendation(self):
+        now = datetime.datetime.now()
+        logger.info(f'Trigger recommendation generation at: {now}')
+        self.scheduler.execute_task('generate_recommendation_task', 2)
 
     # ------------------------------------------------ Helpers ------------------------------------------------
 
@@ -564,7 +583,7 @@ class IntelligenceHub:
         try:
             if self.mongo_db_archive:
                 self.mongo_db_archive.insert(data)
-                self.intelligence_cache.encache(data)
+                # self.intelligence_cache.encache(data)
         except Exception as e:
             logger.error(f'Archive processed data fail: {str(e)}')
 
@@ -598,68 +617,63 @@ class IntelligenceHub:
         except Exception as e:
             logger.error(f'Add item link fail: {str(e)}')
 
-    def _get_cached_data_brief(self, threshold: int = 6) -> List[dict]:
-        return self.intelligence_cache.get_cached_data(
-            filter_func=lambda data: data.get('APPENDIX', {}).get(APPENDIX_MAX_RATE_SCORE, 0) >= threshold,
-            map_function=lambda data: {
-                'UUID': data['UUID'],
-                'EVENT_TITLE': data['EVENT_TITLE'],
-                'EVENT_BRIEF': data['EVENT_BRIEF'],
-            }
-        )
+    # def _get_cached_data_brief(self, threshold: int = 6) -> List[dict]:
+    #     return self.intelligence_cache.get_cached_data(
+    #         filter_func=lambda data: data.get('APPENDIX', {}).get(APPENDIX_MAX_RATE_SCORE, 0) >= threshold,
+    #         map_function=lambda data: {
+    #             'UUID': data['UUID'],
+    #             'EVENT_TITLE': data['EVENT_TITLE'],
+    #             'EVENT_BRIEF': data['EVENT_BRIEF'],
+    #         }
+    #     )
 
     def _aggressive_intelligence(self, article: dict):
         pass
 
-    def _generate_recommendation_immediately(self):
-        now = datetime.datetime.now()
-        logger.info(f'Trigger recommendation generation at: {now}')
-        self.scheduler.execute_task('generate_recommendation_task', 2)
-
-    def _generate_recommendation(self,
-                                 period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
-                                 threshold: int = 6,
-                                 limit: int = 2000):
-        with self.lock:
-            if self.generating_recommendation:
-                return
-        try:
-            with self.lock:
-                self.generating_recommendation = True
-
-            if not period:
-                period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
-
-            query_engine = self.archive_db_query_engine
-            result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)
-
-            if not result:
-                return []
-            if total > limit:
-                logger.warning(f'Total intelligence ({total}) is larger than limit ({limit}).')
-
-            title_brief = [{
-                'UUID': item['UUID'],
-                'EVENT_TITLE': item['EVENT_TITLE'],
-                'EVENT_BRIEF': item['EVENT_BRIEF'],
-            } for item in result]
-
-            recommendation_uuids = generate_recommendation_by_ai(self.open_ai_client, SUGGESTION_PROMPT, title_brief)
-
-            if not recommendation_uuids or 'error' in recommendation_uuids:
-                return []
-
-            uuid_set = set(recommendation_uuids)
-
-            recommendation_intelligences = [
-                item for item in result
-                if item['UUID'] in uuid_set
-            ]
-
-            with self.lock:
-                self.recommendations = recommendation_intelligences
-        except Exception as e:
-            logger.error(f'generate_recommendation exception: {str(e)}')
-        finally:
-            with self.lock:
-                self.generating_recommendation = False
+    # def _generate_recommendation(self,
+    #                              period: Optional[Tuple[datetime.datetime, datetime.datetime]] = None,
+    #                              threshold: int = 6,
+    #                              limit: int = 2000):
+    #     with self.lock:
+    #         if self.generating_recommendation:
+    #             return
+    #     try:
+    #         with self.lock:
+    #             self.generating_recommendation = True
+    #
+    #         if not period:
+    #             period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
+    #
+    #         query_engine = self.archive_db_query_engine
+    #         result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)
+    #
+    #         if not result:
+    #             return []
+    #         if total > limit:
+    #             logger.warning(f'Total intelligence ({total}) is larger than limit ({limit}).')
+    #
+    #         title_brief = [{
+    #             'UUID': item['UUID'],
+    #             'EVENT_TITLE': item['EVENT_TITLE'],
+    #             'EVENT_BRIEF': item['EVENT_BRIEF'],
+    #         } for item in result]
+    #
+    #         recommendation_uuids = generate_recommendation_by_ai(self.open_ai_client, SUGGESTION_PROMPT, title_brief)
+    #
+    #         if not recommendation_uuids or 'error' in recommendation_uuids:
+    #             return []
+    #
+    #         uuid_set = set(recommendation_uuids)
+    #
+    #         recommendation_intelligences = [
+    #             item for item in result
+    #             if item['UUID'] in uuid_set
+    #         ]
+    #
+    #         with self.lock:
+    #             self.recommendations = recommendation_intelligences
+    #     except Exception as e:
+    #         logger.error(f'generate_recommendation exception: {str(e)}')
+    #     finally:
+    #         with self.lock:
+    #             self.generating_recommendation = False
