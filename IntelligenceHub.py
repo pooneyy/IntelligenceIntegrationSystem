@@ -9,6 +9,7 @@ import threading
 from attr import dataclass
 from typing import Tuple, Optional, Dict
 from pymongo.errors import ConnectionFailure
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_result, TryAgain
 
 from ServiceComponent.IntelligenceStatisticsEngine import IntelligenceStatisticsEngine
 from ServiceComponent.RecommendationManager import RecommendationManager
@@ -335,12 +336,34 @@ class IntelligenceHub:
 
     # ---------------------------------------------------- Workers -----------------------------------------------------
 
+    @staticmethod
+    def __is_result_an_error(result):
+        """Return True if the result is considered an error."""
+        return result is None or 'error' in result
+
+    @retry(
+        # The wait strategy: start at 1s, multiply by 2 each time, max out at 60s
+        wait=wait_exponential(multiplier=1, min=1, max=30),
+        # The stop condition: stop after max_retry attempts
+        stop=stop_after_attempt(5),
+        # The retry condition: retry if an exception occurs OR the result is an error
+        retry=(retry_if_exception_type(Exception) | retry_if_result(__is_result_an_error))
+    )
+    def __robust_analyze_with_ai(self, open_ai_client, prompt, original_data):
+        """
+        A robust wrapper for the AI analysis function that will be automatically retried.
+        """
+        if self.shutdown_flag.is_set():
+            raise TryAgain
+        result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, original_data)
+        return result
+
     def _ai_analysis_thread(self):
         if not self.open_ai_client:
             logger.info('**** NO AI API client - Thread QUIT ****')
             return
 
-        ai_process_max_retry = 3
+        # ai_process_max_retry = 3
 
         while not self.shutdown_flag.is_set():
             try:
@@ -363,21 +386,30 @@ class IntelligenceHub:
 
                 # ---------------------------------- AI Analysis with Retry ----------------------------------
 
-                retry = 0
-                result = None
-                # Add retry to get correct answer from AI
-                while retry < ai_process_max_retry and not self.shutdown_flag.is_set():
-                    result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, original_data)
-                    if 'error' not in result:
-                        break
-                    retry += 1
+                result = self.__robust_analyze_with_ai(original_data)
+
+                # retry = 0
+                # result = None
+                # # Add retry to get correct answer from AI
+                # while retry < ai_process_max_retry and not self.shutdown_flag.is_set():
+                #     start_time = time.time()
+                #     result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, original_data)
+                #     time_spending = time.time() - start_time
+                #
+                #     # Cooling down the API limitation.
+                #     if time_spending < 1.0:
+                #         time.sleep(1)
+                #
+                #     if 'error' not in result:
+                #         break
+                #     retry += 1
 
                 if not result or 'error' in result:
-                    error_msg = f"AI process error after {retry} retries."
+                    error_msg = f"AI process error after all retries."
                     raise ValueError(error_msg)
 
-                if retry:
-                    logger.info(f'Got AI match format answer after {retry} retires.')
+                # if retry:
+                #     logger.info(f'Got AI match format answer after {retry} retires.')
 
                 # ----------------------- Check Analysis Result and Fill Other Fields ------------------------
 

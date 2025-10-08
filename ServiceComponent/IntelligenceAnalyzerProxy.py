@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+MAX_OUTPUT_TOKEN = 8192         # The limit of Gemini
 CONVERSATION_PATH = 'conversation'
 conversation_db = HybridDB(CONVERSATION_PATH)
 
@@ -150,7 +151,7 @@ def analyze_with_ai(
     response = api_client.create_chat_completion_sync(
         messages=messages,
         temperature=0,
-        max_tokens=5000
+        max_tokens=MAX_OUTPUT_TOKEN
     )
 
     elapsed = time.time() - start
@@ -183,7 +184,7 @@ def aggressive_by_ai(
     response = api_client.create_chat_completion_sync(
         messages=messages,
         temperature=0,
-        max_tokens=5000
+        max_tokens=MAX_OUTPUT_TOKEN
     )
 
     elapsed = time.time() - start
@@ -208,7 +209,7 @@ def generate_recommendation_by_ai(
     response = api_client.create_chat_completion_sync(
         messages=messages,
         temperature=0,
-        max_tokens=5000
+        max_tokens=MAX_OUTPUT_TOKEN
     )
 
     elapsed = time.time() - start
