@@ -16,6 +16,8 @@ psutil
 waitress                     # WSGI service
 apscheduler
 tzlocal
+openai
+httpx
 
 ##############################
 ### Network Requests & Parsing

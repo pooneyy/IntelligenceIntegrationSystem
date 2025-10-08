@@ -56,11 +56,14 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
     ai_service_url = config.get('intelligence_hub.ai_service.url', OPEN_AI_API_BASE_URL_SELECT)
     ai_service_token = config.get('intelligence_hub.ai_service.token', 'Sleepy')
     ai_service_model = config.get('intelligence_hub.ai_service.model', MODEL_SELECT)
+    ai_service_proxies = config.get('intelligence_hub.ai_service.proxies', None)
 
     api_client = OpenAICompatibleAPI(
         api_base_url=ai_service_url,
         token=ai_service_token,
-        default_model=ai_service_model)
+        default_model=ai_service_model,
+        proxies=ai_service_proxies
+    )
 
     ref_host_url = config.get('intelligence_hub_web_service.service.host_url', 'http://127.0.0.1:5000')
 
@@ -87,6 +90,13 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
             username=mongodb_user,
             password=mongodb_pass,
             collection_name='intelligence_archived'),
+
+        db_recommendation=MongoDBStorage(
+            host=mongodb_host,
+            port=mongodb_port,
+            username=mongodb_user,
+            password=mongodb_pass,
+            collection_name='intelligence_recommendation'),
 
         ai_client = api_client
     )

@@ -260,8 +260,8 @@ The CRTC is considering expanding that system to allow more creative positions t
 MPA-Canada said that "adding just a few positions to a more than 40-year-old list ignores today's modern production landscape."""
 
 
-API_BASE_URL = ["http://localhost:11434",
-                "https://api.siliconflow.cn"]
+API_BASE_URL = ["http://localhost:11434/v1",
+                "https://api.siliconflow.cn/v1"]
 
 MODEL = ['qwen3:14b',
          'Qwen/Qwen3-235B-A22B']

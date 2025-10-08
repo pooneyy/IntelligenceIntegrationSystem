@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, Union, List
 
 
 """
-Reply example:
+Siliconflow Reply example:
 {
   "id": "0196f08d74220b683a08ca3630683a51",         # 唯一标识符，用于追踪API调用记录
   "object": "chat.completion",                      # 标识响应类型，chat.completion表示这是聊天补全类型的响应
@@ -47,7 +47,8 @@ class OpenAICompatibleAPI:
         default_model (str): Default model to use when making requests.
     """
 
-    def __init__(self, api_base_url: str, token: Optional[str] = None, default_model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_base_url: str, token: Optional[str] = None,
+                 default_model: str = "gpt-3.5-turbo", proxies: dict = None):
         """
         Initialize the OpenAI-compatible API client.
 
@@ -69,6 +70,7 @@ class OpenAICompatibleAPI:
                 "API token must be provided either through the constructor or environment variable OPENAI_API_KEY")
 
         self.default_model = default_model
+        self.proxies = proxies
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_token}"
@@ -76,7 +78,8 @@ class OpenAICompatibleAPI:
 
     def _construct_url(self, endpoint: str) -> str:
         """Construct the full URL for a given API endpoint."""
-        return f"{self.api_base_url}/v1/{endpoint}"
+        base = self.api_base_url.rstrip('/')
+        return f"{base}/{endpoint}"
 
     def _prepare_request_data(self,
                               model: Optional[str] = None,
@@ -112,14 +115,17 @@ class OpenAICompatibleAPI:
             Union[Dict[str, Any], requests.Response]: The API response, either as a parsed dictionary or the raw response object.
         """
         url = self._construct_url("models")
-        response = requests.get(url, headers=self.headers)
+        if self.proxies:
+            response = requests.get(url, headers=self.headers, proxies=self.proxies)
+        else:
+            response = requests.get(url, headers=self.headers)
         return response.json() if response.status_code == 200 else response
 
     def create_chat_completion_sync(self,
                                     messages: List[Dict[str, str]],
                                     model: Optional[str] = None,
                                     temperature: float = 0.7,
-                                    max_tokens: int = 150) -> Union[Dict[str, Any], requests.Response]:
+                                    max_tokens: int = 4096) -> Union[Dict[str, Any], requests.Response]:
         """
         Create a chat completion synchronously.
 
@@ -145,7 +151,7 @@ class OpenAICompatibleAPI:
         )
 
         # Use POST request to send the completion request
-        response = requests.post(url, headers=self.headers, json=data)
+        response = requests.post(url, headers=self.headers, json=data, proxies=self.proxies)
 
         # Return parsed JSON if successful, otherwise return the raw response
         return response.json() if response.status_code == 200 else response
@@ -154,7 +160,7 @@ class OpenAICompatibleAPI:
                                            messages: List[Dict[str, str]],
                                            model: Optional[str] = None,
                                            temperature: float = 0.7,
-                                           max_tokens: int = 150) -> Dict[str, Any]:
+                                           max_tokens: int = 4096) -> Dict[str, Any]:
         """
         Create a chat completion asynchronously.
 
@@ -184,14 +190,14 @@ class OpenAICompatibleAPI:
 
         # Use async POST request to send the completion request
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data) as response:
+            async with session.post(url, headers=self.headers, json=data, proxies=self.proxies) as response:
                 return await response.json()
 
     def create_completion_sync(self,
                                prompt: str,
                                model: Optional[str] = None,
                                temperature: float = 0.7,
-                               max_tokens: int = 150) -> Union[Dict[str, Any], requests.Response]:
+                               max_tokens: int = 4096) -> Union[Dict[str, Any], requests.Response]:
         """
         Create a text completion synchronously.
 
@@ -213,7 +219,7 @@ class OpenAICompatibleAPI:
         )
 
         # Use POST request to send the completion request
-        response = requests.post(url, headers=self.headers, json=data)
+        response = requests.post(url, headers=self.headers, json=data, proxies=self.proxies)
 
         # Return parsed JSON if successful, otherwise return the raw response
         return response.json() if response.status_code == 200 else response
@@ -222,7 +228,7 @@ class OpenAICompatibleAPI:
                                       prompt: str,
                                       model: Optional[str] = None,
                                       temperature: float = 0.7,
-                                      max_tokens: int = 150) -> Dict[str, Any]:
+                                      max_tokens: int = 4096) -> Dict[str, Any]:
         """
         Create a text completion asynchronously.
 
@@ -250,26 +256,49 @@ class OpenAICompatibleAPI:
 
         # Use async POST request to send the completion request
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data) as response:
+            async with session.post(url, headers=self.headers, json=data, proxies=self.proxies) as response:
                 return await response.json()
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+
+def create_ollama_client():
+    client = OpenAICompatibleAPI(
+        api_base_url='http://localhost:11434/v1',
+        token='x',
+        default_model='qwen3:14b'
+    )
+    return client
+
+
+def create_siliconflow_client():
+    client = OpenAICompatibleAPI(
+        api_base_url='https://api.siliconflow.cn/v1',
+        token=os.getenv("SILICON_API_KEY"),
+        default_model='Qwen/Qwen3-235B-A22B'
+    )
+    return client
+
+
+def create_gemini_client():
+    client = OpenAICompatibleAPI(
+        api_base_url='https://generativelanguage.googleapis.com/v1beta/openai',
+        token=os.getenv("GEMINI_API_KEY"),
+        default_model='models/gemini-pro-latest',
+        proxies={
+            "http": "http://127.0.0.1:10809",
+            "https": "http://127.0.0.1:10809"
+        }
+    )
+    return client
+
+
 def main():
-    # Set your API base URL
-    # API_BASE_URL = "https://api.siliconflow.cn"
-    API_BASE_URL = "http://localhost:11434"
-
-    # MODEL = 'Qwen/Qwen3-235B-A22B'
-    MODEL = 'qwen3:14b'
-
     # Initialize the client - token can be passed directly or will be fetched from environment
-    client = (OpenAICompatibleAPI
-              (api_base_url=API_BASE_URL,
-               token='x',
-               default_model=MODEL))
+    client = create_gemini_client()
 
     model_list = client.get_model_list()
-    print(f'Model list of {API_BASE_URL}')
+    print(f'Model list of {client.api_base_url}')
     print(model_list)
 
     # Example synchronous chat completion
