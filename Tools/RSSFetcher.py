@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 context = None
 
 
-DEFAULT_TIMEOUT_MS = 8000  # 8 seconds
+DEFAULT_TIMEOUT_MS = 30000  # 30 seconds
 MINIMAL_WAIT_SEC = 2
 
 
