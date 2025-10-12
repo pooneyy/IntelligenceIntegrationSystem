@@ -349,7 +349,7 @@ class IntelligenceHub:
         # The retry condition: retry if an exception occurs OR the result is an error
         retry=(retry_if_exception_type(Exception) | retry_if_result(__is_result_an_error))
     )
-    def __robust_analyze_with_ai(self, open_ai_client, prompt, original_data):
+    def __robust_analyze_with_ai(self, original_data):
         """
         A robust wrapper for the AI analysis function that will be automatically retried.
         """
@@ -530,8 +530,8 @@ class IntelligenceHub:
 
         # TODO: Test, so using a wide datetime range.
         # period = (now - datetime.timedelta(days=60), now)
-        period = (now - datetime.timedelta(days=14), now)
-        # period = (now- datetime.timedelta(hours=24), now)
+        # period = (now - datetime.timedelta(days=14), now)
+        period = (now- datetime.timedelta(hours=24), now)
 
         self.recommendations_manager.generate_recommendation(period=period, threshold=6, limit=500)
         # self._generate_recommendation(period=period, threshold=6, limit=1000)

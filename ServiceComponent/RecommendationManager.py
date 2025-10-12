@@ -179,7 +179,7 @@ class RecommendationManager:
             # Use update_one + upsert=True to update the record if it exists, or insert it if it doesn't.
             # NOTE: Verify this call. If `self.db` is a client, you may need:
             # self.db.get_collection("recommendations").update_one(query_key, update_data, upsert=True)
-            self.db.update_one(query_key, update_data, upsert=True)
+            self.db.update(query_key, update_data, upsert=True)
             logger.info(f"Successfully saved recommendation for {recommendation_data.generated_datetime} to database.")
 
             # Update the in-memory cache
