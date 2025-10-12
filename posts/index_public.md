@@ -33,3 +33,15 @@
 + [2025年8月](https://pan.baidu.com/s/1IiuH13NqEd4XOZnlFLhCWQ?pwd=v94e)
 
 + [2025年9月](https://pan.baidu.com/s/1r9T0joS2JdUIb4hvrMa_Sw?pwd=k4ay)
+
+## 赞助该项目
+
+本项目使用硅基流动提供的AI服务。如果你能通过我的邀请链接注册，那么我的账户将会获得14元赠金，为该系统增加约半天的AI分析额度。
+
+邀请链接：https://cloud.siliconflow.cn/i/ml9II4B7
+
+或邀请码：ml9II4B7
+
+如果您愿意支持更多，可以在闲鱼搜索“硅基流动赠金”，并将上面的邀请链接提供给商家。
+
+谢谢。
