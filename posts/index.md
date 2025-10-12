@@ -24,7 +24,9 @@
 
 #### Maintenance
 
-+ [Logger Viewer](/logger/log_viewer)
++ [Log Viewer](/logger/log_viewer)
+
++ [Logger Config](/logger/logger_config)
 
 + [System Monitor](/monitor/api/dashboard)
 

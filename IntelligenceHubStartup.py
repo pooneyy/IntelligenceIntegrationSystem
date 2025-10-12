@@ -36,6 +36,7 @@ wsgi_app.config.update(
 
 
 logger = logging.getLogger(__name__)
+self_path = os.path.dirname(os.path.abspath(__file__))
 
 
 def show_intelligence_hub_statistics_forever(hub: IntelligenceHub):
@@ -155,7 +156,9 @@ def run():
     log_backend = LoggerBackend(monitoring_file_path=IIS_LOG_FILE, cache_limit_count=100000,
                                 link_file_roots={
                                     'conversation': os.path.abspath('conversation')
-                                })
+                                },
+                                project_root=self_path,
+                                with_logger_manager=True)
     log_backend.register_router(app=wsgi_app, wrapper=ihub_service.access_manager.login_required)
 
     # Monitor in the same process and the same service
