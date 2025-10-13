@@ -499,10 +499,29 @@ class MonitorAPI:
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='System Monitoring API')
-    parser.add_argument('--host', default='0.0.0.0', help='Host address to bind to')
-    parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Port number to listen on')
-    parser.add_argument('--pid', type=int, nargs='+', help='PIDs to monitor initially')
-    parser.add_argument('--add-self', action='store_true', help='Add current process to monitoring')
+
+    parser.add_argument('--host', default='0.0.0.0',
+                        help='Host address to bind to')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT,
+                        help='Port number to listen on')
+
+    # 自定义 action：把空串或非数字串过滤掉
+    class PidAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            pids = []
+            for v in values:
+                if v == '':          # 跳过显式空串
+                    continue
+                try:
+                    pids.append(int(v))
+                except ValueError:
+                    parser.error(f"invalid PID {v!r}: must be an integer")
+            setattr(namespace, self.dest, pids)
+
+    parser.add_argument('--pid', nargs='*', action=PidAction, default=[],
+                        help='PIDs to monitor initially (can be given multiple times)')
+    parser.add_argument('--add-self', action='store_true',
+                        help='Add current process to monitoring')
     return parser.parse_args()
 
 
