@@ -1,6 +1,7 @@
 import logging
 import datetime
 import threading
+import traceback
 from collections import Counter
 from dataclasses import dataclass, asdict
 from typing import Optional, Tuple, List, Dict
@@ -65,6 +66,7 @@ class RecommendationManager:
 
             logger.info(f"Successfully loaded {len(self.recommendations_cache)} recommendation sets into cache.")
         except Exception as e:
+            print(traceback.format_exc())
             logger.error(f"Failed to load initial recommendations: {e}", exc_info=True)
 
     def count_intelligence(self, period: Tuple[datetime.datetime, datetime.datetime], limit: int = 10000) -> Dict[
@@ -173,7 +175,7 @@ class RecommendationManager:
         query_key = {"generated_datetime": recommendation_data.generated_datetime}
 
         # Convert the dataclass object to a dictionary for MongoDB storage.
-        update_data = {"$set": asdict(recommendation_data)}
+        update_data = asdict(recommendation_data)
 
         try:
             # Use update_one + upsert=True to update the record if it exists, or insert it if it doesn't.

@@ -92,9 +92,9 @@ class IntelligenceHub:
         # TODO: This cache seems to be ugly.
         # self.intelligence_cache = IntelligenceCache(self.mongo_db_archive, 6, 2000, None)       # datetime.timedelta(days=1)
 
-        self.recommendations = []
-        self.recommendation_data = []       # List of dict: ''
-        self.generating_recommendation = False
+        # self.recommendations = []
+        # self.recommendation_data = []       # List of dict: ''
+        # self.generating_recommendation = False
 
         self.recommendations_manager = RecommendationManager(
             query_engine = self.archive_db_query_engine,
@@ -312,7 +312,7 @@ class IntelligenceHub:
         return result
 
     def get_recommendations(self) -> List[Dict]:
-        return self.recommendations
+        return self.recommendations_manager.get_latest_recommendation()
 
     # ------------------------------------------------ Directly Access ------------------------------------------------
 
