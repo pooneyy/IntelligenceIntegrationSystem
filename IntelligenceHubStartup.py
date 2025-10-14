@@ -1,16 +1,13 @@
 import os
-import shutil
-import threading
 import time
 import uuid
 import logging
 import datetime
+import threading
 import traceback
-from functools import partial
-
-from PyQt5.QtWidgets.QScroller import target
 from flask import Flask
 from typing import Tuple
+from functools import partial
 
 from GlobalConfig import *
 from IntelligenceHub import IntelligenceHub
@@ -155,6 +152,7 @@ def config_log():
     limit_logger_level("pymongo")
     limit_logger_level("waitress")
     limit_logger_level("WaitressServer")
+    limit_logger_level("proactor_events")
 
     # My modules
     limit_logger_level("Tools.RequestTracer")

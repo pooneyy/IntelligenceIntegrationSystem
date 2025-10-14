@@ -290,10 +290,10 @@ class SiliconFlowServiceRotator:
 
         try:
             result = get_siliconflow_balance(key)
-            if 'total_balance_usd' in result:
-                return result['total_balance_usd']
+            if 'total_balance_usd' in result.get('data', { }):
+                return int(result['data']['total_balance_usd'])
             else:
-                logger.warning(f"Ubalance response format for key: {key[:8]}...")
+                logger.warning(f"Unknown balance response format for key: {key[:8]}...")
                 return -1
         except Exception as e:
             logger.error(f"Error fetching balance for key {key[:8]}...: {e}")
