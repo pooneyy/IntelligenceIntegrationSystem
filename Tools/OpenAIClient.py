@@ -3,6 +3,11 @@ import json
 import requests
 from typing import Optional, Dict, Any, Union, List
 
+try:
+    import aiohttp
+except:
+    aiohttp = None
+
 
 """
 Siliconflow Reply example:
@@ -60,7 +65,7 @@ class OpenAICompatibleAPI:
         Raises:
             ValueError: If token is not provided and not found in environment variables.
         """
-        self.api_base_url = api_base_url
+        self.api_base_url = api_base_url.strip()
 
         # Try to get token from environment variables if not provided
         self.api_token = token or os.getenv("OPENAI_API_KEY")
@@ -70,7 +75,7 @@ class OpenAICompatibleAPI:
                 "API token must be provided either through the constructor or environment variable OPENAI_API_KEY")
 
         self.default_model = default_model
-        self.proxies = proxies
+        self.proxies = proxies or {}
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_token}"
@@ -178,7 +183,8 @@ class OpenAICompatibleAPI:
             The messages should be in the format of [{"role": "system", "content": "System message"},
                                                    {"role": "user", "content": "User message"}].
         """
-        import aiohttp
+        if not aiohttp:
+            return {}
 
         url = self._construct_url("chat/completions")
         data = self._prepare_request_data(
@@ -244,7 +250,8 @@ class OpenAICompatibleAPI:
         Note:
             Requires asyncio and aiohttp to be installed and used within an async context.
         """
-        import aiohttp
+        if not aiohttp:
+            return {}
 
         url = self._construct_url("completions")
         data = self._prepare_request_data(
@@ -259,12 +266,10 @@ class OpenAICompatibleAPI:
             async with session.post(url, headers=self.headers, json=data, proxy=self._get_url_proxy(url)) as response:
                 return await response.json()
 
-    def _get_url_proxy(self, url) -> str:
-        if self.proxies:
-            proxy_url = self.proxies.get("https") if url.startswith("https") else self.proxies.get("http")
-        else:
-            proxy_url = ''
-        return proxy_url
+    def _get_url_proxy(self, url: str) -> Optional[str]:
+        if not self.proxies:
+            return None
+        return self.proxies.get("https") if url.startswith("https") else self.proxies.get("http")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
