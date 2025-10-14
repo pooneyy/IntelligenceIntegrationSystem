@@ -53,6 +53,8 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
     logger.info('Apply config: ')
     logger.info(config.dump_text())
 
+    # ------------------------------- AI Service -------------------------------
+
     ai_service_url = config.get('intelligence_hub.ai_service.url', OPEN_AI_API_BASE_URL_SELECT)
     ai_service_token = config.get('intelligence_hub.ai_service.token', 'Sleepy')
     ai_service_model = config.get('intelligence_hub.ai_service.model', MODEL_SELECT)
@@ -64,6 +66,8 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
         default_model=ai_service_model,
         proxies=ai_service_proxies
     )
+
+    # ------------------------------- Core: IHub -------------------------------
 
     ref_host_url = config.get('intelligence_hub_web_service.service.host_url', 'http://127.0.0.1:5000')
 
@@ -102,6 +106,8 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
     )
     hub.startup()
 
+    # ----------------------- Main Service and Access Control -----------------------
+
     rpc_api_tokens = config.get('intelligence_hub_web_service.rpc_api.tokens', [])
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens', [])
     processor_tokens = config.get('intelligence_hub_web_service.processor.tokens', [])
@@ -123,16 +129,32 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
 
     hub_service.register_routers(wsgi_app)
 
-    quit_flag = threading.Event()
-    ai_token_rotator = SiliconFlowServiceRotator(api_client, keys_file=os.path.join(self_path, 'siliconflow_keys.txt'))
+    # --------------------------------- Key Rotator ---------------------------------
 
-    rotator_thread = threading.Thread(
-        target=ai_token_rotator.run_forever,
-        args=(quit_flag,),
-        name="KeyRotatorThread",
-        daemon=True
-    )
-    rotator_thread.start()
+    key_rotator_enabled = config.get('ai_service_rotator.enabled', False)
+    key_rotator_key_file = config.get('ai_service_rotator.key_file', '')
+    key_rotator_threshold = config.get('ai_service_rotator.threshold', 10.0)
+
+    if key_rotator_enabled and key_rotator_key_file:
+        logger.info(f'AI Service Key Rotator Enabled. key file: '
+                    f'{key_rotator_key_file}, threshold: {key_rotator_threshold}')
+
+        ai_token_rotator = SiliconFlowServiceRotator(
+            api_client,
+            keys_file=os.path.join(self_path, key_rotator_key_file),
+            threshold=key_rotator_threshold
+        )
+
+        quit_flag = threading.Event()
+        rotator_thread = threading.Thread(
+            target=ai_token_rotator.run_forever,
+            args=(quit_flag,),
+            name="KeyRotatorThread",
+            daemon=True
+        )
+        rotator_thread.start()
+
+    # --------------------------------- End of Init ---------------------------------
 
     return hub, hub_service
 

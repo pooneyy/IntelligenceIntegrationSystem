@@ -2,9 +2,19 @@
   "intelligence_hub": {
 
     "ai_service": {
-      "url": "http://localhost:11434",
-      "token": "SleepySoft",
-      "model": "qwen3:14b"
+      "url": "https://api.siliconflow.cn/v1",
+      "token": "sk-",
+      "model": "deepseek-ai/DeepSeek-R1"
+    },
+
+    "ai_service2": {
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "token": "AIza",
+      "model": "models/gemini-2.0-pro-exp",
+      "proxies": {
+        "http": "http://127.0.0.1:10809",
+        "https": "http://127.0.0.1:10809"
+      }
     },
 
     "mongodb": {
@@ -13,6 +23,12 @@
       "user": "",
       "password": ""
     }
+  },
+
+  "ai_service_rotator": {
+    "enabled": false,
+    "key_file": "siliconflow_keys.txt",
+    "threshold": "12.0"
   },
 
   "intelligence_hub_web_service": {
@@ -25,19 +41,19 @@
 
     "rpc_api": {
       "tokens": [
-        "8567add0-604b-49d8-9949-0976f2553ac2"
+        "2b9d053e-e62b-4243-9e0f-a363560a6017"
       ]
     },
 
     "collector": {
       "tokens": [
-      "13662a6a-b7fc-43c5-9def-56bb52976165"
+      "a9f2068b-aaa9-48fd-b6d5-d219c8da6090"
       ]
     },
 
     "processor": {
       "tokens": [
-        "99092d44-0b93-4eca-b42a-af18c0d2e093"
+        "dd698933-2824-4181-8d50-af4a5f385864"
       ]
     }
   },
@@ -51,14 +67,14 @@
     },
 
     "global_site_proxy": {
-      "http": "socks5://127.0.0.1:10808",
-      "https": "socks5://127.0.0.1:10808"
+      "http": "http://127.0.0.1:10809",
+      "https": "http://127.0.0.1:10809"
     },
 
-    "default_token": "13662a6a-b7fc-43c5-9def-56bb52976165"
+    "default_token": "a9f2068b-aaa9-48fd-b6d5-d219c8da6090"
   },
 
   "processor": {
-    "default_token": "99092d44-0b93-4eca-b42a-af18c0d2e093"
+    "default_token": "dd698933-2824-4181-8d50-af4a5f385864"
   }
 }
