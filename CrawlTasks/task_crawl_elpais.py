@@ -5,7 +5,7 @@ from GlobalConfig import APPLIED_NATIONAL_TIMEOUT_MS
 from MyPythonUtility.easy_config import EasyConfig
 from ServiceEngine import ServiceContext
 from Tools.RSSFetcher import fetch_feed
-from Scraper.RequestsScraper import fetch_content
+from Scraper.PlaywrightRenderedScraper import fetch_content
 from Scrubber.HTMLConvertor import html_content_converter
 from Scrubber.UnicodeSanitizer import sanitize_unicode_string
 from Workflow.CommonFeedsCrawFlow import feeds_craw_flow
@@ -43,7 +43,7 @@ def start_task(stop_event):
                     partial(fetch_feed, scraper=Scraper.PlaywrightRawScraper, proxy=config.get('collector.global_site_proxy', {})),
                     partial(fetch_content, timeout_ms=APPLIED_NATIONAL_TIMEOUT_MS, proxy=config.get('collector.global_site_proxy', {}), format='lxml'),
                     [
-                        partial(html_content_converter, selectors=['div[class*="ArticleHeadlineTitle_container"]', 'div[class*="ArticleWeb_article"]']),
+                        partial(html_content_converter, selectors=['article[id="main-content"]']),
                         partial(sanitize_unicode_string, max_length=10240 * 5)
                     ])
 

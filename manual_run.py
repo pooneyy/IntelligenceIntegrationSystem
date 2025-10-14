@@ -82,6 +82,9 @@ def main():
     # from CrawlTasks import task_crawl_aa
     # drive_module(task_crawl_aa)
 
+    from CrawlTasks import task_crawl_elpais
+    drive_module(task_crawl_elpais)
+
     # fetch_by_request_scraper('https://www.cbc.ca/news/science/india-flood-cloudburst-glacier-1.7603074?cmp=rss')
 
     pass
