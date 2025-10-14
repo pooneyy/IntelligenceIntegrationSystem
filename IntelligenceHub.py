@@ -342,10 +342,10 @@ class IntelligenceHub:
         return result is None or 'error' in result
 
     @retry(
-        # The wait strategy: start at 1s, multiply by 2 each time, max out at 60s
+        # The wait strategy: start at 1s, multiply by 2 each time, max out at 30s
         wait=wait_exponential(multiplier=1, min=1, max=30),
         # The stop condition: stop after max_retry attempts
-        stop=stop_after_attempt(5),
+        stop=stop_after_attempt(3),
         # The retry condition: retry if an exception occurs OR the result is an error
         retry=(retry_if_exception_type(Exception) | retry_if_result(__is_result_an_error))
     )

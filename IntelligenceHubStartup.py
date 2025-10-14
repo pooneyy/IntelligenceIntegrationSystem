@@ -142,7 +142,7 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
         ai_token_rotator = SiliconFlowServiceRotator(
             api_client,
             keys_file=os.path.join(self_path, key_rotator_key_file),
-            threshold=key_rotator_threshold
+            threshold=float(key_rotator_threshold)
         )
 
         quit_flag = threading.Event()
@@ -171,14 +171,18 @@ def config_log():
     setup_logging(IIS_LOG_FILE)
 
     # Disable 3-party library's log
+    limit_logger_level("base")
+    limit_logger_level("asyncio")
     limit_logger_level("pymongo")
     limit_logger_level("waitress")
+    limit_logger_level("connectionpool")
     limit_logger_level("WaitressServer")
     limit_logger_level("proactor_events")
 
     # My modules
     limit_logger_level("Tools.RequestTracer")
     limit_logger_level("Tools.DateTimeUtility")
+    limit_logger_level("ServiceComponent.AIServiceRotator")
 
 
 def run():

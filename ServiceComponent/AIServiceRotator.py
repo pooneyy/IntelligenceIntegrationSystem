@@ -200,17 +200,17 @@ class SiliconFlowServiceRotator:
             Check interval in seconds (minimum 30 seconds, maximum 1 hour)
         """
         if self.current_key not in self.keys_data:
-            return 300  # Default 5 minutes
+            return 300
 
         current_balance = self.keys_data[self.current_key].get('balance', 0)
 
         # More frequent checks when balance is low
         if current_balance < self.threshold * 5:  # Below 5x threshold
-            return 30  # Check every 30 seconds
+            return 30
         elif current_balance < self.threshold * 10:  # Below 10x threshold
-            return 60  # Check every minute
+            return 60
         else:
-            return 300  # Default 5 minutes
+            return 600
 
     def _check_all_balances(self):
         """Check balances for all keys in the database."""
@@ -291,7 +291,7 @@ class SiliconFlowServiceRotator:
         try:
             result = get_siliconflow_balance(key)
             if 'total_balance_usd' in result.get('data', { }):
-                return int(result['data']['total_balance_usd'])
+                return float(result['data']['total_balance_usd'])
             else:
                 logger.warning(f"Unknown balance response format for key: {key[:8]}...")
                 return -1
