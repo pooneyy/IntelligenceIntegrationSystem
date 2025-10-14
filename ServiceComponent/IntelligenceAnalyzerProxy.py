@@ -1,9 +1,10 @@
 import os
 import json
 import time
+import traceback
 import uuid
 import logging
-import datetime
+import json_repair
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, ValidationError
 
@@ -79,11 +80,35 @@ def parse_ai_response(response: dict) -> dict:
         ai_output = response["choices"][0]["message"]["content"]
         ai_answer = extract_pure_response(ai_output)
         ai_json = extract_pure_json_text(ai_answer)
+
         try:
             parsed_output = json.loads(ai_json)
             return parsed_output
+
         except json.JSONDecodeError:
-            return {'error': "Cannot parse AI response to JSON."}
+            logger.warning(f'Error when parsing AI reply to json, try to repair...')
+
+            try:
+                repaired_data = json_repair.loads(ai_json)
+                fixed_json_str = json.dumps(repaired_data, ensure_ascii=False, indent=4)
+
+                parsed_output = json.loads(fixed_json_str)
+                parsed_output['warning'] = 'Json repaired.'
+
+                logger.info(f'Json repare success.')
+
+                return parsed_output
+            except json.JSONDecodeError:
+                logger.error(f'Json cannot be repaired.')
+                return {'error': "Cannot parse AI response to JSON."}
+
+            except:
+                raise
+
+        except Exception as e:
+            logger.error(f'Exception when parsing AI response')
+            print(traceback.format_exc())
+
     else:
         return {'error': "Invalid AI response."}
 
@@ -100,9 +125,9 @@ def conversation_common_process(category, messages, response) -> dict:
     else:
         record_file_rel_path = ''
         record_file_web_path = ''
+    ai_json['record_file'] = record_file_rel_path
 
     if isinstance(ai_json, dict) and 'error' in ai_json:
-        ai_json['record_file'] = record_file_rel_path
         logger.error(f'AI {category} conversation fail.', extra={'link_file': record_file_web_path})
     else:
         logger.debug(f'AI {category} conversation successful.', extra={'link_file': record_file_web_path})

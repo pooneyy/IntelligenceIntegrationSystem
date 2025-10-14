@@ -229,11 +229,14 @@ class IntelligenceHub:
     @property
     def statistics(self):
         return {
-            'original': self.original_queue.qsize(),
-            'processed': self.processed_queue.qsize(),
+            'waiting_process': self.original_queue.qsize(),
+            'post_process': self.processed_queue.qsize(),
             'archived': self.archived_counter,
             'dropped': self.drop_counter,
             'error': self.error_counter,
+            'conversation_warning': 0,
+            'conversation_error': 0,
+            'conversation_total': 0,
         }
 
     # ------------------------------------------------ Public Functions ------------------------------------------------
@@ -355,7 +358,16 @@ class IntelligenceHub:
         """
         if self.shutdown_flag.is_set():
             raise TryAgain
+
         result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, original_data)
+
+        # Check warning and error for statistics
+        self.statistics['conversation_total'] += 1
+        if 'error' in result:
+            self.statistics['conversation_error'] += 1
+        elif 'warning' in result:
+            self.statistics['conversation_warning'] += 1
+
         return result
 
     def _ai_analysis_thread(self):

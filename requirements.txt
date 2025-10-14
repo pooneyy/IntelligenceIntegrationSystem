@@ -18,6 +18,7 @@ apscheduler
 tzlocal
 openai
 httpx
+json_repair
 
 ##############################
 ### Network Requests & Parsing
