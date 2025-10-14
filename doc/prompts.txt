@@ -2140,8 +2140,62 @@ GEMINI_SELECTORS = {
 
 
 
+根据以下信息，理解、推论并完成代码，文本及注释使用英文：
+```
+import logging
+
+from Tools.OpenAIClient import OpenAICompatibleAPI
+from Tools.AiServiceBalanceQuery import get_siliconflow_balance
 
 
+logger = logging.getLogger(__name__)
+
+
+class SiliconFlowServiceRotator:
+    # 用来检查余额并自动更换key
+    # 启动时载入key，当判定使用完一个key（balance < self.threshold）后，将其从self.valid_keys移除，并写入'.json'文件。
+    # 更换key前先检查key的余额及有效性
+    # 不要因为网络问题而错误地丢弃key
+    # 为了让系统正常运作，启动时先给一个key再说
+    # 如果check_all_balance为True，则在启动并检查完当前key后，获取所有key的余额
+    # 保存json时需要通过临时文件
+    def __init__(self,
+                 ai_client: OpenAICompatibleAPI,
+                 keys_file: str,
+                 threshold: float = 0.1,
+                 check_all_balance: bool = True):
+        self.ai_client = ai_client
+        self.keys_file = keys_file
+        self.threshold = threshold
+
+        self.keys_data = {}
+        self.current_key = ''
+
+    def load_keys(self):
+        key_record = 'key_record.json'
+        # TODO: 载入'key_record.json'，并构建内存中的key表，至少包括以下字段：余额、最后一次使用，状态（有效，无效，错误，默认：未知）
+        #       同时也从self.keys_file载入所有key，并跟自己的数据库比对，加入数据库中不存在的部分
+        #       keys_file的格式非常简单，每一行为一个key，记得去除首尾空格
+
+    def check_update_key(self):
+        balance = self._fetch_balance(self.current_key)
+
+    def run_forever(self, thread_quit_flag):
+        # TODO: 在这个函数中调度，包括获取所有余额信息，检查当前key余额，保存json文件，等等
+        #       根据余额的趋势估计下一次检查的时间
+        pass
+
+    def _fetch_balance(self, key: str) -> float:
+        if key:
+            result = get_siliconflow_balance(key)
+            if 'total_balance_usd' in result:
+                return result['total_balance_usd']
+        return -1
+
+    def _change_api_key(self, api_key):
+        self.ai_client.set_api_token(api_key)
+
+```
 
 
 

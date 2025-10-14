@@ -1,7 +1,11 @@
 import aiohttp
 import asyncio
+import logging
 import traceback
 from typing import Dict, Any
+
+
+logger = logging.getLogger(__name__)
 
 
 SILICONFLOW_API_URL = "https://api.siliconflow.cn/v1/user/info"
@@ -255,55 +259,62 @@ class BalanceQueryService:
         }
 
 
-# Compatibility functions that maintain the original interface
-def query_siliconflow_balance(api_key: str) -> str:
+# --------------------------------- Easy for use sync functions ---------------------------------
+
+def get_siliconflow_balance(api_key: str) -> dict:
     """
     Synchronous compatibility function that maintains the original interface.
     Returns formatted string for backward compatibility.
     """
-
     async def _async_query():
         service = BalanceQueryService()
         try:
             result = await service.query_siliconflow(api_key)
-            return _format_result_to_string(result)
+            return result
+        except Exception as e:
+            logger.error(str(e))
+            traceback.print_exc()
+            return {}
         finally:
             await service.close()
-
     return asyncio.run(_async_query())
 
 
-def query_openai_balance(api_key: str) -> str:
+def get_openai_balance(api_key: str) -> dict:
     """
     Synchronous compatibility function that maintains the original interface.
     Returns formatted string for backward compatibility.
     """
-
     async def _async_query():
         service = BalanceQueryService()
         try:
             result = await service.query_openai(api_key)
-            return _format_result_to_string(result)
+            return result
+        except Exception as e:
+            logger.error(str(e))
+            traceback.print_exc()
+            return {}
         finally:
             await service.close()
-
     return asyncio.run(_async_query())
 
 
-def query_ds_balance(api_key: str) -> str:
+def get_ds_balance(api_key: str) -> dict:
     """
     Synchronous compatibility function that maintains the original interface.
     Returns formatted string for backward compatibility.
     """
-
     async def _async_query():
         service = BalanceQueryService()
         try:
             result = await service.query_deepseek(api_key)
-            return _format_result_to_string(result)
+            return result
+        except Exception as e:
+            logger.error(str(e))
+            traceback.print_exc()
+            return {}
         finally:
             await service.close()
-
     return asyncio.run(_async_query())
 
 
@@ -351,8 +362,8 @@ def _format_result_to_string(result: Dict[str, Any]) -> str:
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
-    result = query_siliconflow_balance('sk-btfvfqtrhfdsvepyktfqxaqokqvxgiervyevinenmoorkjil')
-    print(result)
+    result = get_siliconflow_balance('')
+    print(_format_result_to_string(result))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 import os
 import json
+import threading
+
 import requests
 from typing import Optional, Dict, Any, Union, List
 
@@ -80,6 +82,7 @@ class OpenAICompatibleAPI:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_token}"
         }
+        self.lock = threading.Lock()
 
     def _construct_url(self, endpoint: str) -> str:
         """Construct the full URL for a given API endpoint."""
@@ -112,6 +115,15 @@ class OpenAICompatibleAPI:
 
         return request_data
 
+    def set_api_token(self, token: str):
+        with self.lock:
+            self.api_token = token
+            self.headers["Authorization"] = f"Bearer {self.api_token}"
+            
+    def get_header(self) -> dict:
+        with self.lock:
+            return self.headers.copy()
+
     def get_model_list(self) -> Union[Dict[str, Any], requests.Response]:
         """
         Get the list of available models from the API.
@@ -121,9 +133,9 @@ class OpenAICompatibleAPI:
         """
         url = self._construct_url("models")
         if self.proxies:
-            response = requests.get(url, headers=self.headers, proxies=self.proxies)
+            response = requests.get(url, headers=self.get_header(), proxies=self.proxies)
         else:
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.get_header())
         return response.json() if response.status_code == 200 else response
 
     def create_chat_completion_sync(self,
@@ -156,7 +168,7 @@ class OpenAICompatibleAPI:
         )
 
         # Use POST request to send the completion request
-        response = requests.post(url, headers=self.headers, json=data, proxies=self.proxies)
+        response = requests.post(url, headers=self.get_header(), json=data, proxies=self.proxies)
 
         # Return parsed JSON if successful, otherwise return the raw response
         return response.json() if response.status_code == 200 else response
@@ -196,7 +208,7 @@ class OpenAICompatibleAPI:
 
         # Use async POST request to send the completion request
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data, proxy=self._get_url_proxy(url)) as response:
+            async with session.post(url, headers=self.get_header(), json=data, proxy=self._get_url_proxy(url)) as response:
                 return await response.json()
 
     def create_completion_sync(self,
@@ -225,7 +237,7 @@ class OpenAICompatibleAPI:
         )
 
         # Use POST request to send the completion request
-        response = requests.post(url, headers=self.headers, json=data, proxies=self.proxies)
+        response = requests.post(url, headers=self.get_header(), json=data, proxies=self.proxies)
 
         # Return parsed JSON if successful, otherwise return the raw response
         return response.json() if response.status_code == 200 else response
@@ -263,7 +275,7 @@ class OpenAICompatibleAPI:
 
         # Use async POST request to send the completion request
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=self.headers, json=data, proxy=self._get_url_proxy(url)) as response:
+            async with session.post(url, headers=self.get_header(), json=data, proxy=self._get_url_proxy(url)) as response:
                 return await response.json()
 
     def _get_url_proxy(self, url: str) -> Optional[str]:
