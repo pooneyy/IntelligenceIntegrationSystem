@@ -8,11 +8,13 @@ import datetime
 import traceback
 from functools import partial
 
+from PyQt5.QtWidgets.QScroller import target
 from flask import Flask
 from typing import Tuple
 
 from GlobalConfig import *
 from IntelligenceHub import IntelligenceHub
+from ServiceComponent.AIServiceRotator import SiliconFlowServiceRotator
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
 from Tools.SystemMonitorService import MonitorAPI
@@ -123,6 +125,17 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
     )
 
     hub_service.register_routers(wsgi_app)
+
+    quit_flag = threading.Event()
+    ai_token_rotator = SiliconFlowServiceRotator(api_client, keys_file=os.path.join(self_path, 'siliconflow_keys.txt'))
+
+    rotator_thread = threading.Thread(
+        target=ai_token_rotator.run_forever,
+        args=(quit_flag,),
+        name="KeyRotatorThread",
+        daemon=True
+    )
+    rotator_thread.start()
 
     return hub, hub_service
 
