@@ -140,7 +140,7 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
                     f'{key_rotator_key_file}, threshold: {key_rotator_threshold}')
 
         ai_token_rotator = SiliconFlowServiceRotator(
-            api_client,
+            ai_client=api_client,
             keys_file=os.path.join(self_path, key_rotator_key_file),
             threshold=float(key_rotator_threshold)
         )

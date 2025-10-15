@@ -8,6 +8,7 @@ from typing import Callable, TypedDict, Dict, List, Tuple
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
 from IntelligenceHub import CollectedData
 from MyPythonUtility.easy_config import EasyConfig
+from PyLoggingBackend.LogUtility import create_tls_leveling_logger
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
@@ -19,7 +20,7 @@ from Tools.RSSFetcher import FeedData
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-logger = logging.getLogger(__name__)
+logger = create_tls_leveling_logger(__name__)
 logger.setLevel(logging.INFO)
 
 CRAWL_ERROR_THRESHOLD = 3

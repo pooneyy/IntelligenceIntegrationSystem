@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import logging
 import threading
 import traceback
 from watchdog.observers import Observer
@@ -8,20 +9,23 @@ from watchdog.events import FileSystemEventHandler
 
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
 from MyPythonUtility.easy_config import EasyConfig
+from PyLoggingBackend import LoggerBackend
+from PyLoggingBackend.LogUtility import set_tls_logger, backup_and_clean_previous_log_file, setup_logging
 from Tools.MongoDBAccess import init_global_db_access
-from MyPythonUtility.plugin_manager import PluginManager, PluginWrapper, logger
+from MyPythonUtility.plugin_manager import PluginManager, PluginWrapper
 
-project_root = os.path.abspath(__file__)
+logger = logging.getLogger(__name__)
+project_root = os.path.dirname(os.path.abspath(__file__))
 
 
 class ServiceContext:
     """
     Use this class to pass parameters to plugins and to selectively expose functions to plugins.
     """
-    def __init__(self):
+    def __init__(self, module_logger, module_config):
         self.sys = sys
-        self.logger = logger
-        self.config = EasyConfig()
+        self.logger = module_logger
+        self.config = module_config
         self.project_root = project_root
 
     def solve_import_path(self):
@@ -145,12 +149,22 @@ class TaskManager:
 
     def __drive_module(self, plugin: PluginWrapper, stop_event: threading.Event):
         self.on_model_enter(plugin)
+
+        module_logger = logging.getLogger(plugin.plugin_name)
+        old_logger = set_tls_logger(module_logger)
+
         try:
-            plugin.module_init(ServiceContext())
+            plugin.module_init(ServiceContext(
+                module_logger=module_logger,
+                module_config=EasyConfig()
+            ))
             while not stop_event.is_set():
                 plugin.start_task(stop_event)
         except Exception as e:
             logger.error(f"Plugin {plugin.plugin_name} crashed: {e}", exc_info=True)
+        finally:
+            set_tls_logger(old_logger)
+
         self.on_model_quit(plugin)
 
     # def verify_security(self, file_path):
@@ -193,6 +207,13 @@ class FileHandler(FileSystemEventHandler):
             not os.path.basename(event.src_path).startswith(('~', '.')) and \
             event.src_path.endswith('.py')
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+CRAWL_LOG_FILE = 'crawls.log'
+HISTORY_LOG_FOLDER = 'crawls_history_log'
+
+
 def main():
     # config  = SecurityConfig(
     #     enable_hash=True,
@@ -202,6 +223,21 @@ def main():
     #         "/path/to/valid.py": "a1b2c3...sha256哈希值"
     #     }
     # )
+
+    # ------------------------------------ Logger ------------------------------------
+
+    backup_and_clean_previous_log_file(CRAWL_LOG_FILE, HISTORY_LOG_FOLDER)
+    setup_logging(CRAWL_LOG_FILE)
+
+    log_backend = LoggerBackend(monitoring_file_path=CRAWL_LOG_FILE, cache_limit_count=100000,
+                                link_file_roots={
+                                    'conversation': os.path.abspath('conversation')
+                                },
+                                project_root=project_root,
+                                with_logger_manager=True)
+    log_backend.start_service(port=8000)
+
+    # --------------------------------- Main Service ---------------------------------
 
     crawl_task_path = 'CrawlTasks'
 
@@ -213,6 +249,8 @@ def main():
     observer = Observer()
     observer.schedule(event_handler, path=crawl_task_path, recursive=False)
     observer.start()
+
+    # --------------------------------------------------------------------------------
 
     try:
         while True:
