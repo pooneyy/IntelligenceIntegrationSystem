@@ -45,6 +45,10 @@ class SiliconFlowServiceRotator:
         self.lock = threading.Lock()  # For thread-safe operations
         self.running: bool = False
 
+        # Tracker for consumption rate calculation, only for the current key.
+        # This is kept separate from the persistent keys_data.
+        self.rate_tracker: Dict = {}
+
         self._load_keys()
         # Note: Key initialization is now handled at the beginning of run_forever()
 
@@ -251,23 +255,60 @@ class SiliconFlowServiceRotator:
 
     def _calculate_check_interval(self) -> int:
         """
-        Calculate the next check interval based on the current key's balance.
-        Checks become more frequent as the balance gets lower.
-
-        Returns:
-            Check interval in seconds.
+        Calculates the next check interval based on the rate of balance consumption.
+        This method uses a separate instance variable `self.rate_tracker` to avoid
+        polluting the persistent key data.
         """
-        if not self.current_key or self.current_key not in self.keys_data:
-            return 300  # Default to 5 minutes if no key is active.
+        with self.lock:
+            if not self.current_key or self.current_key not in self.keys_data:
+                return 300  # Default interval if no key is active
 
-        current_balance = self.keys_data[self.current_key].get('balance', 0)
+            current_balance = self.keys_data[self.current_key].get('balance', 0.0)
 
-        if current_balance < self.threshold * 5:
-            return 30
-        elif current_balance < self.threshold * 10:
-            return 60
-        else:
-            return 600
+            # Use the dedicated rate_tracker, falling back to current values if it's not initialized.
+            previous_balance = self.rate_tracker.get('previous_balance', current_balance)
+            last_check_time = self.rate_tracker.get('last_check_time', time.time())
+            current_time = time.time()
+
+            time_elapsed = current_time - last_check_time
+            balance_consumed = previous_balance - current_balance
+
+            # Update the tracker for the next calculation cycle.
+            self.rate_tracker['previous_balance'] = current_balance
+            self.rate_tracker['last_check_time'] = current_time
+
+            # If no consumption, time hasn't passed, or balance increased, fall back to static intervals.
+            if balance_consumed <= 0 or time_elapsed < 1:
+                if current_balance < self.threshold * 5:
+                    return 30
+                elif current_balance < self.threshold * 10:
+                    return 60
+                else:
+                    return 600
+
+            consumption_rate = balance_consumed / time_elapsed
+            remaining_balance = current_balance - self.threshold
+
+            if remaining_balance <= 0:
+                return 15  # Check very frequently if balance is already below threshold.
+
+            time_to_threshold = remaining_balance / consumption_rate
+
+            # Set interval to 20% of the estimated time to threshold, providing a safe buffer.
+            check_interval = int(time_to_threshold * 0.2)
+
+            # Enforce reasonable minimum and maximum bounds.
+            min_interval = 30  # At least every 30 seconds.
+            max_interval = 1800  # At most every 30 minutes.
+            final_interval = max(min_interval, min(check_interval, max_interval))
+
+            logger.info(
+                f"Consumption rate: ${consumption_rate * 3600:.4f}/hour. "
+                f"Est. time to threshold: {time_to_threshold / 60:.1f} mins. "
+                f"Next check in: {final_interval}s."
+            )
+
+            return final_interval
 
     def check_all_balances(self):
         """
@@ -378,14 +419,26 @@ class SiliconFlowServiceRotator:
 
     def _change_api_key(self, api_key: str):
         """
-        Change the API key in the AI client instance.
-
-        Args:
-            api_key: The new API key to set.
+        Change the API key in the AI client and reset the consumption rate tracker.
+        This method is the central point for all key changes.
         """
         try:
             self.ai_client.set_api_token(api_key)
             logger.info(f"Successfully changed API client key to: {api_key[:8]}...")
+
+            # Reset the rate tracker whenever the key changes.
+            # This ensures the consumption rate for the new key is calculated fresh.
+            logger.info(f"Resetting consumption rate tracker for new key {api_key[:8]}...")
+            if self.current_key and self.current_key in self.keys_data:
+                # Use the last known balance as the starting point for the new key.
+                current_balance = self.keys_data[self.current_key].get('balance', -1.0)
+                self.rate_tracker = {
+                    'previous_balance': current_balance,
+                    'last_check_time': time.time()
+                }
+            else:
+                self.rate_tracker = {}  # Clear tracker if no valid key is set.
+
         except Exception as e:
             logger.error(f"Failed to change API key in client: {e}")
 
@@ -404,8 +457,7 @@ class SiliconFlowServiceRotator:
         with self.lock:
             usable_count = len(self._get_usable_keys())
             total_count = len(self.keys_data)
-            current_balance = self.keys_data.get(self.current_key, {}).get('balance',
-                                                                           'N/A') if self.current_key else 'N/A'
+            current_balance = self.keys_data.get(self.current_key, {}).get('balance', 'N/A') if self.current_key else 'N/A'
 
             return {
                 'running': self.running,
