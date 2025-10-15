@@ -15,129 +15,184 @@ class SiliconFlowServiceRotator:
     """
     A service for rotating Silicon Flow API keys based on balance thresholds.
     Automatically manages key validity, balance checking, and key rotation.
+    Keys with insufficient balance are marked as 'disabled' and permanently excluded from use.
     """
 
     def __init__(self,
                  ai_client: OpenAICompatibleAPI,
                  keys_file: str,
                  threshold: float = 0.2,
-                 check_all_balance: bool = True):
+                 check_all_balance_on_start: bool = True):
         """
         Initialize the key rotator.
 
         Args:
-            ai_client: OpenAI compatible API client instance
-            keys_file: Path to file containing API keys (one per line)
-            threshold: Balance threshold for key rotation (default: 0.1 USD)
-            check_all_balance: Whether to check all keys' balances on startup
+            ai_client: OpenAI compatible API client instance.
+            keys_file: Path to the file containing API keys (one per line).
+            threshold: Balance threshold in USD for disabling a key.
+            check_all_balance_on_start: Whether to check all keys' balances on startup.
         """
         self.ai_client = ai_client
         self.keys_file = keys_file
         self.threshold = threshold
-        self.check_all_balance = check_all_balance
+        self.check_all_balance_on_start = check_all_balance_on_start
 
         # Key database structure: {key: {'balance': float, 'last_used': timestamp, 'status': str}}
-        self.keys_data = {}
-        self.current_key = ''
-        self.key_record_file = 'key_record.json'
+        # Status can be: 'unknown', 'valid', 'error', 'disabled'
+        self.keys_data: Dict[str, Dict] = {}
+        self.current_key: str = ''
+        self.key_record_file: str = 'key_record.json'
         self.lock = threading.Lock()  # For thread-safe operations
-        self.running = False
+        self.running: bool = False
 
-        # Load keys and initialize service
         self._load_keys()
-        self._initialize_current_key()
+        # Note: Key initialization is now handled at the beginning of run_forever()
 
     def _load_keys(self):
         """
-        Load keys from key_record.json and the keys file.
-        Merge keys from both sources and maintain key status information.
+        Load keys from key_record.json and the keys text file.
+        Merges keys from both sources and maintains existing key status information.
+        Keys marked as 'disabled' in the JSON file will be ignored for all future operations.
         """
         # Load existing key records from JSON file
         if os.path.exists(self.key_record_file):
             try:
-                with open(self.key_record_file, 'r') as f:
+                with open(self.key_record_file, 'r', encoding='utf-8') as f:
                     self.keys_data = json.load(f)
-                logger.info(f"Loaded {len(self.keys_data)} keys from key record")
+                logger.info(f"Loaded {len(self.keys_data)} keys from key record.")
             except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Failed to load key record: {e}, starting fresh")
+                logger.warning(f"Failed to load key record: {e}, starting fresh.")
                 self.keys_data = {}
             except Exception as e:
-                logger.error(f'Unexpected error when loading {self.key_record_file}')
-                logger.error(str(e))
+                logger.error(f'Unexpected error when loading {self.key_record_file}: {e}')
+                self.keys_data = {}
 
-        # Load keys from text file and merge with existing records
+        # Load keys from the text file and merge with existing records
         has_update = False
         if os.path.exists(self.keys_file):
             try:
-                with open(self.keys_file, 'r') as f:
+                with open(self.keys_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         key = line.strip()
                         if key and key not in self.keys_data:
                             self.keys_data[key] = {
-                                'balance': -1.0,  # Unknown balance
+                                'balance': -1.0,  # A negative value indicates an unknown balance.
                                 'last_used': 0,
-                                'status': 'unknown'  # unknown, valid, invalid, error
+                                'status': 'unknown'  # Statuses: unknown, valid, error, disabled
                             }
                             has_update = True
                             logger.info(f"Added new key from file: {key[:8]}...")
             except Exception as e:
-                logger.error(f'Unexpected error when loading {self.keys_file}')
-                logger.error(str(e))
+                logger.error(f'Unexpected error when loading {self.keys_file}: {e}')
 
         if has_update:
             self._save_key_records()
 
-    def _initialize_current_key(self):
-        """Initialize the current key with the first valid key available."""
-        valid_keys = self._get_valid_keys()
-        if valid_keys:
-            self.current_key = valid_keys[0]
-            self._change_api_key(self.current_key)
-            logger.info(f"Initialized with key: {self.current_key[:8]}...")
-        else:
-            logger.warning("No valid keys available during initialization")
-
-    def check_update_key(self):
+    def _select_initial_key(self):
         """
-        Check current key balance and rotate if necessary.
-        Implements retry logic to avoid discarding keys due to network issues [5](@ref).
+        Selects the first usable key on startup.
+        It iterates through all keys that are not disabled, checks their balance,
+        and picks the first one that meets the balance threshold.
+        Keys that fail the balance check are marked as 'disabled'.
+        All updates are saved to the JSON database at once.
+        """
+        logger.info("Selecting initial key...")
+        records_updated = False
+
+        # Using list() to create a copy, allowing modification of the dict during iteration.
+        for key, data in list(self.keys_data.items()):
+            # Request 1: Skip keys that are already known to be disabled.
+            if data.get('status') == 'disabled':
+                continue
+
+            balance = self._fetch_balance_with_retry(key)
+            records_updated = True  # An attempt to fetch balance means we should save the result.
+
+            if balance is not None:
+                self.keys_data[key]['balance'] = balance
+                if balance < self.threshold:
+                    # The key is unusable, mark it as disabled and continue to the next one.
+                    self.keys_data[key]['status'] = 'disabled'
+                    logger.warning(f"Key {key[:8]}... is below threshold (${balance:.4f}). Marking as disabled.")
+                else:
+                    # Found a usable key. Set it as current and stop searching.
+                    self.keys_data[key]['status'] = 'valid'
+                    self.current_key = key
+                    self._change_api_key(key)
+                    logger.info(f"Initialized with key: {self.current_key[:8]}... with balance ${balance:.4f}")
+                    break
+            else:
+                # Failed to fetch balance after retries. Mark with 'error' and try the next key.
+                self.keys_data[key]['status'] = 'error'
+                logger.error(f"Failed to fetch balance for key {key[:8]}... Marking with status 'error'.")
+
+        # Request 2: Save all updates made during the initial selection process.
+        if records_updated:
+            self._save_key_records()
+
+        if not self.current_key:
+            logger.critical("No usable API keys found after initial check!")
+
+    def check_and_update_current_key(self):
+        """
+        Check the current key's balance. If it falls below the threshold,
+        mark it as 'disabled' and rotate to the next available key.
         """
         if not self.current_key:
-            logger.warning("No current key set")
-            return False
+            logger.warning("No current key is set. Attempting to find a new one.")
+            self._rotate_to_next_key()
+            return bool(self.current_key)
 
         balance = self._fetch_balance_with_retry(self.current_key)
+
         if balance is None:
-            logger.error(f"Failed to fetch balance for current key")
+            logger.error(
+                f"Failed to fetch balance for current key {self.current_key[:8]}.... Marking as 'error' and rotating.")
+            with self.lock:
+                self.keys_data[self.current_key]['status'] = 'error'
+            self._save_key_records()
+            self._rotate_to_next_key()
             return False
 
-        logger.info(f"Current key balance: ${balance:.4f}")
+        logger.info(f"Current key {self.current_key[:8]}... balance: ${balance:.4f}")
 
-        # Update key record
+        records_changed = False
         with self.lock:
-            self.keys_data[self.current_key]['balance'] = balance
+            # Only mark as changed if balance value is actually different
+            if self.keys_data[self.current_key]['balance'] != balance:
+                self.keys_data[self.current_key]['balance'] = balance
+                records_changed = True
+
             self.keys_data[self.current_key]['last_used'] = time.time()
 
+            # Request 4: Check if the key has reached the unusable threshold.
             if balance < self.threshold:
-                logger.warning(f"Key balance below threshold (${balance:.4f} < ${self.threshold}), rotating...")
-                self.keys_data[self.current_key]['status'] = 'invalid'
+                logger.warning(
+                    f"Key {self.current_key[:8]}... balance below threshold (${balance:.4f} < ${self.threshold}). Disabling and rotating...")
+                self.keys_data[self.current_key]['status'] = 'disabled'
+                records_changed = True
+                if records_changed:
+                    self._save_key_records()  # Save immediately after disabling a key.
                 return self._rotate_to_next_key()
             else:
-                self.keys_data[self.current_key]['status'] = 'valid'
+                if self.keys_data[self.current_key]['status'] != 'valid':
+                    self.keys_data[self.current_key]['status'] = 'valid'
+                    records_changed = True
 
-        self._save_key_records()
+        if records_changed:
+            self._save_key_records()
         return True
 
-    def _fetch_balance_with_retry(self, key: str, max_retries: int = 3) -> float:
+    def _fetch_balance_with_retry(self, key: str, max_retries: int = 3) -> float | None:
         """
         Fetch balance with retry logic to handle temporary network issues.
 
         Args:
-            key: API key to check balance for
-            max_retries: Maximum number of retry attempts
+            key: API key to check balance for.
+            max_retries: Maximum number of retry attempts.
 
         Returns:
-            Balance amount or -1 if all retries fail
+            The balance as a float, or None if all retries fail.
         """
         for attempt in range(max_retries):
             try:
@@ -145,199 +200,218 @@ class SiliconFlowServiceRotator:
                 if balance is not None:
                     return balance
 
-                # If fetch failed, wait with exponential backoff [5](@ref)
                 wait_time = 2 ** attempt
-                logger.warning(f"Balance fetch attempt {attempt + 1} failed, retrying in {wait_time}s")
+                logger.warning(
+                    f"Balance fetch attempt {attempt + 1} for key {key[:8]}... failed, retrying in {wait_time}s.")
                 time.sleep(wait_time)
 
             except Exception as e:
-                logger.error(f"Exception during balance fetch attempt {attempt + 1}: {e}")
-                if attempt == max_retries - 1:
-                    break
-                time.sleep(2 ** attempt)
+                logger.error(f"Exception during balance fetch for key {key[:8]}... (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
 
-        return -1
+        return None
 
-    def run_forever(self, thread_quit_flag):
+    def run_forever(self, thread_quit_flag: threading.Event):
         """
         Main scheduling loop for key management.
-        Monitors key balances and handles automatic rotation.
+        It first selects an initial key, then periodically monitors its balance
+        and handles automatic rotation.
 
         Args:
-            thread_quit_flag: Threading event to signal when to stop
+            thread_quit_flag: A threading.Event to signal when to stop the loop.
         """
         self.running = True
-        logger.info("Starting key rotator service")
+        logger.info("Starting key rotator service.")
 
-        # TODO: Check until got a valid key.
-        self.check_update_key()
+        # Request 2: Select the initial key to use by checking balances sequentially.
+        self._select_initial_key()
 
-        # Initial balance check for all keys if enabled
-        if self.check_all_balance:
-            self._check_all_balances()
+        # If specified, perform a one-time balance check for all other usable keys.
+        if self.check_all_balance_on_start:
+            self.check_all_balances()
 
         while self.running and not thread_quit_flag.is_set():
             try:
-                # Check and update current key
-                self.check_update_key()
+                # Periodically check and update the current key.
+                self.check_and_update_current_key()
 
-                # Calculate next check time based on balance consumption rate
+                # Calculate next check time based on balance.
                 check_interval = self._calculate_check_interval()
 
-                # Wait for next check or quit signal
+                # Wait for the next check or a quit signal.
                 thread_quit_flag.wait(check_interval)
 
             except Exception as e:
-                logger.error(f"Error in key rotator loop: {e}")
-                time.sleep(60)  # Wait before retrying
+                logger.error(f"Error in key rotator loop: {e}", exc_info=True)
+                time.sleep(60)  # Wait for a minute before retrying on unexpected errors.
 
         self.running = False
-        logger.info("Key rotator service stopped")
+        logger.info("Key rotator service stopped.")
 
     def _calculate_check_interval(self) -> int:
         """
-        Calculate next check interval based on balance consumption trends.
+        Calculate the next check interval based on the current key's balance.
+        Checks become more frequent as the balance gets lower.
 
         Returns:
-            Check interval in seconds (minimum 30 seconds, maximum 1 hour)
+            Check interval in seconds.
         """
-        if self.current_key not in self.keys_data:
-            return 300
+        if not self.current_key or self.current_key not in self.keys_data:
+            return 300  # Default to 5 minutes if no key is active.
 
         current_balance = self.keys_data[self.current_key].get('balance', 0)
 
-        # More frequent checks when balance is low
-        if current_balance < self.threshold * 5:  # Below 5x threshold
+        if current_balance < self.threshold * 5:
             return 30
-        elif current_balance < self.threshold * 10:  # Below 10x threshold
+        elif current_balance < self.threshold * 10:
             return 60
         else:
             return 600
 
-    def _check_all_balances(self):
-        """Check balances for all keys in the database."""
-        logger.info("Checking balances for all keys")
-        for key in list(self.keys_data.keys()):
+    def check_all_balances(self):
+        """
+        Check and update the balance for all usable (i.e., not disabled) keys.
+        """
+        logger.info("Performing a full balance check for all usable keys.")
+        # Request 3: Only update keys that are not already disabled.
+        keys_to_check = [key for key, data in self.keys_data.items() if data.get('status') != 'disabled']
+
+        if not keys_to_check:
+            logger.info("No usable keys to check.")
+            return
+
+        for key in keys_to_check:
+            # No need to re-check the current key if it was just validated.
+            if key == self.current_key and self.keys_data[key].get('status') == 'valid':
+                continue
+
             balance = self._fetch_balance_with_retry(key)
             with self.lock:
                 if balance is not None:
                     self.keys_data[key]['balance'] = balance
-                    self.keys_data[key]['status'] = 'valid' if balance >= self.threshold else 'invalid'
+                    if balance < self.threshold:
+                        self.keys_data[key]['status'] = 'disabled'
+                        logger.warning(f"Key {key[:8]}... is below threshold during full check. Disabling.")
+                    else:
+                        self.keys_data[key]['status'] = 'valid'
                 else:
                     self.keys_data[key]['status'] = 'error'
+                    logger.error(f"Failed to fetch balance for key {key[:8]}... during full check.")
 
         self._save_key_records()
-        logger.info("Completed balance check for all keys")
+        logger.info("Completed full balance check.")
 
     def _rotate_to_next_key(self) -> bool:
         """
-        Rotate to the next available valid key.
+        Rotate to the next usable key in the list. A usable key is one
+        that is not marked as 'disabled'.
 
         Returns:
-            True if rotation successful, False if no valid keys available
+            True if rotation was successful, False if no usable keys are available.
         """
-        valid_keys = self._get_valid_keys()
+        usable_keys = self._get_usable_keys()
 
-        if not valid_keys:
-            logger.error("No valid keys available for rotation")
-            return False
-
-        # Remove current key from valid keys list
-        if self.current_key in valid_keys:
-            valid_keys.remove(self.current_key)
-
-        if valid_keys:
-            new_key = valid_keys[0]
-            self.current_key = new_key
-            self._change_api_key(new_key)
-            logger.info(f"Rotated to new key: {new_key[:8]}...")
-            return True
-        else:
-            logger.error("No alternative valid keys available")
+        if not usable_keys:
+            logger.critical("Rotation failed: No usable keys available.")
             self.current_key = ''
             self.ai_client.set_api_token('')
             return False
 
-    def _get_valid_keys(self) -> List[str]:
-        """Get list of valid keys (balance above threshold)."""
+        # Simply pick the first usable key from the remaining list.
+        # The main loop will validate its balance in the next iteration.
+        new_key = usable_keys[0]
+        self.current_key = new_key
+        self._change_api_key(new_key)
+        logger.info(f"Rotated to new key: {new_key[:8]}...")
+        return True
+
+    def _get_usable_keys(self) -> List[str]:
+        """
+        Get a list of keys that are not disabled.
+        This provides the pool of keys for rotation and checking.
+        """
         with self.lock:
+            # A key is considered usable if it has not been explicitly marked as 'disabled'.
             return [key for key, data in self.keys_data.items()
-                    if data.get('status') in ['valid', 'unknown']
-                    and data.get('balance', 0) >= self.threshold]
+                    if data.get('status') != 'disabled']
 
     def _save_key_records(self):
-        """Save key records to file using temporary file for atomic writes [4](@ref)."""
-        try:
-            # Create temporary file
-            temp_file = f"{self.key_record_file}.tmp"
-            with open(temp_file, 'w') as f:
-                json.dump(self.keys_data, f, indent=2)
-
-            # Atomically replace the old file
-            os.replace(temp_file, self.key_record_file)
-            logger.debug("Key records saved successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to save key records: {e}")
+        """
+        Save the current key data to the JSON file atomically.
+        Uses a temporary file to prevent data corruption on write failure.
+        """
+        with self.lock:
+            try:
+                temp_file = f"{self.key_record_file}.tmp"
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.keys_data, f, indent=2)
+                os.replace(temp_file, self.key_record_file)
+                logger.debug("Key records saved successfully.")
+            except Exception as e:
+                logger.error(f"Failed to save key records: {e}")
 
     def _fetch_balance(self, key: str) -> float | None:
         """
-        Fetch balance for a specific API key.
+        Fetch the balance for a specific API key from the service.
 
         Args:
-            key: API key to check balance for
+            key: The API key to check.
 
         Returns:
-            Balance amount or -1 if fetch fails
+            The balance as a float, or None if the fetch fails or the response is malformed.
         """
         if not key:
             return None
 
         try:
             result = get_siliconflow_balance(key)
-            if 'total_balance_usd' in result.get('data', { }):
-                return float(result['data']['total_balance_usd'])
+            balance = result.get('data', {}).get('total_balance_usd')
+            if balance is not None:
+                return float(balance)
             else:
-                logger.warning(f"Unknown balance response format for key: {key[:8]}...")
+                logger.warning(f"Malformed balance response for key {key[:8]}...: {result}")
                 return None
         except Exception as e:
-            logger.error(f"Error fetching balance for key {key[:8]}...: {e}")
+            logger.error(f"Exception fetching balance for key {key[:8]}...: {e}")
             return None
 
     def _change_api_key(self, api_key: str):
         """
-        Change the API key in the AI client.
+        Change the API key in the AI client instance.
 
         Args:
-            api_key: New API key to set
+            api_key: The new API key to set.
         """
         try:
             self.ai_client.set_api_token(api_key)
-            logger.info(f"Successfully changed API key to: {api_key[:8]}...")
+            logger.info(f"Successfully changed API client key to: {api_key[:8]}...")
         except Exception as e:
-            logger.error(f"Failed to change API key: {e}")
+            logger.error(f"Failed to change API key in client: {e}")
 
     def stop(self):
         """Stop the key rotator service."""
         self.running = False
-        logger.info("Key rotator service stopping")
+        logger.info("Key rotator service stopping...")
 
     def get_status(self) -> Dict:
         """
-        Get current status of the key rotator.
+        Get the current status of the key rotator.
 
         Returns:
-            Dictionary containing current status information
+            A dictionary containing current status information.
         """
         with self.lock:
-            valid_count = len(self._get_valid_keys())
+            usable_count = len(self._get_usable_keys())
             total_count = len(self.keys_data)
+            current_balance = self.keys_data.get(self.current_key, {}).get('balance',
+                                                                           'N/A') if self.current_key else 'N/A'
 
             return {
+                'running': self.running,
                 'current_key': self.current_key[:8] + '...' if self.current_key else 'None',
-                'valid_keys': valid_count,
+                'current_balance': current_balance,
+                'usable_keys': usable_count,
                 'total_keys': total_count,
                 'threshold': self.threshold,
-                'current_balance': self.keys_data.get(self.current_key, {}).get('balance', 0) if self.current_key else 0,
-                'running': self.running
             }
