@@ -171,6 +171,7 @@ def config_log():
     setup_logging(IIS_LOG_FILE)
 
     # Disable 3-party library's log
+    limit_logger_level("core")
     limit_logger_level("base")
     limit_logger_level("asyncio")
     limit_logger_level("pymongo")
@@ -179,9 +180,17 @@ def config_log():
     limit_logger_level("WaitressServer")
     limit_logger_level("proactor_events")
 
+    limit_logger_level("urllib3")
+    limit_logger_level("urllib3.connection")
+    limit_logger_level("urllib3.connectionpool")
+    limit_logger_level("urllib3.poolmanager")
+    limit_logger_level("urllib3.response")
+    limit_logger_level("urllib3.util.retry")
+
     # My modules
     limit_logger_level("Tools.RequestTracer")
     limit_logger_level("Tools.DateTimeUtility")
+    limit_logger_level("PyLoggingBackend.LoggerBackend")
     limit_logger_level("ServiceComponent.AIServiceRotator")
 
 

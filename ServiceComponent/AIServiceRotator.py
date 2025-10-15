@@ -89,14 +89,13 @@ class SiliconFlowServiceRotator:
 
     def _initialize_current_key(self):
         """Initialize the current key with the first valid key available."""
-        with self.lock:
-            valid_keys = self._get_valid_keys()
-            if valid_keys:
-                self.current_key = valid_keys[0]
-                self._change_api_key(self.current_key)
-                logger.info(f"Initialized with key: {self.current_key[:8]}...")
-            else:
-                logger.warning("No valid keys available during initialization")
+        valid_keys = self._get_valid_keys()
+        if valid_keys:
+            self.current_key = valid_keys[0]
+            self._change_api_key(self.current_key)
+            logger.info(f"Initialized with key: {self.current_key[:8]}...")
+        else:
+            logger.warning("No valid keys available during initialization")
 
     def check_update_key(self):
         """
