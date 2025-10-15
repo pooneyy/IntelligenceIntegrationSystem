@@ -164,6 +164,7 @@ class RecommendationManager:
             self._save_and_cache_recommendation(new_recommendation)
 
         except Exception as e:
+            print(traceback.format_exc())
             logger.error(f'An exception occurred during generate_recommendation: {e}', exc_info=True)
         finally:
             with self.lock:

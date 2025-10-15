@@ -129,7 +129,9 @@ def conversation_common_process(category, messages, response) -> dict:
     else:
         record_file_rel_path = ''
         record_file_web_path = ''
-    ai_json['record_file'] = record_file_rel_path
+    if isinstance(ai_json, dict):
+        # For recommendation, it's not a dict.
+        ai_json['record_file'] = record_file_rel_path
 
     if isinstance(ai_json, dict) and 'error' in ai_json:
         logger.error(f'AI {category} conversation fail.', extra={'link_file': record_file_web_path})
