@@ -93,7 +93,8 @@ def parse_ai_response(response: dict) -> dict:
                 fixed_json_str = json.dumps(repaired_data, ensure_ascii=False, indent=4)
 
                 parsed_output = json.loads(fixed_json_str)
-                parsed_output['warning'] = 'Json repaired.'
+                if isinstance(parsed_output, dict):
+                    parsed_output['warning'] = 'Json repaired.'
 
                 logger.info(f'Json repare success.')
 
