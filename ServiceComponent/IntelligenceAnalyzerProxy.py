@@ -114,6 +114,10 @@ def parse_ai_response(response: dict) -> dict:
 
 
 def conversation_common_process(category, messages, response) -> dict:
+    if 'error' in response:
+        logger.error(f'Get error from response.')
+        return response
+
     record_index = record_conversation(category, messages, response)
     ai_json = parse_ai_response(response)
 

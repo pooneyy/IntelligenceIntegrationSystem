@@ -131,6 +131,8 @@ class OpenAICompatibleAPI:
         Returns:
             Union[Dict[str, Any], requests.Response]: The API response, either as a parsed dictionary or the raw response object.
         """
+        if not self.api_token:
+            return {'error': 'invalid api token'}
         url = self._construct_url("models")
         if self.proxies:
             response = requests.get(url, headers=self.get_header(), proxies=self.proxies)
@@ -159,6 +161,9 @@ class OpenAICompatibleAPI:
             The messages should be in the format of [{"role": "system", "content": "System message"},
                                                    {"role": "user", "content": "User message"}].
         """
+        if not self.api_token:
+            return {'error': 'invalid api token'}
+
         url = self._construct_url("chat/completions")
         data = self._prepare_request_data(
             model=model,
@@ -195,8 +200,10 @@ class OpenAICompatibleAPI:
             The messages should be in the format of [{"role": "system", "content": "System message"},
                                                    {"role": "user", "content": "User message"}].
         """
+        if not self.api_token:
+            return {'error': 'invalid api token'}
         if not aiohttp:
-            return {}
+            return {'error': 'aiohttp not installed'}
 
         url = self._construct_url("chat/completions")
         data = self._prepare_request_data(
@@ -228,6 +235,9 @@ class OpenAICompatibleAPI:
         Returns:
             Union[Dict[str, Any], requests.Response]: The API response, either as a parsed dictionary or the raw response object.
         """
+        if not self.api_token:
+            return {'error': 'invalid api token'}
+
         url = self._construct_url("completions")
         data = self._prepare_request_data(
             model=model,
@@ -262,8 +272,10 @@ class OpenAICompatibleAPI:
         Note:
             Requires asyncio and aiohttp to be installed and used within an async context.
         """
+        if not self.api_token:
+            return {'error': 'invalid api token'}
         if not aiohttp:
-            return {}
+            return {'error': 'aiohttp not installed'}
 
         url = self._construct_url("completions")
         data = self._prepare_request_data(

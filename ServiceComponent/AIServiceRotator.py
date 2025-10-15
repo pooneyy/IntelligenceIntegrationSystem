@@ -131,7 +131,7 @@ class SiliconFlowServiceRotator:
 
     def _fetch_balance_with_retry(self, key: str, max_retries: int = 3) -> float:
         """
-        Fetch balance with retry logic to handle temporary network issues [5](@ref).
+        Fetch balance with retry logic to handle temporary network issues.
 
         Args:
             key: API key to check balance for
@@ -252,13 +252,16 @@ class SiliconFlowServiceRotator:
             return True
         else:
             logger.error("No alternative valid keys available")
+            self.current_key = ''
+            self.ai_client.set_api_token('')
             return False
 
     def _get_valid_keys(self) -> List[str]:
         """Get list of valid keys (balance above threshold)."""
-        return [key for key, data in self.keys_data.items()
-                if data.get('status') in ['valid', 'unknown']
-                and data.get('balance', 0) >= self.threshold]
+        with self.lock:
+            return [key for key, data in self.keys_data.items()
+                    if data.get('status') in ['valid', 'unknown']
+                    and data.get('balance', 0) >= self.threshold]
 
     def _save_key_records(self):
         """Save key records to file using temporary file for atomic writes [4](@ref)."""
@@ -324,14 +327,15 @@ class SiliconFlowServiceRotator:
         Returns:
             Dictionary containing current status information
         """
-        valid_count = len(self._get_valid_keys())
-        total_count = len(self.keys_data)
+        with self.lock:
+            valid_count = len(self._get_valid_keys())
+            total_count = len(self.keys_data)
 
-        return {
-            'current_key': self.current_key[:8] + '...' if self.current_key else 'None',
-            'valid_keys': valid_count,
-            'total_keys': total_count,
-            'threshold': self.threshold,
-            'current_balance': self.keys_data.get(self.current_key, {}).get('balance', 0) if self.current_key else 0,
-            'running': self.running
-        }
+            return {
+                'current_key': self.current_key[:8] + '...' if self.current_key else 'None',
+                'valid_keys': valid_count,
+                'total_keys': total_count,
+                'threshold': self.threshold,
+                'current_balance': self.keys_data.get(self.current_key, {}).get('balance', 0) if self.current_key else 0,
+                'running': self.running
+            }
