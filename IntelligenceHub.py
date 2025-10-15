@@ -82,6 +82,10 @@ class IntelligenceHub:
         self.drop_counter = 0
         self.error_counter = 0
 
+        self.conversation_warning = 0
+        self.conversation_error = 0
+        self.conversation_total = 0
+
         # --------------- Components ----------------
 
         self.cache_db_query_engine = IntelligenceQueryEngine(self.mongo_db_cache)
@@ -234,9 +238,9 @@ class IntelligenceHub:
             'archived': self.archived_counter,
             'dropped': self.drop_counter,
             'error': self.error_counter,
-            'conversation_warning': 0,
-            'conversation_error': 0,
-            'conversation_total': 0,
+            'conversation_warning': self.conversation_warning,
+            'conversation_error': self.conversation_error ,
+            'conversation_total': self.conversation_total ,
         }
 
     # ------------------------------------------------ Public Functions ------------------------------------------------
@@ -362,11 +366,11 @@ class IntelligenceHub:
         result = analyze_with_ai(self.open_ai_client, ANALYSIS_PROMPT, original_data)
 
         # Check warning and error for statistics
-        self.statistics['conversation_total'] += 1
         if 'error' in result:
-            self.statistics['conversation_error'] += 1
+            self.conversation_error += 1
         elif 'warning' in result:
-            self.statistics['conversation_warning'] += 1
+            self.conversation_warning += 1
+        self.conversation_total += 1
 
         return result
 
