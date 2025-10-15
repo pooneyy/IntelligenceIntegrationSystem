@@ -362,8 +362,13 @@ def _format_result_to_string(result: Dict[str, Any]) -> str:
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
-    result = get_siliconflow_balance('')
-    print(_format_result_to_string(result))
+    with open('C:\D\Code\git\IntelligenceIntegrationSystem\siliconflow_keys.txt', 'rt') as f:
+        while True:
+            line = f.readline().strip()
+            if not line:
+                break
+            result = get_siliconflow_balance(line)
+            print(_format_result_to_string(result))
 
 
 if __name__ == "__main__":

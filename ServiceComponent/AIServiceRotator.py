@@ -107,7 +107,7 @@ class SiliconFlowServiceRotator:
             return False
 
         balance = self._fetch_balance_with_retry(self.current_key)
-        if balance < 0:
+        if balance is None:
             logger.error(f"Failed to fetch balance for current key")
             return False
 
@@ -142,7 +142,7 @@ class SiliconFlowServiceRotator:
         for attempt in range(max_retries):
             try:
                 balance = self._fetch_balance(key)
-                if balance >= 0:
+                if balance is not None:
                     return balance
 
                 # If fetch failed, wait with exponential backoff [5](@ref)
@@ -168,6 +168,9 @@ class SiliconFlowServiceRotator:
         """
         self.running = True
         logger.info("Starting key rotator service")
+
+        # TODO: Check until got a valid key.
+        self.check_update_key()
 
         # Initial balance check for all keys if enabled
         if self.check_all_balance:
@@ -217,7 +220,7 @@ class SiliconFlowServiceRotator:
         for key in list(self.keys_data.keys()):
             balance = self._fetch_balance_with_retry(key)
             with self.lock:
-                if balance >= 0:
+                if balance is not None:
                     self.keys_data[key]['balance'] = balance
                     self.keys_data[key]['status'] = 'valid' if balance >= self.threshold else 'invalid'
                 else:
@@ -277,7 +280,7 @@ class SiliconFlowServiceRotator:
         except Exception as e:
             logger.error(f"Failed to save key records: {e}")
 
-    def _fetch_balance(self, key: str) -> float:
+    def _fetch_balance(self, key: str) -> float | None:
         """
         Fetch balance for a specific API key.
 
@@ -288,7 +291,7 @@ class SiliconFlowServiceRotator:
             Balance amount or -1 if fetch fails
         """
         if not key:
-            return -1
+            return None
 
         try:
             result = get_siliconflow_balance(key)
@@ -296,10 +299,10 @@ class SiliconFlowServiceRotator:
                 return float(result['data']['total_balance_usd'])
             else:
                 logger.warning(f"Unknown balance response format for key: {key[:8]}...")
-                return -1
+                return None
         except Exception as e:
             logger.error(f"Error fetching balance for key {key[:8]}...: {e}")
-            return -1
+            return None
 
     def _change_api_key(self, api_key: str):
         """
