@@ -131,28 +131,28 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
 
     # --------------------------------- Key Rotator ---------------------------------
 
-    # key_rotator_enabled = config.get('ai_service_rotator.enabled', False)
-    # key_rotator_key_file = config.get('ai_service_rotator.key_file', '')
-    # key_rotator_threshold = config.get('ai_service_rotator.threshold', 0.5)
-    #
-    # if key_rotator_enabled and key_rotator_key_file:
-    #     logger.info(f'AI Service Key Rotator Enabled. key file: '
-    #                 f'{key_rotator_key_file}, threshold: {key_rotator_threshold}')
-    #
-    #     ai_token_rotator = SiliconFlowServiceRotator(
-    #         ai_client=api_client,
-    #         keys_file=os.path.join(self_path, key_rotator_key_file),
-    #         threshold=float(key_rotator_threshold)
-    #     )
-    #
-    #     quit_flag = threading.Event()
-    #     rotator_thread = threading.Thread(
-    #         target=ai_token_rotator.run_forever,
-    #         args=(quit_flag,),
-    #         name="KeyRotatorThread",
-    #         daemon=True
-    #     )
-    #     rotator_thread.start()
+    key_rotator_enabled = config.get('ai_service_rotator.enabled', False)
+    key_rotator_key_file = config.get('ai_service_rotator.key_file', '')
+    key_rotator_threshold = config.get('ai_service_rotator.threshold', 0.5)
+
+    if key_rotator_enabled and key_rotator_key_file:
+        logger.info(f'AI Service Key Rotator Enabled. key file: '
+                    f'{key_rotator_key_file}, threshold: {key_rotator_threshold}')
+
+        ai_token_rotator = SiliconFlowServiceRotator(
+            ai_client=api_client,
+            keys_file=os.path.join(self_path, key_rotator_key_file),
+            threshold=float(key_rotator_threshold)
+        )
+
+        quit_flag = threading.Event()
+        rotator_thread = threading.Thread(
+            target=ai_token_rotator.run_forever,
+            args=(quit_flag,),
+            name="KeyRotatorThread",
+            daemon=True
+        )
+        rotator_thread.start()
 
     # --------------------------------- End of Init ---------------------------------
 

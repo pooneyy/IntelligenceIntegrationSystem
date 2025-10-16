@@ -85,7 +85,7 @@ class SiliconFlowServiceRotator:
                                 'status': 'unknown'  # Statuses: unknown, valid, error, disabled
                             }
                             has_update = True
-                            logger.info(f"Added new key from file: {key[:8]}...")
+                            logger.info(f"Added new key from file: {key[:16]}...")
             except Exception as e:
                 logger.error(f'Unexpected error when loading {self.keys_file}: {e}')
 
@@ -117,18 +117,18 @@ class SiliconFlowServiceRotator:
                 if balance < self.threshold:
                     # The key is unusable, mark it as disabled and continue to the next one.
                     self.keys_data[key]['status'] = 'disabled'
-                    logger.warning(f"Key {key[:8]}... is below threshold (${balance:.4f}). Marking as disabled.")
+                    logger.warning(f"Key {key[:16]}... is below threshold (${balance:.4f}). Marking as disabled.")
                 else:
                     # Found a usable key. Set it as current and stop searching.
                     self.keys_data[key]['status'] = 'valid'
                     self.current_key = key
                     self._change_api_key(key)
-                    logger.info(f"Initialized with key: {self.current_key[:8]}... with balance ${balance:.4f}")
+                    logger.info(f"Initialized with key: {self.current_key[:16]}... with balance ${balance:.4f}")
                     break
             else:
                 # Failed to fetch balance after retries. Mark with 'error' and try the next key.
                 self.keys_data[key]['status'] = 'error'
-                logger.error(f"Failed to fetch balance for key {key[:8]}... Marking with status 'error'.")
+                logger.error(f"Failed to fetch balance for key {key[:16]}... Marking with status 'error'.")
 
         # Request 2: Save all updates made during the initial selection process.
         if records_updated:
@@ -151,14 +151,14 @@ class SiliconFlowServiceRotator:
 
         if balance is None:
             logger.error(
-                f"Failed to fetch balance for current key {self.current_key[:8]}.... Marking as 'error' and rotating.")
+                f"Failed to fetch balance for current key {self.current_key[:16]}.... Marking as 'error' and rotating.")
             with self.lock:
                 self.keys_data[self.current_key]['status'] = 'error'
             self._save_key_records()
             self._rotate_to_next_key()
             return False
 
-        logger.info(f"Current key {self.current_key[:8]}... balance: ${balance:.4f}")
+        logger.info(f"Current key {self.current_key[:16]}... balance: ${balance:.4f}")
 
         records_changed = False
         with self.lock:
@@ -172,7 +172,7 @@ class SiliconFlowServiceRotator:
             # Request 4: Check if the key has reached the unusable threshold.
             if balance < self.threshold:
                 logger.warning(
-                    f"Key {self.current_key[:8]}... balance below threshold (${balance:.4f} < ${self.threshold}). Disabling and rotating...")
+                    f"Key {self.current_key[:16]}... balance below threshold (${balance:.4f} < ${self.threshold}). Disabling and rotating...")
                 self.keys_data[self.current_key]['status'] = 'disabled'
                 records_changed = True
                 if records_changed:
@@ -206,11 +206,11 @@ class SiliconFlowServiceRotator:
 
                 wait_time = 2 ** attempt
                 logger.warning(
-                    f"Balance fetch attempt {attempt + 1} for key {key[:8]}... failed, retrying in {wait_time}s.")
+                    f"Balance fetch attempt {attempt + 1} for key {key[:16]}... failed, retrying in {wait_time}s.")
                 time.sleep(wait_time)
 
             except Exception as e:
-                logger.error(f"Exception during balance fetch for key {key[:8]}... (attempt {attempt + 1}): {e}")
+                logger.error(f"Exception during balance fetch for key {key[:16]}... (attempt {attempt + 1}): {e}")
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
 
@@ -333,12 +333,12 @@ class SiliconFlowServiceRotator:
                     self.keys_data[key]['balance'] = balance
                     if balance < self.threshold:
                         self.keys_data[key]['status'] = 'disabled'
-                        logger.warning(f"Key {key[:8]}... is below threshold during full check. Disabling.")
+                        logger.warning(f"Key {key[:16]}... is below threshold during full check. Disabling.")
                     else:
                         self.keys_data[key]['status'] = 'valid'
                 else:
                     self.keys_data[key]['status'] = 'error'
-                    logger.error(f"Failed to fetch balance for key {key[:8]}... during full check.")
+                    logger.error(f"Failed to fetch balance for key {key[:16]}... during full check.")
 
         self._save_key_records()
         logger.info("Completed full balance check.")
@@ -364,7 +364,7 @@ class SiliconFlowServiceRotator:
         new_key = usable_keys[0]
         self.current_key = new_key
         self._change_api_key(new_key)
-        logger.info(f"Rotated to new key: {new_key[:8]}...")
+        logger.info(f"Rotated to new key: {new_key[:16]}...")
         return True
 
     def _get_usable_keys(self) -> List[str]:
@@ -411,10 +411,10 @@ class SiliconFlowServiceRotator:
             if balance is not None:
                 return float(balance)
             else:
-                logger.warning(f"Malformed balance response for key {key[:8]}...: {result}")
+                logger.warning(f"Malformed balance response for key {key[:16]}...: {result}")
                 return None
         except Exception as e:
-            logger.error(f"Exception fetching balance for key {key[:8]}...: {e}")
+            logger.error(f"Exception fetching balance for key {key[:16]}...: {e}")
             return None
 
     def _change_api_key(self, api_key: str):
@@ -424,11 +424,11 @@ class SiliconFlowServiceRotator:
         """
         try:
             self.ai_client.set_api_token(api_key)
-            logger.info(f"Successfully changed API client key to: {api_key[:8]}...")
+            logger.info(f"Successfully changed API client key to: {api_key[:16]}...")
 
             # Reset the rate tracker whenever the key changes.
             # This ensures the consumption rate for the new key is calculated fresh.
-            logger.info(f"Resetting consumption rate tracker for new key {api_key[:8]}...")
+            logger.info(f"Resetting consumption rate tracker for new key {api_key[:16]}...")
             if self.current_key and self.current_key in self.keys_data:
                 # Use the last known balance as the starting point for the new key.
                 current_balance = self.keys_data[self.current_key].get('balance', -1.0)
@@ -461,7 +461,7 @@ class SiliconFlowServiceRotator:
 
             return {
                 'running': self.running,
-                'current_key': self.current_key[:8] + '...' if self.current_key else 'None',
+                'current_key': self.current_key[:16] + '...' if self.current_key else 'None',
                 'current_balance': current_balance,
                 'usable_keys': usable_count,
                 'total_keys': total_count,

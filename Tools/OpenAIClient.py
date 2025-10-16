@@ -1,14 +1,18 @@
 import os
 import json
+import logging
+import requests
 import threading
 
-import requests
 from typing import Optional, Dict, Any, Union, List
 
 try:
     import aiohttp
 except:
     aiohttp = None
+
+
+logger = logging.getLogger(__name__)
 
 
 """
@@ -117,8 +121,10 @@ class OpenAICompatibleAPI:
 
     def set_api_token(self, token: str):
         with self.lock:
+            old_token = self.api_token
             self.api_token = token
             self.headers["Authorization"] = f"Bearer {self.api_token}"
+            logger.info(f'Change API key from {old_token[:16]} to {token[:16]}.')
             
     def get_header(self) -> dict:
         with self.lock:
