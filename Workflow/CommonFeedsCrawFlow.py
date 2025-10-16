@@ -132,6 +132,7 @@ def feeds_craw_flow(flow_name: str,
     """
     prefix = f'[{flow_name}]:'
     print(f'{prefix} starts work.')
+    logger.info(f'{prefix} starts work.')
 
     submit_ihub_url = config.get('collector.submit_ihub_url', f'http://127.0.0.1:{DEFAULT_IHUB_PORT}')
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens')

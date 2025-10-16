@@ -10,7 +10,8 @@ from watchdog.events import FileSystemEventHandler
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
 from MyPythonUtility.easy_config import EasyConfig
 from PyLoggingBackend import LoggerBackend
-from PyLoggingBackend.LogUtility import set_tls_logger, backup_and_clean_previous_log_file, setup_logging
+from PyLoggingBackend.LogUtility import set_tls_logger, backup_and_clean_previous_log_file, setup_logging, \
+    limit_logger_level
 from Tools.MongoDBAccess import init_global_db_access
 from MyPythonUtility.plugin_manager import PluginManager, PluginWrapper
 
@@ -214,6 +215,19 @@ CRAWL_LOG_FILE = 'crawls.log'
 HISTORY_LOG_FOLDER = 'crawls_history_log'
 
 
+def config_log_level():
+    # Disable 3-party library's log
+    limit_logger_level("asyncio")
+    limit_logger_level("werkzeug")
+    limit_logger_level("pymongo.topology")
+    limit_logger_level("pymongo.connection")
+    limit_logger_level("pymongo.serverSelection")
+    limit_logger_level('urllib3.util.retry')
+    limit_logger_level('urllib3.connectionpool')
+
+    # My modules
+
+
 def main():
     # config  = SecurityConfig(
     #     enable_hash=True,
@@ -228,6 +242,8 @@ def main():
 
     backup_and_clean_previous_log_file(CRAWL_LOG_FILE, HISTORY_LOG_FOLDER)
     setup_logging(CRAWL_LOG_FILE)
+
+    config_log_level()
 
     log_backend = LoggerBackend(monitoring_file_path=CRAWL_LOG_FILE, cache_limit_count=100000,
                                 link_file_roots={
