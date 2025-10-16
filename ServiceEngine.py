@@ -168,22 +168,6 @@ class TaskManager:
 
         self.on_model_quit(plugin)
 
-    # def verify_security(self, file_path):
-    #     # 哈希白名单校验
-    #     if self.security.enable_hash:
-    #         expected_hash = self.security.whitelist.get(file_path)
-    #         if not SecurityValidator.verify_hash(file_path, expected_hash):
-    #             return False
-    #
-    #     # 数字签名校验
-    #     if self.security.enable_signature and self.security.public_key:
-    #         sig_path = f"{file_path}.sig"
-    #         if not SecurityValidator.verify_signature(file_path,
-    #                                                   self.security.public_key,
-    #                                                   sig_path):
-    #             return False
-    #     return True
-
 
 class FileHandler(FileSystemEventHandler):
     def __init__(self, task_manager):
@@ -229,15 +213,6 @@ def config_log_level():
 
 
 def main():
-    # config  = SecurityConfig(
-    #     enable_hash=True,
-    #     enable_signature=True,
-    #     public_key_path="public_key.pem",
-    #     whitelist_hashes={
-    #         "/path/to/valid.py": "a1b2c3...sha256哈希值"
-    #     }
-    # )
-
     # ------------------------------------ Logger ------------------------------------
 
     backup_and_clean_previous_log_file(CRAWL_LOG_FILE, HISTORY_LOG_FOLDER)

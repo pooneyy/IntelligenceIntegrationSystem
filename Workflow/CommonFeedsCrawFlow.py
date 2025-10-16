@@ -8,7 +8,7 @@ from typing import Callable, TypedDict, Dict, List, Tuple
 from GlobalConfig import DEFAULT_COLLECTOR_TOKEN
 from IntelligenceHub import CollectedData
 from MyPythonUtility.easy_config import EasyConfig
-from PyLoggingBackend.LogUtility import create_tls_leveling_logger
+from PyLoggingBackend.LogUtility import get_tls_logger
 from Tools.ContentHistory import has_url
 from IntelligenceHubWebService import post_collected_intelligence, DEFAULT_IHUB_PORT
 from Streamer.ToFileAndHistory import to_file_and_history
@@ -20,7 +20,7 @@ from Tools.RSSFetcher import FeedData
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-logger = create_tls_leveling_logger(__name__)
+logger = get_tls_logger(__name__)
 logger.setLevel(logging.INFO)
 
 CRAWL_ERROR_THRESHOLD = 3
@@ -131,18 +131,15 @@ def feeds_craw_flow(flow_name: str,
     :return: None
     """
     prefix = f'[{flow_name}]:'
-    print(f'{prefix} starts work.')
     logger.info(f'{prefix} starts work.')
 
     submit_ihub_url = config.get('collector.submit_ihub_url', f'http://127.0.0.1:{DEFAULT_IHUB_PORT}')
     collector_tokens = config.get('intelligence_hub_web_service.collector.tokens')
     token = collector_tokens[0] if collector_tokens else DEFAULT_COLLECTOR_TOKEN
 
-    print(f'{prefix} submit token: {token}.')
-    print(f'{prefix} submit to URL: {submit_ihub_url}.')
+    logger.info(f'{prefix} submit to URL: {submit_ihub_url}, token = {token}.')
 
-    crawl_record = CrawlRecord(
-        ['crawl_record', flow_name])
+    crawl_record = CrawlRecord(['crawl_record', flow_name])
     crawl_statistics = CrawlStatistics()
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -161,9 +158,7 @@ def feeds_craw_flow(flow_name: str,
 
         # ----------------------------------- Fetch and Parse feeds -----------------------------------
 
-        print()
-        print('=' * 100)
-        print(f'{prefix} Process feed: [{feed_name}] - {feed_url}')
+        logger.info(f'{prefix} Processing feed: [{feed_name}] - {feed_url}')
 
         try:
             result = fetch_feed(feed_url)
@@ -177,12 +172,16 @@ def feeds_craw_flow(flow_name: str,
             crawl_statistics.counter_log(stat_name, 'exception')
             continue
 
+        logger.info(f'{prefix} Feed: [{feed_name}] process finished.')
+
         # ----------------------------------- Process Articles in Feed ----------------------------------
 
         for article in result.entries:
             try:
                 feed_statistics['index'] += 1
                 article_link = article.link
+
+                logger.debug(f'Processing article: {article_link}')
 
                 # ----------------------------------- Check Duplication ----------------------------------
 
@@ -214,7 +213,7 @@ def feeds_craw_flow(flow_name: str,
                     collected_data = cached_data
                     # TODO: Workaround, compatible with to_file_and_history() mechanism.
                     text = collected_data.content
-                    print(f'[cache] Get data from cache: {article_link}')
+                    logger.debug(f'[cache] Get data from cache: {article_link}')
                 else:
                     text, error_place = fetch_process_article(article_link, fetch_content, scrubbers)
 
@@ -223,7 +222,6 @@ def feeds_craw_flow(flow_name: str,
                         raise ProcessProblem('fetch_error', article_link)
 
                     if not text:
-                        # logger.error(f'{prefix}   |--Got empty content when applying scrubber {str(scrubber)}.')
                         raise ProcessIgnore('empty when ' + error_place)
 
                     # --------------------------------- Record and Persists ---------------------------------
@@ -245,34 +243,35 @@ def feeds_craw_flow(flow_name: str,
                     if result.get('status', 'success') == 'error':
                         if not cached_data:
                             cache_content(article_link, collected_data)
-                            print(f'[cache] Cache item: {article_link}')
+                            logger.info(f'[cache] Cache item: {article_link}')
                         raise ProcessProblem('commit_error')
                     else:
                         if cached_data:
                             drop_cached_content(article_link)
-                            print(f'[cache] Submitted and remove item: {article_link}')
+                            logger.info(f'[cache] Submitted and remove item: {article_link}')
 
                 if text:
                     success, file_path = to_file_and_history(
                         article_link, text, article.title, feed_name, '.md')
                     # TODO: Actually, with CrawlRecord, we don't need this.
                     if not success:
-                        # logger.error(f'{prefix}   |--Save content {file_path} fail.')
-                        # raise ProcessProblem('persists_error', article_link)
-                        pass
+                        logger.info(f'{prefix} Save content {file_path} fail.')
 
                 feed_statistics['success'] += 1
                 print('.', end='', flush=True)
+                logger.debug(f'Article finished.')
                 crawl_record.record_url_status(article_link, STATUS_SUCCESS)
                 crawl_statistics.sub_item_log(stat_name, article_link, 'success')
 
             except ProcessSkip:
                 feed_statistics['skip'] += 1
                 print('*', end='', flush=True)
+                logger.debug(f'Article skipped.')
 
             except ProcessIgnore as e:
                 feed_statistics['skip'] += 1
                 print('o', end='', flush=True)
+                logger.debug(f'Article ignored.')
                 crawl_record.record_url_status(e.item, STATUS_IGNORED)
                 crawl_statistics.sub_item_log(stat_name, e.item, e.reason)
 
@@ -293,25 +292,24 @@ def feeds_craw_flow(flow_name: str,
 
         # ---------------------------------------- Log feed statistics ----------------------------------------
 
-        print(f"{prefix} Feed: {feed_name} finished.\n"
-              f"     Total: {feed_statistics['total']}\n"
-              f"     Success: {feed_statistics['success']}\n"
-              f"     Skip: {feed_statistics['skip']}\n"
-              f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n"
-              f"     -----------------------\n"
-              f"     Total Cached Items: {len(_uncommit_content_cache)}")
+        logger.info(f"{prefix} Feed: {feed_name} finished.\n"
+                    f"     Total: {feed_statistics['total']}\n"
+                    f"     Success: {feed_statistics['success']}\n"
+                    f"     Skip: {feed_statistics['skip']}\n"
+                    f"     Fail: {feed_statistics['total'] - feed_statistics['success'] - feed_statistics['skip']}\n"
+                    f"     Total Cached Items: {len(_uncommit_content_cache)}")
 
-        print('-' * 80)
-        print(crawl_statistics.dump_sub_items(stat_name, statuses=[
-            'fetch emtpy', 'scrub emtpy', 'persists fail', 'exception']))
-        print()
-        print('=' * 100)
-        print()
+        # print('-' * 80)
+        # print(crawl_statistics.dump_sub_items(stat_name, statuses=[
+        #     'fetch emtpy', 'scrub emtpy', 'persists fail', 'exception']))
+        # print()
+        # print('=' * 100)
+        # print()
 
     # ----------------------------------------- Log all feeds counter -----------------------------------------
 
     crawl_statistics.dump_counters(['flow_name'])
-    print(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
+    logger.info(f"{prefix} Finished one loop and rest for {update_interval_s} seconds ...")
 
     # ------------------------------------------ Delay and Wait for Next Loop ------------------------------------------
 
