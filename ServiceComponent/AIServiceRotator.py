@@ -42,7 +42,7 @@ class SiliconFlowServiceRotator:
         self.keys_data: Dict[str, Dict] = {}
         self.current_key: str = ''
         self.key_record_file: str = 'key_record.json'
-        self.lock = threading.Lock()  # For thread-safe operations
+        self.lock = threading.RLock()  # For thread-safe operations
         self.running: bool = False
 
         # Tracker for consumption rate calculation, only for the current key.
