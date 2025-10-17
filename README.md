@@ -1,6 +1,6 @@
 ## IntelligenceIntegrationSystem
 
-情报整合系统：通过抓取主流新闻网站的公开新闻，并使用AI进行分析和评分的情报系统。属于ONIST和一种。
+情报整合系统：通过抓取主流新闻网站的公开新闻，并使用AI进行分析和评分的情报系统。属于OSINT的一种。
 
 项目地址：[https://github.com/SleepySoft/IntelligenceIntegrationSystem](https://github.com/SleepySoft/IntelligenceIntegrationSystem/tree/dev)
 
@@ -10,7 +10,7 @@
 
 + 一方面现代社会每日产生的新闻数量巨大，并且参杂着毫无情报价值的水文。
 
-+ 另一方面媒体看重点击量，所以标题通常无法概括事件。
++ 另一方面媒体看重点击量，所以标题成为了吸引点击的工具而非事件的概括。
 
 我一直认为，公开信息中有四成只需要看标题，有两成看总结即可，而只有不到一成的信息有阅读全文的必要。而剩下的三成都是垃圾。
 
@@ -45,18 +45,20 @@
 + [IntelligenceHubWebService.py](IntelligenceHubWebService.py)：为IHub提供网络服务的模块，包括API、网页发布和鉴权。
 + 
 + [IntelligenceHubStartup.py](IntelligenceHubStartup.py)：初始化所有子组件、IntelligenceHub和IntelligenceHubWebService。
-+ [IntelligenceHubLauncher.py](IntelligenceHubStartup.py)：IHub的**启动**器
++ [IntelligenceHubLauncher.py](IntelligenceHubStartup.py)：IHub的**启动**器，选用合适的backend载入IntelligenceHubWebService的wsgi_app，
   > [20250910] 提供Flask原生、waitress、gunicorn三种WSGI服务器，默认服务器为waitress。
   > 
   > 注意gunicorn仅支持Linux。
+  > 
+  > 该文件不包含业务代码，几乎全部由AI生成，没有阅读的必要。如果对启动原理不理解，可以去搜索WSGI的机制。
 
 > IHub的处理流程请参见：[IIS_Diagram.drawio](doc/IIS_Diagram.drawio)
 
 ### 分析
 
-情报分析的prompt在这里：[prompts.py](prompts.py)
++ [prompts.py](prompts.py)
 
-程序中的dict校验和该prompt指示的输出格式紧密相关，如果prompt改变，那么校验规则同样需要改变。
+情报分析的所有prompt。程序中的dict校验和该prompt指示的输出格式紧密相关，如果prompt改变，那么校验规则同样需要改变。
 
 已知的问题为：
 
@@ -69,6 +71,22 @@
 > 对于一些非情报新闻，AI还是给出了6分的评价，尽管我在prompt中强调不含情报的数据应该抛弃，但效果不佳。
 > 
 > 对于情报的评分偏高，我理想中80%的新闻应当处于6分及以下的区间。
+
++ [IntelligenceAnalyzerProxy.py](ServiceComponent/IntelligenceAnalyzerProxy.py)
+
+> AI分析实现的主要文件。调用AI Client，组织数据、使用prompt进行分析，并解析和返回结果。
+
++ [OpenAIClient.py](Tools/OpenAIClient.py)
+
+> OpenAI兼容的API Client
+
++ [AIServiceRotator.py](ServiceComponent/AIServiceRotator.py)
++ [AiServiceBalanceQuery.py](Tools/AiServiceBalanceQuery.py)
+
+> 为了节约成本，程序可以使用硅基流动刷邀请的14元余额的矿渣账号进行分析。
+> 
+> 这两个模块实现查询余额，并根据余额情况对Token进行自动选择和轮转的功能。
+
 
 ### 内容发布
 
