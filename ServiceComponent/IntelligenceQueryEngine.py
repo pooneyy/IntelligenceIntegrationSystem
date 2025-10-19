@@ -96,50 +96,50 @@ class IntelligenceQueryEngine:
             logger.error(f"Intelligence summary retrieval failed: {str(e)}")
             return {"total_count": 0, "base_uuid": None}
 
-    def get_paginated_intelligences(self, base_uuid: str, offset: int, limit: int) -> List[dict]:
-        """
-        Retrieve paginated intelligence with stable ordering
-
-        Args:
-            base_uuid: Reference UUID for stable pagination anchor (None for start)
-            offset: Number of documents to skip from the base
-            limit: Maximum number of documents to return
-
-        Returns:
-            List of processed intelligence documents
-        """
-        if limit <= 0:
-            return []
-
-        collection = self.__mongo_db.collection
-        sort_order = [
-            # TODO: Temporary hardcoded.
-            ("APPENDIX.__TIME_ARCHIVED__", pymongo.DESCENDING),
-            ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
-        ]
-
-        try:
-            if base_uuid:
-                base_doc = collection.find_one({"UUID": base_uuid})
-                if not base_doc:
-                    logger.warning(f"Base UUID not found: {base_uuid}")
-                    return []
-
-                cursor = collection.find(
-                    filter={"PUB_TIME": {"$lte": base_doc["PUB_TIME"]}}
-                ).sort(sort_order).skip(offset).limit(limit)
-            else:
-                cursor = collection.find().sort(sort_order).skip(offset).limit(limit)
-
-            return [self.process_document(doc) for doc in cursor]
-
-        except pymongo.errors.PyMongoError as e:
-            logger.error(f"Pagination query failed: {str(e)}")
-            return []
-
-        except Exception as e:
-            logger.error(f"Exception on query: {str(e)}")
-            return []
+    # def get_paginated_intelligences(self, base_uuid: str, offset: int, limit: int) -> List[dict]:
+    #     """
+    #     Retrieve paginated intelligence with stable ordering
+    #
+    #     Args:
+    #         base_uuid: Reference UUID for stable pagination anchor (None for start)
+    #         offset: Number of documents to skip from the base
+    #         limit: Maximum number of documents to return
+    #
+    #     Returns:
+    #         List of processed intelligence documents
+    #     """
+    #     if limit <= 0:
+    #         return []
+    #
+    #     collection = self.__mongo_db.collection
+    #     sort_order = [
+    #         # TODO: Temporary hardcoded.
+    #         ("APPENDIX.__TIME_ARCHIVED__", pymongo.DESCENDING),
+    #         ("_id", pymongo.DESCENDING)  # Secondary sort for consistency
+    #     ]
+    #
+    #     try:
+    #         if base_uuid:
+    #             base_doc = collection.find_one({"UUID": base_uuid})
+    #             if not base_doc:
+    #                 logger.warning(f"Base UUID not found: {base_uuid}")
+    #                 return []
+    #
+    #             cursor = collection.find(
+    #                 filter={"PUB_TIME": {"$lte": base_doc["PUB_TIME"]}}
+    #             ).sort(sort_order).skip(offset).limit(limit)
+    #         else:
+    #             cursor = collection.find().sort(sort_order).skip(offset).limit(limit)
+    #
+    #         return [self.process_document(doc) for doc in cursor]
+    #
+    #     except pymongo.errors.PyMongoError as e:
+    #         logger.error(f"Pagination query failed: {str(e)}")
+    #         return []
+    #
+    #     except Exception as e:
+    #         logger.error(f"Exception on query: {str(e)}")
+    #         return []
 
     def query_intelligence(
             self,
@@ -373,9 +373,7 @@ class IntelligenceQueryEngine:
             return {operator: condition_list}
 
     def process_document(self, doc: dict) -> dict:
-        # 转换ObjectId为字符串
-        if '_id' in doc:
-            doc['_id'] = str(doc['_id'])
+        doc_processed = self.__mongo_db.process_document_output(doc)
 
         # 确保所有字段都有默认值
         fields = {
@@ -391,10 +389,10 @@ class IntelligenceQueryEngine:
         }
 
         for field, default in fields.items():
-            if field not in doc or doc[field] is None:
-                doc[field] = default
+            if field not in doc_processed or doc_processed[field] is None:
+                doc_processed[field] = default
 
-        return doc
+        return doc_processed
 
     def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
         """

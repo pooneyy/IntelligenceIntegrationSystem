@@ -125,7 +125,7 @@ class MongoDBStorage:
             return conversion_func(data)
         return data
 
-    def _process_document_output(self, document: Optional[Dict]) -> Optional[Dict]:
+    def process_document_output(self, document: Optional[Dict]) -> Optional[Dict]:
         """Handles common processing for documents coming from the database."""
         if not document:
             return None
@@ -181,7 +181,7 @@ class MongoDBStorage:
 
             processed_query = self._process_dates_recursive(query_dict, self._normalize_to_utc)
             document = self.collection.find_one(processed_query, **kwargs)
-            return self._process_document_output(document)
+            return self.process_document_output(document)
         except PyMongoError as e:
             logger.error(f"Find_one operation failed: {e}")
             raise MongoDBOperationError from e
@@ -212,7 +212,7 @@ class MongoDBStorage:
             if limit > 0:
                 cursor = cursor.limit(limit)
 
-            return [self._process_document_output(doc) for doc in cursor]
+            return [self.process_document_output(doc) for doc in cursor]
         except PyMongoError as e:
             logger.error(f"Find_many operation failed: {e}")
             raise MongoDBOperationError from e
@@ -277,7 +277,7 @@ class MongoDBStorage:
         try:
             processed_pipeline = self._process_dates_recursive(pipeline, self._normalize_to_utc)
             cursor = self.collection.aggregate(processed_pipeline, **kwargs)
-            return [self._process_document_output(doc) for doc in cursor]
+            return [self.process_document_output(doc) for doc in cursor]
         except PyMongoError as e:
             logger.error(f"Aggregation operation failed: {e}")
             raise MongoDBOperationError from e
