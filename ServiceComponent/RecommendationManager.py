@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass, asdict
 from typing import Optional, Tuple, List, Dict
 
-from Tools.DateTimeUtility import get_aware_time
+from Tools.DateTimeUtility import get_aware_time, ensure_timezone_aware
 from prompts import SUGGESTION_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
@@ -128,7 +128,9 @@ class RecommendationManager:
         try:
             generation_time = get_aware_time().replace(minute=0, second=0)
 
-            if not period:
+            if isinstance(period, (list, tuple)):
+                period = [ensure_timezone_aware(dt) for dt in period]
+            else:
                 period = (generation_time - datetime.timedelta(hours=24), generation_time)
 
             logger.info(f"Starting recommendation generation for period: {period[0]} to {period[1]}")
