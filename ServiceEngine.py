@@ -4,6 +4,8 @@ import time
 import logging
 import threading
 import traceback
+from typing import Optional
+
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -12,7 +14,6 @@ from MyPythonUtility.easy_config import EasyConfig
 from PyLoggingBackend import LoggerBackend
 from PyLoggingBackend.LogUtility import set_tls_logger, backup_and_clean_previous_log_file, setup_logging, \
     limit_logger_level
-from Tools.MongoDBAccess import init_global_db_access
 from MyPythonUtility.plugin_manager import PluginManager, PluginWrapper
 
 logger = logging.getLogger(__name__)
@@ -23,10 +24,10 @@ class ServiceContext:
     """
     Use this class to pass parameters to plugins and to selectively expose functions to plugins.
     """
-    def __init__(self, module_logger, module_config):
+    def __init__(self, module_logger: Optional[logging.Logger] = None, module_config: Optional[dict] = None):
         self.sys = sys
-        self.logger = module_logger
-        self.config = module_config
+        self.logger = module_logger or logger
+        self.config = module_config or EasyConfig()
         self.project_root = project_root
 
     def solve_import_path(self):
@@ -231,8 +232,6 @@ def main():
     # --------------------------------- Main Service ---------------------------------
 
     crawl_task_path = 'CrawlTasks'
-
-    init_global_db_access()
 
     task_manager = TaskManager(crawl_task_path)
     event_handler = FileHandler(task_manager)

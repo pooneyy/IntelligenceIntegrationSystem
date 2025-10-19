@@ -19,6 +19,7 @@ tzlocal
 openai
 httpx
 json_repair
+backoff
 
 ##############################
 ### Network Requests & Parsing
