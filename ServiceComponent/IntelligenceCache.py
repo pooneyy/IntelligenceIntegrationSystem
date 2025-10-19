@@ -4,6 +4,7 @@ from typing import Optional, Callable
 
 from ServiceComponent.IntelligenceHubDefines import APPENDIX_TIME_ARCHIVED, APPENDIX_MAX_RATE_SCORE
 from ServiceComponent.IntelligenceQueryEngine import IntelligenceQueryEngine
+from Tools.DateTimeUtility import get_aware_time
 
 
 class IntelligenceCache:
@@ -72,7 +73,7 @@ class IntelligenceCache:
                 results, count = query_engine.query_intelligence(threshold = self.threshold, skip = 0, limit = self.count_limit)
             else:
                 # Calculate time range for query
-                end_time = datetime.datetime.now()
+                end_time = get_aware_time()
                 start_time = end_time - self.period_limit
 
                 # Execute query and process results
@@ -139,7 +140,7 @@ class IntelligenceCache:
         Remove expired data from cache based on period_limit.
         """
         if self.period_limit:
-            current_time = datetime.datetime.now()
+            current_time = get_aware_time()
             cutoff_time = current_time - self.period_limit
         else:
             cutoff_time = None

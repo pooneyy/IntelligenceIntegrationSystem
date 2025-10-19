@@ -3,6 +3,8 @@ import PyRSS2Gen
 from typing import List
 from pydantic import BaseModel
 
+from Tools.DateTimeUtility import get_aware_time
+
 
 class FeedItem(BaseModel):
     guid: str
@@ -42,7 +44,7 @@ class RSSPublisher:
             title=channel_title,
             link=self.join_url(self.base_url, channel_link),
             description=channel_description,
-            lastBuildDate=datetime.datetime.now(),
+            lastBuildDate=get_aware_time(),
             items=rss_items
         )
 

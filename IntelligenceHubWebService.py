@@ -27,6 +27,7 @@ from ServiceComponent.ArticleRender import default_article_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleListRender import default_article_list_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData, APPENDIX_TIME_ARCHIVED
+from Tools.DateTimeUtility import get_aware_time
 from Tools.RequestTracer import RequestTracer
 
 logger = logging.getLogger(__name__)
@@ -515,7 +516,7 @@ class IntelligenceHubWebService:
                 # Generate filename with timestamp
                 start_str = start_date.split('T')[0].replace('-', '')
                 end_str = end_date.split('T')[0].replace('-', '')
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = get_aware_time().strftime("%Y%m%d_%H%M%S")
                 filename = f"intelligence_archived_{start_str}_{end_str}_{timestamp}.json"
 
                 os.makedirs('exports', exist_ok=True)
@@ -637,13 +638,13 @@ class IntelligenceHubWebService:
             start_time = dateutil.parser.parse(start_str)
         else:
             # Default to 24 hours ago if no start time provided
-            start_time = datetime.datetime.now() - datetime.timedelta(hours=24)
+            start_time = get_aware_time() - datetime.timedelta(hours=24)
 
         if end_str:
             end_time = dateutil.parser.parse(end_str)
         else:
             # Default to current time if no end time provided
-            end_time = datetime.datetime.now()
+            end_time = get_aware_time()
 
         return start_time, end_time
 

@@ -16,7 +16,7 @@ from ServiceComponent.RecommendationManager import RecommendationManager
 from prompts import ANALYSIS_PROMPT, SUGGESTION_PROMPT
 from Tools.MongoDBAccess import MongoDBStorage
 from Tools.OpenAIClient import OpenAICompatibleAPI
-from Tools.DateTimeUtility import time_str_to_datetime
+from Tools.DateTimeUtility import time_str_to_datetime, get_aware_time
 from MyPythonUtility.DictTools import check_sanitize_dict
 from MyPythonUtility.AdvancedScheduler import AdvancedScheduler
 from ServiceComponent.IntelligenceHubDefines import *
@@ -529,19 +529,19 @@ class IntelligenceHub:
     # ------------------------------------------------ Scheduled Tasks -------------------------------------------------
 
     def _do_export_mongodb_weekly(self):
-        now = datetime.datetime.now()
+        now = get_aware_time()
         logger.info(f'Export mongodb weekly start at: {now}')
         # TODO: Export mongodb.
-        logger.info(f'Export mongodb weekly finished at: {datetime.datetime.now()}')
+        logger.info(f'Export mongodb weekly finished at: {get_aware_time()}')
 
     def _do_export_mongodb_monthly(self):
-        now = datetime.datetime.now()
+        now = get_aware_time()
         logger.info(f'Export mongodb monthly start at: {now}')
         # TODO: Export mongodb.
-        logger.info(f'Export mongodb monthly finished at: {datetime.datetime.now()}')
+        logger.info(f'Export mongodb monthly finished at: {get_aware_time()}')
 
     def _do_generate_recommendation(self):
-        now = datetime.datetime.now()
+        now = get_aware_time()
         logger.info(f'Generate recommendation start at: {now}')
 
         # TODO: Test, so using a wide datetime range.
@@ -551,10 +551,10 @@ class IntelligenceHub:
 
         self.recommendations_manager.generate_recommendation(period=period, threshold=6, limit=500)
         # self._generate_recommendation(period=period, threshold=6, limit=1000)
-        logger.info(f'Generate recommendation finished at: {datetime.datetime.now()}')
+        logger.info(f'Generate recommendation finished at: {get_aware_time()}')
 
     def _trigger_generate_recommendation(self):
-        now = datetime.datetime.now()
+        now = get_aware_time()
         logger.info(f'Trigger recommendation generation at: {now}')
         self.scheduler.execute_task('generate_recommendation_task', 2)
 
@@ -590,7 +590,7 @@ class IntelligenceHub:
 
     def _enqueue_processed_data(self, data: dict) -> True or Error:
         try:
-            ts = datetime.datetime.now()
+            ts = get_aware_time()
             article_time = data.get('PUB_TIME', None)
 
             if article_time and isinstance(article_time, str):
@@ -690,7 +690,7 @@ class IntelligenceHub:
     #             self.generating_recommendation = True
     #
     #         if not period:
-    #             period = (datetime.datetime.now() - datetime.timedelta(hours=24), datetime.datetime.now())
+    #             period = (get_aware_time() - datetime.timedelta(hours=24), get_aware_time())
     #
     #         query_engine = self.archive_db_query_engine
     #         result, total = query_engine.query_intelligence(archive_period = period, threshold=threshold, limit=limit)

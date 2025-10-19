@@ -48,7 +48,7 @@ class RecommendationManager:
         """Loads recommendations from the last 48 hours from the DB into the in-memory cache."""
         try:
             logger.info("Loading initial recommendations from the last 48 hours...")
-            start_time = datetime.datetime.now() - datetime.timedelta(hours=48)
+            start_time = get_aware_time() - datetime.timedelta(hours=48)
 
             query = {"generated_datetime": {"$gte": start_time}}
 
@@ -125,7 +125,7 @@ class RecommendationManager:
             self.generating = True
 
         try:
-            generation_time = datetime.datetime.now().replace(minute=0, second=0)
+            generation_time = get_aware_time().replace(minute=0, second=0)
 
             if not period:
                 period = (generation_time - datetime.timedelta(hours=24), generation_time)
@@ -196,7 +196,7 @@ class RecommendationManager:
                 self.recommendations_cache.sort(key=lambda r: r.generated_datetime)
 
                 # (Optional) Prune the cache to only keep records from the last 48 hours.
-                forty_eight_hours_ago = datetime.datetime.now() - datetime.timedelta(hours=48)
+                forty_eight_hours_ago = get_aware_time() - datetime.timedelta(hours=48)
                 self.recommendations_cache = [r for r in self.recommendations_cache if
                                               r.generated_datetime >= forty_eight_hours_ago]
 

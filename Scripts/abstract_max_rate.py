@@ -8,7 +8,7 @@ APPENDIX_MAX_RATE_CLASS_EXCLUDE = '内容准确率'
 
 def find_and_update_max_rate(collection_name):
     # 连接到MongoDB
-    client = MongoClient('localhost', 27017)
+    client = MongoClient('localhost', 27017, tz_aware=True)
     db = client['IntelligenceIntegrationSystem']  # 替换为实际数据库名
     collection = db[collection_name]
 

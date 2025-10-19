@@ -226,7 +226,7 @@ def main():
                                 },
                                 project_root=project_root,
                                 with_logger_manager=True)
-    log_backend.start_service(port=8000)
+    log_backend.start_service(port=18000)
 
     # --------------------------------- Main Service ---------------------------------
 
