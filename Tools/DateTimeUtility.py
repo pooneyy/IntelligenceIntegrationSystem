@@ -1,30 +1,107 @@
+# -*- coding: utf-8 -*-
+
 import re
+import pytz
 import logging
 import datetime
 from typing import Union, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import pytz
+
+try:
+    import tzlocal
+    LOCAL_TZ_NAME = tzlocal.get_localzone_name()
+    LOCAL_TZ = ZoneInfo(LOCAL_TZ_NAME)
+except (ImportError, ZoneInfoNotFoundError):
+    print("Warning: tzlocal not found or local timezone could not be determined. Falling back to UTC.")
+    LOCAL_TZ = datetime.timezone.utc
+
 
 logger = logging.getLogger(__name__)
 
+
 # Default format constants
-DEFAULT_YEAR_FORMAT = "%Y"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d"
 DEFAULT_TIME_FORMAT = "%H:%M:%S"
 DEFAULT_DATE_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# 时区常量
-LOCAL_TIMEZONE = pytz.timezone('Asia/Shanghai')
+
+def get_aware_time() -> datetime.datetime:
+    """
+    Get the current time as a timezone-aware datetime object in the system's local timezone.
+
+    This function is a convenience utility to obtain the current moment in time
+    with the correct local timezone information attached. It is the recommended
+    way to get the 'now' for applications that require timezone awareness.
+
+    Returns:
+        datetime.datetime: An aware datetime object representing the current
+        time in the system's local timezone.
+
+    Example:
+        >> now = get_aware_time()
+        >> print(now)
+        2024-10-16 22:30:54.123456+08:00
+        >> print(now.tzinfo)
+        Asia/Shanghai
+    """
+    return datetime.datetime.now(LOCAL_TZ)
 
 
-def ensure_local_timezone(dt: datetime.datetime) -> datetime.datetime:
-    """将datetime对象转换为本地时区(北京时间)"""
+def ensure_timezone_aware(
+        dt: datetime.datetime,
+        target_timezone: Optional[datetime.tzinfo] = None
+) -> datetime.datetime:
+    """
+    Convert a datetime object to timezone-aware datetime using the specified timezone.
+
+    This function handles both naive (timezone-unaware) and aware (timezone-aware)
+    datetime objects. For naive datetime, it's interpreted as local system time.
+    For aware datetime, it's converted to the target timezone.
+
+    Args:
+        dt: A datetime object, which can be either naive or timezone-aware.
+        target_timezone: Target timezone for conversion. If None, the system
+                        timezone will be used. Defaults to None.
+
+    Returns:
+        A timezone-aware datetime object in the specified target timezone.
+
+    Raises:
+        ValueError: If the datetime is aware but has ambiguous or non-existent
+                   time due to DST transitions.
+        AttributeError: If the timezone object doesn't support required methods.
+
+    Examples:
+        >> naive_dt = datetime.datetime(2023, 10, 16, 12, 0, 0)
+        >> aware_dt = ensure_timezone_aware(naive_dt)
+        >> print(aware_dt.tzinfo)
+
+        >> # Convert to specific timezone
+        >> import pytz
+        >> utc_dt = ensure_timezone_aware(naive_dt, pytz.UTC)
+        >> print(utc_dt.tzinfo)
+        UTC
+    """
+    # Get target timezone (system timezone if not specified)
+    if target_timezone is None:
+        target_timezone = LOCAL_TZ
+
     if dt.tzinfo is None:
-        # Naive时间视为本地时区
-        return LOCAL_TIMEZONE.localize(dt)
+        # Naive datetime - interpret as local system timezone
+        if hasattr(target_timezone, 'localize'):
+            # Use localize for pytz timezones (handles DST properly)
+            return target_timezone.localize(dt)
+        else:
+            # Use replace for other timezone implementations
+            aware_dt = dt.replace(tzinfo=target_timezone)
+            # For timezones that might need normalization (like DST transitions)
+            if hasattr(target_timezone, 'normalize'):
+                return target_timezone.normalize(aware_dt)
+            return aware_dt
     else:
-        # Aware时间直接转换到本地时区
-        return dt.astimezone(LOCAL_TIMEZONE)
+        # Aware datetime - convert to target timezone
+        return dt.astimezone(target_timezone)
 
 
 def any_time_to_time_str(dt: Union[datetime.datetime, datetime.date, int, float, str, None],
@@ -41,7 +118,7 @@ def any_time_to_time_str(dt: Union[datetime.datetime, datetime.date, int, float,
         if isinstance(dt, datetime.datetime):
             logger.debug(f"Processing datetime object: {dt}")
             # 确保转换到本地时区再格式化
-            dt_local = ensure_local_timezone(dt)
+            dt_local = ensure_timezone_aware(dt)
             return dt_local.strftime(DEFAULT_DATE_TIME_FORMAT if show_time else DEFAULT_DATE_FORMAT)
 
         # 处理date对象（纯日期）
@@ -55,7 +132,7 @@ def any_time_to_time_str(dt: Union[datetime.datetime, datetime.date, int, float,
             logger.debug(f"Processing timestamp: {dt}")
             # 时间戳视为UTC时间，再转换到本地时区
             utc_dt = datetime.datetime.utcfromtimestamp(dt).replace(tzinfo=pytz.utc)
-            dt_local = ensure_local_timezone(utc_dt)
+            dt_local = ensure_timezone_aware(utc_dt)
             return dt_local.strftime(DEFAULT_DATE_TIME_FORMAT if show_time else DEFAULT_DATE_FORMAT)
 
         # 处理字符串输入
@@ -66,7 +143,7 @@ def any_time_to_time_str(dt: Union[datetime.datetime, datetime.date, int, float,
                 try:
                     timestamp = int(dt)
                     utc_dt = datetime.datetime.utcfromtimestamp(timestamp).replace(tzinfo=pytz.utc)
-                    dt_local = ensure_local_timezone(utc_dt)
+                    dt_local = ensure_timezone_aware(utc_dt)
                     return dt_local.strftime(DEFAULT_DATE_TIME_FORMAT if show_time else DEFAULT_DATE_FORMAT)
                 except (ValueError, OSError) as e:
                     logger.warning(f"Timestamp conversion failed: {str(e)}")
