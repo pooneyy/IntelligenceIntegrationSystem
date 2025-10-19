@@ -9,25 +9,11 @@ from bson.objectid import ObjectId
 from tzlocal import get_localzone
 from typing import Optional, List, Tuple, Union, Dict, Any
 
+from Tools.DateTimeUtility import ensure_timezone_aware
 from Tools.MongoDBAccess import MongoDBStorage
 
 
 logger = logging.getLogger(__name__)
-
-
-def _ensure_aware_datetime(dt: datetime.datetime) -> datetime.datetime:
-    """
-    Ensures a datetime object is timezone-aware.
-    If it's naive, it assumes the system's local timezone using the
-    modern `zoneinfo` compatible method.
-    """
-    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
-        # It's a naive datetime, assume local timezone.
-        local_tz = get_localzone()
-        # Use .replace() for modern zoneinfo objects
-        return dt.replace(tzinfo=local_tz)
-    # It's already an aware datetime
-    return dt
 
 
 class IntelligenceQueryEngine:
@@ -201,7 +187,8 @@ class IntelligenceQueryEngine:
                 threshold=threshold
             )
 
-            logger.debug(self.convert_to_compass_query(query))
+            compass_query = self.convert_to_compass_query(query)
+            logger.debug(compass_query)
 
             # Execute query and return results with limit
             data = self.execute_query(collection, query, skip=skip, limit=limit)
@@ -409,13 +396,6 @@ class IntelligenceQueryEngine:
 
         return doc
 
-    # def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
-    #     # 转换为UTC时间并格式化为ISO字符串
-    #     utc_start = start_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    #     utc_end = end_time.astimezone(pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    #
-    #     return {key: {"$gte": utc_start, "$lte": utc_end}}
-
     def build_time_condition(self, key: str, start_time: datetime.datetime, end_time: datetime.datetime) -> dict:
         """
         Builds a MongoDB time condition dictionary, correctly handling timezones
@@ -430,8 +410,8 @@ class IntelligenceQueryEngine:
             A dictionary for MongoDB query with the correct BSON Date type.
         """
         # 1. Ensure both datetime objects are timezone-aware
-        aware_start = _ensure_aware_datetime(start_time)
-        aware_end = _ensure_aware_datetime(end_time)
+        aware_start = ensure_timezone_aware(start_time)
+        aware_end = ensure_timezone_aware(end_time)
 
         # 2. Convert both to UTC, keeping them as datetime objects
         utc_start = aware_start.astimezone(pytz.utc)

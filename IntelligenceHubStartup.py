@@ -84,6 +84,7 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
         db_cache=MongoDBStorage(
             host=mongodb_host,
             port=mongodb_port,
+            db_name='IntelligenceIntegrationSystem',
             username=mongodb_user,
             password=mongodb_pass,
             collection_name='intelligence_cached'),
@@ -91,6 +92,7 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
         db_archive=MongoDBStorage(
             host=mongodb_host,
             port=mongodb_port,
+            db_name='IntelligenceIntegrationSystem',
             username=mongodb_user,
             password=mongodb_pass,
             collection_name='intelligence_archived'),
@@ -98,6 +100,7 @@ def start_intelligence_hub_service() -> Tuple[IntelligenceHub, IntelligenceHubWe
         db_recommendation=MongoDBStorage(
             host=mongodb_host,
             port=mongodb_port,
+            db_name='IntelligenceIntegrationSystem',
             username=mongodb_user,
             password=mongodb_pass,
             collection_name='intelligence_recommendation'),
