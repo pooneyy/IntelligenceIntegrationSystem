@@ -5,6 +5,7 @@ import datetime
 from flask import jsonify
 from typing import Optional, List, Tuple, Union, Dict, Any
 
+from Tools.DateTimeUtility import ensure_timezone_aware
 from Tools.MongoDBAccess import MongoDBStorage
 from ServiceComponent.IntelligenceHubDefines import APPENDIX_TIME_ARCHIVED, APPENDIX_MAX_RATE_SCORE
 
@@ -14,6 +15,13 @@ logger = logging.getLogger(__name__)
 class IntelligenceStatisticsEngine:
     def __init__(self, db: MongoDBStorage):
         self.__mongo_db = db
+        try:
+            from tzlocal import get_localzone_name
+            self.__local_timezone = get_localzone_name()
+            print(f"StatisticsEngine: Using local timezone: {self.__local_timezone}")
+        except Exception as e:
+            print(f"Warning: Could not determine local timezone. Falling back to UTC. Error: {e}")
+            self.__local_timezone = "UTC"
 
     def get_score_distribution(self, start_time: datetime.datetime, end_time: datetime.datetime):
         """
@@ -29,8 +37,8 @@ class IntelligenceStatisticsEngine:
             {
                 "$match": {
                     f"APPENDIX.{APPENDIX_TIME_ARCHIVED}": {
-                        "$gte": start_time,
-                        "$lte": end_time
+                        "$gte": ensure_timezone_aware(start_time),
+                        "$lte": ensure_timezone_aware(end_time)
                     },
                     f"APPENDIX.{APPENDIX_MAX_RATE_SCORE}": {
                         "$gte": 1,
@@ -63,53 +71,31 @@ class IntelligenceStatisticsEngine:
 
         return score_distribution
 
-            # # Convert to array format for charting
-            # chart_data = [
-            #     {"score": score, "count": count}
-            #     for score, count in score_distribution.items()
-            # ]
-            #
-            # return jsonify({
-            #     "success": True,
-            #     "time_range": {
-            #         "start": start_time.strftime(),
-            #         "end": start_time.strftime(),
-            #     },
-            #     "distribution": score_distribution,
-            #     "chart_data": chart_data,
-            #     "total_records": sum(score_distribution.values())
-            # })
-
-        # except ValueError:
-        #     return jsonify({
-        #         "error": "Invalid time format. Please use ISO format (e.g., '2024-01-01T00:00:00Z')"
-        #     }), 400
-        # except Exception as e:
-        #     logger.error(f"Error processing request: {str(e)}")
-        #     return jsonify({
-        #         "error": "Internal server error",
-        #         "message": str(e)
-        #     }), 500
-
     def get_hourly_stats(self, start_time: datetime.datetime, end_time: datetime.datetime) -> list:
         """Get record counts grouped by hour for the specified time range"""
         # MongoDB aggregation pipeline for hourly statistics
+
+        date_in_local_tz = {
+            "date": "$APPENDIX.__TIME_ARCHIVED__",
+            "timezone": self.__local_timezone  # <-- 在这里使用本地时区
+        }
+
         pipeline = [
             {
                 "$match": {
                     "APPENDIX.__TIME_ARCHIVED__": {
-                        "$gte": start_time,
-                        "$lte": end_time
+                        "$gte": ensure_timezone_aware(start_time),
+                        "$lte": ensure_timezone_aware(end_time)
                     }
                 }
             },
             {
                 "$group": {
                     "_id": {
-                        "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "day": {"$dayOfMonth": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "hour": {"$hour": "$APPENDIX.__TIME_ARCHIVED__"}
+                        "year": {"$year": date_in_local_tz},
+                        "month": {"$month": date_in_local_tz},
+                        "day": {"$dayOfMonth": date_in_local_tz},
+                        "hour": {"$hour": date_in_local_tz}
                     },
                     "count": {"$sum": 1}
                 }
@@ -127,27 +113,30 @@ class IntelligenceStatisticsEngine:
         collection = self.__mongo_db.collection
         return list(collection.aggregate(pipeline))
 
-        # result = list(collection.aggregate(pipeline))
-        # return jsonify(result)
-
     def get_daily_stats(self, start_time: datetime.datetime, end_time: datetime.datetime):
         """Get record counts grouped by day for the specified time range"""
         # MongoDB aggregation pipeline for daily statistics
+
+        date_in_local_tz = {
+            "date": "$APPENDIX.__TIME_ARCHIVED__",
+            "timezone": self.__local_timezone
+        }
+
         pipeline = [
             {
                 "$match": {
                     "APPENDIX.__TIME_ARCHIVED__": {
-                        "$gte": start_time,
-                        "$lte": end_time
+                        "$gte": ensure_timezone_aware(start_time),
+                        "$lte": ensure_timezone_aware(end_time)
                     }
                 }
             },
             {
                 "$group": {
                     "_id": {
-                        "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "day": {"$dayOfMonth": "$APPENDIX.__TIME_ARCHIVED__"}
+                        "year": {"$year": date_in_local_tz},
+                        "month": {"$month": date_in_local_tz},
+                        "day": {"$dayOfMonth": date_in_local_tz}
                     },
                     "count": {"$sum": 1}
                 }
@@ -169,20 +158,26 @@ class IntelligenceStatisticsEngine:
     def get_weekly_stats(self, start_time: datetime.datetime, end_time: datetime.datetime):
         """Get record counts grouped by week for the specified time range"""
         # MongoDB aggregation pipeline for weekly statistics
+
+        date_in_local_tz = {
+            "date": "$APPENDIX.__TIME_ARCHIVED__",
+            "timezone": self.__local_timezone
+        }
+
         pipeline = [
             {
                 "$match": {
                     "APPENDIX.__TIME_ARCHIVED__": {
-                        "$gte": start_time,
-                        "$lte": end_time
+                        "$gte": ensure_timezone_aware(start_time),
+                        "$lte": ensure_timezone_aware(end_time)
                     }
                 }
             },
             {
                 "$group": {
                     "_id": {
-                        "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "week": {"$week": "$APPENDIX.__TIME_ARCHIVED__"}
+                        "year": {"$year": date_in_local_tz},
+                        "week": {"$week": date_in_local_tz}
                     },
                     "count": {"$sum": 1}
                 }
@@ -198,25 +193,29 @@ class IntelligenceStatisticsEngine:
         collection = self.__mongo_db.collection
         return list(collection.aggregate(pipeline))
 
-        # return jsonify(result)
-
     def get_monthly_stats(self, start_time: datetime.datetime, end_time: datetime.datetime):
         """Get record counts grouped by month for the specified time range"""
         # MongoDB aggregation pipeline for monthly statistics
+
+        date_in_local_tz = {
+            "date": "$APPENDIX.__TIME_ARCHIVED__",
+            "timezone": self.__local_timezone
+        }
+
         pipeline = [
             {
                 "$match": {
                     "APPENDIX.__TIME_ARCHIVED__": {
-                        "$gte": start_time,
-                        "$lte": end_time
+                        "$gte": ensure_timezone_aware(start_time),
+                        "$lte": ensure_timezone_aware(end_time)
                     }
                 }
             },
             {
                 "$group": {
                     "_id": {
-                        "year": {"$year": "$APPENDIX.__TIME_ARCHIVED__"},
-                        "month": {"$month": "$APPENDIX.__TIME_ARCHIVED__"}
+                        "year": {"$year": date_in_local_tz},
+                        "month": {"$month": date_in_local_tz}
                     },
                     "count": {"$sum": 1}
                 }
@@ -232,8 +231,6 @@ class IntelligenceStatisticsEngine:
         collection = self.__mongo_db.collection
         return list(collection.aggregate(pipeline))
 
-        # return jsonify(result)
-
     def get_stats_summary(self, start_time: datetime.datetime, end_time: datetime.datetime) -> Tuple[int, list]:
         """Get overall statistics for the specified time range"""
         collection = self.__mongo_db.collection
@@ -241,8 +238,8 @@ class IntelligenceStatisticsEngine:
         # Total count in time range
         total_count = self.__mongo_db.collection.count_documents({
             "APPENDIX.__TIME_ARCHIVED__": {
-                "$gte": start_time,
-                "$lte": end_time
+                "$gte": ensure_timezone_aware(start_time),
+                "$lte": ensure_timezone_aware(end_time)
             }
         })
 
@@ -251,8 +248,8 @@ class IntelligenceStatisticsEngine:
             {
                 "$match": {
                     "APPENDIX.__TIME_ARCHIVED__": {
-                        "$gte": start_time,
-                        "$lte": end_time
+                        "$gte": ensure_timezone_aware(start_time),
+                        "$lte": ensure_timezone_aware(end_time)
                     }
                 }
             },
@@ -273,12 +270,3 @@ class IntelligenceStatisticsEngine:
         informant_stats = list(collection.aggregate(informant_pipeline))
 
         return total_count, informant_stats
-
-        # return jsonify({
-        #     "total_count": total_count,
-        #     "time_range": {
-        #         "start": start_time,
-        #         "end": end_time
-        #     },
-        #     "top_informants": informant_stats
-        # })

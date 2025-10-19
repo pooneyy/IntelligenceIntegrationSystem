@@ -27,7 +27,7 @@ from ServiceComponent.ArticleRender import default_article_render
 from ServiceComponent.ArticleQueryRender import render_query_page
 from ServiceComponent.ArticleListRender import default_article_list_render
 from IntelligenceHub import CollectedData, IntelligenceHub, ProcessedData, APPENDIX_TIME_ARCHIVED
-from Tools.DateTimeUtility import get_aware_time
+from Tools.DateTimeUtility import get_aware_time, ensure_timezone_aware, time_str_to_datetime
 from Tools.RequestTracer import RequestTracer
 
 logger = logging.getLogger(__name__)
@@ -393,8 +393,11 @@ class IntelligenceHubWebService:
                     }), 400
 
                 # Convert to datetime objects
-                start_time = datetime.datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-                end_time = datetime.datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                # start_time = datetime.datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                # end_time = datetime.datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+
+                start_time = ensure_timezone_aware(time_str_to_datetime(start_time_str))
+                end_time = ensure_timezone_aware(time_str_to_datetime(end_time_str))
 
                 stat_engine = self.intelligence_hub.get_statistics_engine()
                 score_distribution = stat_engine.get_score_distribution(start_time, end_time)
