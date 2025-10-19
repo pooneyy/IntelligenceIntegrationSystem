@@ -156,8 +156,8 @@ class OpenAICompatibleAPI:
 
         # Define the retry strategy
         retry_strategy = Retry(
-            total=3,  # Total number of retries
-            backoff_factor=1,  # Base for exponential backoff (1s, 2s, 4s...)
+            total=5,  # Total number of retries
+            backoff_factor=25,  # Base for exponential backoff (1s, 2s, 4s...)
             status_forcelist=list(RETRYABLE_STATUS_CODES),  # HTTP codes to retry on
             allowed_methods=["GET", "POST"]  # Only retry these idempotent/safe methods
         )
