@@ -1,9 +1,7 @@
+import time
+import threading
 import traceback
-
-import chromadb
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import List, Dict, Any, Union, Optional
 
 
@@ -21,9 +19,9 @@ class VectorStoreManager:
 
     def __init__(
             self,
-            chroma_client: chromadb.Client,
+            chroma_client: "chromadb.Client",
             collection_name: str,
-            embedding_model: SentenceTransformer,
+            embedding_model: "SentenceTransformer",
             chunk_size: int = 512,
             chunk_overlap: int = 50
     ):
@@ -39,6 +37,8 @@ class VectorStoreManager:
             chunk_size (int): The target size for text chunks (in characters).
             chunk_overlap (int): The overlap between consecutive chunks.
         """
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
         self.client = chroma_client
         self.model = embedding_model
 
@@ -326,12 +326,132 @@ class VectorStoreManager:
         return len(unique_doc_ids)
 
 
+class ThreadedVectorStore:
+    """
+    A thread-safe wrapper for the VectorStoreManager.
+    This class initializes the model and database in a background thread
+    to avoid blocking the main application startup.
+    """
+
+    def __init__(
+            self,
+            db_path: str,
+            collection_name: str,
+            model_name: str,
+            chunk_size: int = 512,
+            chunk_overlap: int = 50
+    ):
+        """
+        Starts the non-blocking initialization.
+
+        Args:
+            db_path (str): Path for PersistentClient.
+            collection_name (str): Name of the collection.
+            model_name (str): Name of the sentence-transformer model.
+            chunk_size (int): Target chunk size.
+            chunk_overlap (int): Chunk overlap.
+        """
+        self._store: Optional[VectorStoreManager] = None
+        self._status: str = "initializing"  # States: initializing, ready, error
+        self._error: Optional[str] = None
+
+        # Store params for the background thread
+        self._init_params = (
+            db_path, collection_name, model_name, chunk_size, chunk_overlap
+        )
+
+        # (Requirement 1) Start initialization in a background thread
+        self._thread = threading.Thread(target=self._initialize, daemon=True)
+        self._thread.start()
+
+    def _initialize(self):
+        """
+        [Background Thread] Performs the heavy-lifting (model/db loading)
+        and creates the VectorStoreManager instance.
+        """
+        try:
+            (db_path, collection_name, model_name,
+             chunk_size, chunk_overlap) = self._init_params
+
+            print(f"[{collection_name} BG]: Importing heavy libraries...")
+            import chromadb
+            from sentence_transformers import SentenceTransformer
+
+            print(f"[ThreadedStore BG]: Initializing components...")
+
+            # --- This is the SLOW part ---
+            client = chromadb.PersistentClient(path=db_path)
+            print(f"[ThreadedStore BG]: ChromaDB client loaded.")
+
+            model = SentenceTransformer(model_name)
+            print(f"[ThreadedStore BG]: SentenceTransformer model loaded.")
+            # --- End of SLOW part ---
+
+            self._store = VectorStoreManager(
+                chroma_client=client,
+                collection_name=collection_name,
+                embedding_model=model,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+
+            self._status = "ready"
+            print(f"[ThreadedStore BG]: VectorStoreManager is ready.")
+
+        except Exception as e:
+            print(f"[ThreadedStore BG]: Initialization failed: {e}")
+            self._status = "error"
+            self._error = str(e)
+
+    # (Requirement 2) Status query interface
+    def get_status(self) -> Dict[str, Optional[str]]:
+        """
+        Returns the current initialization status.
+
+        Returns:
+            dict: A dictionary with "status" and "error" keys.
+                  Status can be "initializing", "ready", or "error".
+        """
+        return {"status": self._status, "error": self._error}
+
+    def __getattr__(self, name: str) -> Any:
+        """
+        [Magic Method] This is the proxy.
+        It's called when you try to access an attribute/method that
+        doesn't exist on this wrapper (e.g., 'search', 'add_document').
+
+        It forwards the call to the *real* store, but only if it's ready.
+        """
+        # If the store is ready, pass the call to the real store
+        if self._status == "ready" and self._store:
+            attr = getattr(self._store, name)
+            return attr
+
+        # If the store is not ready, raise an informative error.
+        if self._status == "initializing":
+            raise RuntimeError(
+                f"Cannot access '{name}'. The VectorStore is still initializing. "
+                f"Please check get_status() first."
+            )
+
+        if self._status == "error":
+            raise RuntimeError(
+                f"Cannot access '{name}'. Initialization failed: {self._error}"
+            )
+
+        # Default behavior
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}' "
+            f"and the store is not ready."
+        )
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
     # --- 1. Initialization (Decoupled) ---
 
-    DB_PATH = "./my_vector_db"
+    DB_PATH = "../playground/my_vector_db"
     COLLECTION_NAME = "multilingual_docs"
     # (Requirement) Use a multilingual model
     MODEL_NAME = 'paraphrase-multilingual-MiniLM-L12-v2'

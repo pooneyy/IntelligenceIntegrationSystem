@@ -2284,10 +2284,46 @@ class SiliconFlowServiceRotator:
 
 
 
+写一个python脚本 rebuild_vector_index.py，用以以数据库中的数据向量化并存储到向量数据库VectorStoreManager中：
+
+我在mongodb数据库中上万个有以下记录：
+
+```
+class ProcessedData(BaseModel):
+    UUID: str = Field(..., min_length=1)
+    INFORMANT: str = Field(..., min_length=1)
+    PUB_TIME: str | datetime.datetime | None = None
+
+    TIME: list | None = Field(default_factory=list)
+    LOCATION: list | None = Field(default_factory=list)
+    PEOPLE: list | None = Field(default_factory=list)
+    ORGANIZATION: list | None = Field(default_factory=list)
+    EVENT_TITLE: str | None = Field(..., min_length=1)
+    EVENT_BRIEF: str | None = Field(..., min_length=1)
+    EVENT_TEXT: str | None = None
+
+    RATE: dict | None = {}
+    IMPACT: str | None = None
+    TIPS: str | None = None
 
 
+class ArchivedDataExtraFields(BaseModel):
+    RAW_DATA: dict | None
+    SUBMITTER: str | None
+    APPENDIX: dict | None
 
 
+class ArchivedData(ProcessedData, ArchivedDataExtraFields):
+    pass
+```
+
+创建两个向量数据库：intelligence_full_text和intelligence_summary
+
+将UUID作为key，APPENDIX.RAW_DATA做为文本存储到 intelligence_full_text 中。
+将UUID作为key，EVENT_TITLE + EVENT_BRIEF + EVENT_TEXT 组合成文本存储到 intelligence_summary 中。
+
+整个转换过程需要显示进度信息，且除了建立向量索引外，还实现查询功能，即让用户输入一段文本，检索这两个向量数据库并返回结果UUID的对比（默认一个阈值）。
+用户可以指定查看intelligence_full_text或intelligence_summary的查询结果，也可以查看两个数据库查询结果的交集（相互印证？）。
 
 
 
