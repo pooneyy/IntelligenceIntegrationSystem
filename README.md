@@ -179,6 +179,10 @@ pip install -r requirements.txt
 # If has dependency issue when using upper command
 pip install -r requirements_freeze.txt
 
+# ! Copy config_example.json as config.json
+# ! Check and update config according to you real case
+# ! Config is load in ntelligenceHubStartup.py, you can easily find the usage of config itme.
+
 # After pip install. Install playwright's headless browser
 playwright install chromium
 
@@ -189,6 +193,13 @@ python IntelligenceHubLauncher.py
 python ServiceEngine.py
 ```
 
++ 重要：运行 [UserManagerConsole.py](Scripts/UserManagerConsole.py) ，按提示增加一个用户，设置密码。
+
++ 打开 [localhost:5000/login](localhost:5000/login) 输入刚才输入的账号密码进入后台页面。
+
++ 打开[localhost:5000](localhost:5000)则是无密码的公开页面。
+
+
 ## 其它工具
 
 + MongoDB工具
@@ -196,4 +207,8 @@ python ServiceEngine.py
   > 
   > 用以导出/导出MongoDB记录，可以配合[mongodb_exporter.py](Scripts/mongodb_exporter.py)一系列脚本使用。
 
+
+## 意见和建议
+
+如果有意见和建议，可以到这个讨论下留言：[https://zhuanlan.zhihu.com/p/1957783829684154704](https://zhuanlan.zhihu.com/p/1957783829684154704)
 
