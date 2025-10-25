@@ -3,11 +3,11 @@ import traceback
 import chromadb
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import List, Dict, Any, Union, Optional
 
 
-# pip install chromadb sentence-transformers langchain
+# pip install chromadb sentence-transformers langchain-text-splitters, numpy, hf_xet
 
 
 class VectorStoreManager:
