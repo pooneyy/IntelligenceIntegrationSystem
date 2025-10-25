@@ -154,6 +154,8 @@
 
 ## 环境配置及部署运行
 
+#### 程序部署
+
 ```
 # Clone this project to your local
 git clone https://github.com/SleepySoft/IntelligenceIntegrationSystem.git
@@ -179,9 +181,9 @@ pip install -r requirements.txt
 # If has dependency issue when using upper command
 pip install -r requirements_freeze.txt
 
-# ! Copy config_example.json as config.json
-# ! Check and update config according to you real case
-# ! Config is load in ntelligenceHubStartup.py, you can easily find the usage of config itme.
+# ------------------------------------------------------------------------------------
+# ! Before launching program, you should do some config first (read following section)
+# ------------------------------------------------------------------------------------
 
 # After pip install. Install playwright's headless browser
 playwright install chromium
@@ -193,9 +195,24 @@ python IntelligenceHubLauncher.py
 python ServiceEngine.py
 ```
 
+#### 程序以外的配置
+
++ 重要：运将 config_example.json 复制为 config.json，按照实际情况更改配置（默认能启动，但不能进行分析）。
+> 
+> 配置主要在 [IntelligenceHubStartup.py](IntelligenceHubStartup.py) 中载入，阅读该文件可以知道各配置项的用法。
+> 
+> 如果想使用AI进行情报分析，需要配置 ai_service 项，包括token。
+> 
+> 如果想使用咸鱼上购买的批量14元key，需要配置 ai_service_rotator 项，指定key文件。
+> 
+> 对于抓取外网新闻，需要配置 global_site_proxy。
+> 
+
 + 重要：运行 [UserManagerConsole.py](Scripts/UserManagerConsole.py) ，按提示增加一个用户，设置密码。
 
-+ 打开 [localhost:5000/login](localhost:5000/login) 输入刚才输入的账号密码进入后台页面。
+#### 使用
+
++ 程序运行后，打开 [localhost:5000/login](localhost:5000/login) 输入刚才配置的账号密码进入后台页面。
 
 + 打开[localhost:5000](localhost:5000)则是无密码的公开页面。
 
