@@ -2334,6 +2334,21 @@ class ArchivedData(ProcessedData, ArchivedDataExtraFields):
 
 
 
+再帮我实现一个Vector的后端和前端，功能包括选择要浏览的向量数据库，浏览、增加、删除、查找记录等功能，能让用户清楚地知道数据库的情况，方便用户判断它所期望的项是否正确加入数据库。
+对于后端，采用以下类似的方法来注册routing，用以方便地集成到其它的后端项目中。
+
+```
+    def _register_routes(self, wrapper):
+        def maybe_wrap(fn):
+            return wrapper(fn) if wrapper else fn
+
+        self.app.add_url_rule('/logger/log_viewer', 'log_viewer', maybe_wrap(self.log_viewer))
+        self.app.add_url_rule('/logger/api/logs', 'get_logs', maybe_wrap(self.get_logs), methods=['GET'])
+        self.app.add_url_rule('/logger/api/modules', 'get_module_hierarchy', maybe_wrap(self.get_module_hierarchy),
+                              methods=['GET'])
+```
+请仔细思考设计并针对需求给出前后端的实现。
+
 
 
 
