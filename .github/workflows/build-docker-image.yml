@@ -1,0 +1,80 @@
+name: Build Docker image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        default: latest
+        description: 镜像的Tag, 默认额外添加latest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  ARCHITECTURES: linux/amd64 # PyQt5 没有提供预编译 linux/arm64 版本
+  IMAGE_NAME: intelligence-integration-system
+  IMAGE_DESCRIPTION: Built by GitHub Actions, the associated workflow is https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  LICENSES: MIT
+
+jobs:
+  publish-image:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Set env
+        run: |
+          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "OWNER=$owner" >> "$GITHUB_ENV"
+          echo "IMAGE_FULL_NAME=ghcr.io/$owner/${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ inputs.tag }}" >> $GITHUB_ENV
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ env.OWNER }}
+          password: ${{ github.token }}
+
+      - name: Extract metadata (tags, labels) for image registry
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_FULL_NAME }}
+          annotations: |
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.licenses=${{ env.LICENSES }}
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.version=${{ env.IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
+            org.opencontainers.image.licenses=${{ env.LICENSES }}
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.version=${{ env.IMAGE_TAG }}
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_FULL_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ github.event.inputs.image_tag != 'latest' && format('{0}:latest', env.IMAGE_FULL_NAME) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: ${{ env.ARCHITECTURES }}
